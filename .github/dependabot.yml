@@ -1,0 +1,51 @@
+version: 2
+updates:
+  # npm Dependencies
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps"
+    groups:
+      # Alle Minor/Patch-Updates gebündelt in einem PR
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+      # Next.js + zugehörige Pakete immer zusammen
+      nextjs:
+        patterns:
+          - "next"
+          - "eslint-config-next"
+          - "@next/*"
+        update-types:
+          - major
+          - minor
+          - patch
+      # React-Ökosystem zusammen
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+        update-types:
+          - major
+          - minor
+          - patch
+
+  # Docker Base-Images
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday

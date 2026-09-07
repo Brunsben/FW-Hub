@@ -1,0 +1,118 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Feuerwehr Portal — Master Docker Compose
+# Orchestriert alle Feuerwehr-Anwendungen unter einem gemeinsamen Netzwerk.
+#
+# Verwendung:
+#   cp .env.example .env    # Secrets eintragen
+#   docker compose up -d    # Alle Services starten
+#
+# Architektur:
+#   nginx (Port 8180) ─┬─ /           → Portal (Next.js :8080)
+#                       ├─ /api/auth/  → Portal (Next.js :8080)
+#                       ├─ /food/      → Portal (Next.js :8080)
+#                       ├─ /psa/       → Portal (Next.js :8080)
+#                       └─ /fk/        → Portal (Next.js :8080)
+#
+#   Alle Services teilen sich die PostgreSQL-Instanz und das fw-network.
+#   Auth-Proxy ist nicht mehr nötig — Portal (Next.js) übernimmt die
+#   Authentifizierung direkt via API-Routes + Drizzle ORM.
+#
+# Verzeichnisstruktur (erwartet):
+#   ~/fw/
+#   └── feuerwehr-portal/    ← dieses Repo (docker-compose.yml hier)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Logging Default (schützt Pi-Disk vor Log-Explosion) ─────────────────────
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ── nginx (Reverse-Proxy für alle Services) ───────────────────────────────
+  nginx:
+    image: nginx:1.29-alpine
+    container_name: fw_nginx
+    logging: *default-logging
+    ports:
+      - "${PORTAL_PORT:-8180}:8080"
+    environment:
+      N8N_API_KEY: "${N8N_API_KEY:?N8N_API_KEY muss in .env gesetzt sein}"
+    volumes:
+      - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx-ratelimit.conf:/etc/nginx/conf.d/ratelimit.conf:ro
+      - ./public/error-backend.html:/usr/share/nginx/html/error-backend.html:ro
+    depends_on:
+      portal:
+        condition: service_healthy
+    networks:
+      - fw-network
+    restart: unless-stopped
+
+  # ── Portal (Next.js — Auth + Dashboard + Mitglieder-Verwaltung) ───────────
+  portal:
+    build:
+      context: .
+    container_name: fw_portal
+    logging: *default-logging
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-nocodb}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nocodb}"
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET muss in .env gesetzt sein}"
+      FEUERWEHR_NAME: "${FEUERWEHR_NAME:-Meine Feuerwehr}"
+      ENCRYPTION_KEY: "${FW_ENCRYPTION_KEY:?FW_ENCRYPTION_KEY muss in .env gesetzt sein}"
+      BACKUP_API_KEY: "${FW_BACKUP_API_KEY:?FW_BACKUP_API_KEY muss in .env gesetzt sein}"
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - fw_data:/app/data
+    networks:
+      - fw-network
+    restart: unless-stopped
+
+  # ── PostgreSQL (gemeinsame Datenbank) ─────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine@sha256:6f30057d31f5861b66f3545d4821f987aacf1dd920765f0acadea0c58ff975b1
+    container_name: fw_postgres
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nocodb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-nocodb}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nocodb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fw-network
+    restart: unless-stopped
+
+  # ── Uptime Kuma (Monitoring) ──────────────────────────────────────────────
+  uptime-kuma:
+    image: louislam/uptime-kuma:2@sha256:32c352a235fd10f98b3f64a6a4345d3c0c7f4e8be7810d2e1e867f7fe2e48ba2
+    container_name: fw_uptime
+    logging: *default-logging
+    volumes:
+      - uptime_data:/app/data
+    ports:
+      - "127.0.0.1:${UPTIME_PORT:-3001}:3001"
+    networks:
+      - fw-network
+    restart: unless-stopped
+
+networks:
+  fw-network:
+    name: fw-network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    external: true
+    name: setup_postgres_data
+  uptime_data:
+  fw_data:
