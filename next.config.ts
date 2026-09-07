@@ -13,10 +13,6 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   compress: true,
-  basePath: "/fk",
-  env: {
-    NEXT_PUBLIC_BASE_PATH: "/fk",
-  },
   serverExternalPackages: [],
   images: {
     unoptimized: true, // No sharp dependency needed on Raspberry Pi
