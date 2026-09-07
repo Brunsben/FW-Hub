@@ -45,7 +45,7 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "drizzle-kit": "^0.31.10",
-    "eslint": "^9.39.0",
+    "eslint": "^10.10.0",
     "eslint-config-next": "16.3.2",
     "shadcn": "^4.1.2",
     "tailwindcss": "^4",
