@@ -427,6 +427,7 @@ export const psaWaesche = psa.table(
       onDelete: "set null",
     }),
     datum: date("datum"),
+    waescheart: text("waescheart").notNull().default("Normal"),
     notizen: text("notizen"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

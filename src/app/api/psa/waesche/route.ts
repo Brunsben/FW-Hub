@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       ausruestungstueckId,
       kameradId: toIntOrNull(body.kameradId),
       datum: toStrOrNull(body.datum),
+      waescheart: toStrOrNull(body.waescheart) ?? "Normal",
       notizen: toStrOrNull(body.notizen),
     })
     .returning();

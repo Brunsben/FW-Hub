@@ -1,0 +1,1 @@
+ALTER TABLE "psa"."waesche" ADD COLUMN "waescheart" text DEFAULT 'Normal' NOT NULL;

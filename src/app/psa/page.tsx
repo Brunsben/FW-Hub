@@ -212,14 +212,18 @@ export default async function PsaPage() {
         <StatCard label="Prüfung fällig" value={pruefungFaellig} />
       </div>
 
-      <KameradenManager kameraden={kameradenRows} />
+      <section id="kameraden" className="scroll-mt-4">
+        <KameradenManager kameraden={kameradenRows} />
+      </section>
 
-      <AusruestungManager
-        pieces={pieces}
-        typen={typen}
-        kameraden={kameradenOptions}
-        canEdit
-      />
+      <section id="ausruestung" className="scroll-mt-4">
+        <AusruestungManager
+          pieces={pieces}
+          typen={typen}
+          kameraden={kameradenOptions}
+          canEdit
+        />
+      </section>
     </main>
   );
 }

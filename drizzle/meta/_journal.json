@@ -15,6 +15,13 @@
       "when": 1790456925539,
       "tag": "0001_pink_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790460270751,
+      "tag": "0002_lovely_frog_thor",
+      "breakpoints": true
     }
   ]
 }
