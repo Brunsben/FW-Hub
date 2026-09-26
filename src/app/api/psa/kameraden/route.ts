@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, asc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
 import { kameraden, psaKameradDetails } from "@/lib/db/schema";
+import { withScope } from "@/lib/db/scoped";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { logChange } from "@/lib/psa-changelog";
 
@@ -56,20 +56,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 401 });
   }
 
-  const conditions = [];
-  // User sehen nur den eigenen Datensatz.
-  if (session.isUser) conditions.push(eq(kameraden.id, session.kameradId));
-  // Standard: alle inkl. inaktive (entspricht der Vue-Hauptliste).
-  // ?nurAktiv=true blendet inaktive aus (z.B. für Zuteilungs-Dropdowns).
-  if (req.nextUrl.searchParams.get("nurAktiv") === "true")
-    conditions.push(eq(kameraden.aktiv, true));
+  const nurAktiv = req.nextUrl.searchParams.get("nurAktiv") === "true";
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 
-  const kameradenList = await db
-    .select(kameradSelection)
-    .from(kameraden)
-    .leftJoin(psaKameradDetails, eq(psaKameradDetails.kameradId, kameraden.id))
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(asc(kameraden.name), asc(kameraden.vorname));
+  const kameradenList = await withScope(scope, async (tx) => {
+    const conditions = [];
+    // User sehen nur den eigenen Datensatz (zusätzlich zur RLS-Policy).
+    if (session.isUser) conditions.push(eq(kameraden.id, session.kameradId));
+    // ?nurAktiv=true blendet inaktive aus (z.B. für Zuteilungs-Dropdowns).
+    if (nurAktiv) conditions.push(eq(kameraden.aktiv, true));
+
+    return tx
+      .select(kameradSelection)
+      .from(kameraden)
+      .leftJoin(psaKameradDetails, eq(psaKameradDetails.kameradId, kameraden.id))
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(asc(kameraden.name), asc(kameraden.vorname));
+  });
 
   return NextResponse.json({ kameraden: kameradenList });
 }
@@ -89,8 +92,9 @@ export async function POST(req: NextRequest) {
   }
 
   const { sizes, present } = extractSizes(body);
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 
-  const kamerad = await db.transaction(async (tx) => {
+  const kamerad = await withScope(scope, async (tx) => {
     const [k] = await tx
       .insert(kameraden)
       .values({
@@ -154,8 +158,9 @@ export async function PATCH(req: NextRequest) {
     coreUpdate.psaRolle = body.psaRolle ? String(body.psaRolle) : null;
 
   const { sizes, present } = extractSizes(body);
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 
-  const kamerad = await db.transaction(async (tx) => {
+  const kamerad = await withScope(scope, async (tx) => {
     let updated;
     if (Object.keys(coreUpdate).length > 0) {
       coreUpdate.updatedAt = new Date();
@@ -213,15 +218,19 @@ export async function DELETE(req: NextRequest) {
 
   // Soft-Delete: core.kameraden ist modulübergreifend referenziert und wird
   // nie hart gelöscht — nur deaktiviert.
-  const [deactivated] = await db
-    .update(kameraden)
-    .set({ aktiv: false, updatedAt: new Date() })
-    .where(eq(kameraden.id, id))
-    .returning({
-      id: kameraden.id,
-      vorname: kameraden.vorname,
-      name: kameraden.name,
-    });
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+  const rows = await withScope(scope, (tx) =>
+    tx
+      .update(kameraden)
+      .set({ aktiv: false, updatedAt: new Date() })
+      .where(eq(kameraden.id, id))
+      .returning({
+        id: kameraden.id,
+        vorname: kameraden.vorname,
+        name: kameraden.name,
+      }),
+  );
+  const deactivated = rows[0];
 
   if (!deactivated) {
     return NextResponse.json(

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compare } from "bcryptjs";
 import { and, eq, sql } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { authDb } from "@/lib/db/auth-client";
+import { withScope } from "@/lib/db/scoped";
 import { benutzer, kameraden } from "@/lib/db/schema";
 import { signJwt, setAuthCookie } from "@/lib/auth";
 
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const [user] = await db
+    const [user] = await authDb
       .select()
       .from(benutzer)
       .where(
@@ -41,12 +42,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // kamerad_id ist NOT NULL — der verknüpfte Kamerad existiert garantiert.
-    const [kamerad] = await db
-      .select()
-      .from(kameraden)
-      .where(eq(kameraden.id, user.kameradId))
-      .limit(1);
+    // core.kameraden liegt hinter RLS. fw_auth darf es NICHT lesen; daher mit
+    // dem jetzt bekannten Scope des Benutzers über den regulären Client lesen
+    // (eigene kamerad_id bzw. Admin/Kleiderwart-Vollzugriff).
+    const [kamerad] = await withScope(
+      { kameradId: user.kameradId, psaRolle: user.rolle },
+      (tx) =>
+        tx
+          .select()
+          .from(kameraden)
+          .where(eq(kameraden.id, user.kameradId))
+          .limit(1),
+    );
 
     const token = await signJwt({
       sub: user.benutzername,

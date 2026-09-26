@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePsaSession } from "@/lib/psa-auth";
+import { HashScroll } from "@/components/psa/hash-scroll";
 
 export default async function PsaLayout({
   children,
@@ -25,6 +26,7 @@ export default async function PsaLayout({
 
   return (
     <div>
+      <HashScroll />
       <nav className="border-b bg-card">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 p-3">
           {items.map((i) => (
