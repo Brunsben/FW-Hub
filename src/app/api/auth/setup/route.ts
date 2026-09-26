@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { sql } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { authDb } from "@/lib/db/auth-client";
+import { withScope } from "@/lib/db/scoped";
 import { kameraden, benutzer } from "@/lib/db/schema";
 import { signJwt, setAuthCookie } from "@/lib/auth";
 
@@ -11,7 +12,9 @@ import { signJwt, setAuthCookie } from "@/lib/auth";
 // den Kameraden-Datensatz anlegen, dann den damit verknüpften Admin-Account.
 export async function POST(req: NextRequest) {
   try {
-    const [{ count }] = await db
+    // Guard über fw_auth (BYPASSRLS): unter RLS würde fw_app ohne Scope 0
+    // Zeilen sehen und die Initialisierung fälschlich erneut erlauben.
+    const [{ count }] = await authDb
       .select({ count: sql<number>`count(*)::int` })
       .from(benutzer);
     if (count > 0) {
@@ -42,32 +45,38 @@ export async function POST(req: NextRequest) {
 
     const pinHash = await hash(password, 12);
 
-    const created = await db.transaction(async (tx) => {
-      const [kamerad] = await tx
-        .insert(kameraden)
-        .values({
-          vorname,
-          name,
-          psaRolle: "Admin",
-          foodRolle: "Admin",
-          fkRolle: "Admin",
-          funkRolle: "Admin",
-        })
-        .returning();
+    // Erst-Setup-Scope: der Admin-Zweig der WITH-CHECK-Policies erlaubt beide
+    // INSERTs, obwohl die kamerad_id noch nicht bekannt ist (im Admin-Zweig
+    // irrelevant). Sicher, weil dieser Pfad durch count===0 geschützt ist.
+    const created = await withScope(
+      { kameradId: 0, psaRolle: "Admin" },
+      async (tx) => {
+        const [kamerad] = await tx
+          .insert(kameraden)
+          .values({
+            vorname,
+            name,
+            psaRolle: "Admin",
+            foodRolle: "Admin",
+            fkRolle: "Admin",
+            funkRolle: "Admin",
+          })
+          .returning();
 
-      const [user] = await tx
-        .insert(benutzer)
-        .values({
-          benutzername: username,
-          pin: pinHash,
-          rolle: "Admin",
-          kameradId: kamerad.id,
-          aktiv: true,
-        })
-        .returning();
+        const [user] = await tx
+          .insert(benutzer)
+          .values({
+            benutzername: username,
+            pin: pinHash,
+            rolle: "Admin",
+            kameradId: kamerad.id,
+            aktiv: true,
+          })
+          .returning();
 
-      return { kamerad, user };
-    });
+        return { kamerad, user };
+      },
+    );
 
     const token = await signJwt({
       sub: created.user.benutzername,

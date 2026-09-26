@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { and, asc, count, eq, isNotNull, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { withScope } from "@/lib/db/scoped";
 import {
   kameraden,
   psaAusruestungstuecke,
@@ -95,6 +96,8 @@ export default async function PsaPage() {
   const session = await requirePsaSession();
   if (!session) redirect("/login");
 
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() + 30);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -110,16 +113,18 @@ export default async function PsaPage() {
 
   // Einsatzleiter/User: nur eigene Ausrüstung, keine Verwaltung, kein Schreiben.
   if (!session.canEdit) {
-    const rows = await db
-      .select(pieceSelection)
-      .from(psaAusruestungstuecke)
-      .leftJoin(
-        psaAusruestungstypen,
-        eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
-      )
-      .leftJoin(kameraden, eq(kameraden.id, psaAusruestungstuecke.kameradId))
-      .where(eq(psaAusruestungstuecke.kameradId, session.kameradId))
-      .orderBy(asc(psaAusruestungstuecke.seriennummer));
+    const rows = await withScope(scope, (tx) =>
+      tx
+        .select(pieceSelection)
+        .from(psaAusruestungstuecke)
+        .leftJoin(
+          psaAusruestungstypen,
+          eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
+        )
+        .leftJoin(kameraden, eq(kameraden.id, psaAusruestungstuecke.kameradId))
+        .where(eq(psaAusruestungstuecke.kameradId, session.kameradId))
+        .orderBy(asc(psaAusruestungstuecke.seriennummer)),
+    );
     const pieces = toPieceRows(rows);
     const faellig = pieces.filter(
       (p) => p.naechstePruefung && p.naechstePruefung <= cutoffStr,
@@ -154,57 +159,69 @@ export default async function PsaPage() {
     [{ value: ausgegeben }],
     [{ value: pruefungFaellig }],
   ] = await Promise.all([
-    db
-      .select({ value: count() })
-      .from(kameraden)
-      .where(eq(kameraden.aktiv, true)),
-    db.select({ value: count() }).from(psaAusruestungstuecke),
-    db
-      .select({ value: count() })
-      .from(psaAusruestungstuecke)
-      .where(eq(psaAusruestungstuecke.status, "Ausgegeben")),
-    db
-      .select({ value: count() })
-      .from(psaAusruestungstuecke)
-      .where(
-        and(
-          isNotNull(psaAusruestungstuecke.naechstePruefung),
-          lte(psaAusruestungstuecke.naechstePruefung, cutoffStr),
+    withScope(scope, (tx) =>
+      tx
+        .select({ value: count() })
+        .from(kameraden)
+        .where(eq(kameraden.aktiv, true)),
+    ),
+    withScope(scope, (tx) =>
+      tx.select({ value: count() }).from(psaAusruestungstuecke),
+    ),
+    withScope(scope, (tx) =>
+      tx
+        .select({ value: count() })
+        .from(psaAusruestungstuecke)
+        .where(eq(psaAusruestungstuecke.status, "Ausgegeben")),
+    ),
+    withScope(scope, (tx) =>
+      tx
+        .select({ value: count() })
+        .from(psaAusruestungstuecke)
+        .where(
+          and(
+            isNotNull(psaAusruestungstuecke.naechstePruefung),
+            lte(psaAusruestungstuecke.naechstePruefung, cutoffStr),
+          ),
         ),
-      ),
+    ),
   ]);
 
-  const kameradenRows: KameradRow[] = await db
-    .select({
-      id: kameraden.id,
-      vorname: kameraden.vorname,
-      name: kameraden.name,
-      dienstgrad: kameraden.dienstgrad,
-      email: kameraden.email,
-      personalnummer: kameraden.personalnummer,
-      kartenId: kameraden.kartenId,
-      aktiv: kameraden.aktiv,
-      jackeGroesse: psaKameradDetails.jackeGroesse,
-      hoseGroesse: psaKameradDetails.hoseGroesse,
-      stiefelGroesse: psaKameradDetails.stiefelGroesse,
-      handschuhGroesse: psaKameradDetails.handschuhGroesse,
-      hemdGroesse: psaKameradDetails.hemdGroesse,
-      poloshirtGroesse: psaKameradDetails.poloshirtGroesse,
-      fleeceGroesse: psaKameradDetails.fleeceGroesse,
-    })
-    .from(kameraden)
-    .leftJoin(psaKameradDetails, eq(psaKameradDetails.kameradId, kameraden.id))
-    .orderBy(asc(kameraden.name), asc(kameraden.vorname));
+  const kameradenRows: KameradRow[] = await withScope(scope, (tx) =>
+    tx
+      .select({
+        id: kameraden.id,
+        vorname: kameraden.vorname,
+        name: kameraden.name,
+        dienstgrad: kameraden.dienstgrad,
+        email: kameraden.email,
+        personalnummer: kameraden.personalnummer,
+        kartenId: kameraden.kartenId,
+        aktiv: kameraden.aktiv,
+        jackeGroesse: psaKameradDetails.jackeGroesse,
+        hoseGroesse: psaKameradDetails.hoseGroesse,
+        stiefelGroesse: psaKameradDetails.stiefelGroesse,
+        handschuhGroesse: psaKameradDetails.handschuhGroesse,
+        hemdGroesse: psaKameradDetails.hemdGroesse,
+        poloshirtGroesse: psaKameradDetails.poloshirtGroesse,
+        fleeceGroesse: psaKameradDetails.fleeceGroesse,
+      })
+      .from(kameraden)
+      .leftJoin(psaKameradDetails, eq(psaKameradDetails.kameradId, kameraden.id))
+      .orderBy(asc(kameraden.name), asc(kameraden.vorname)),
+  );
 
-  const pieceRows = await db
-    .select(pieceSelection)
-    .from(psaAusruestungstuecke)
-    .leftJoin(
-      psaAusruestungstypen,
-      eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
-    )
-    .leftJoin(kameraden, eq(kameraden.id, psaAusruestungstuecke.kameradId))
-    .orderBy(asc(psaAusruestungstuecke.seriennummer));
+  const pieceRows = await withScope(scope, (tx) =>
+    tx
+      .select(pieceSelection)
+      .from(psaAusruestungstuecke)
+      .leftJoin(
+        psaAusruestungstypen,
+        eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
+      )
+      .leftJoin(kameraden, eq(kameraden.id, psaAusruestungstuecke.kameradId))
+      .orderBy(asc(psaAusruestungstuecke.seriennummer)),
+  );
   const pieces = toPieceRows(pieceRows);
 
   const kameradenOptions: KameradOption[] = kameradenRows

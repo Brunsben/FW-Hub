@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { asc, desc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { withScope } from "@/lib/db/scoped";
 import {
   psaAusruestungstuecke,
   psaAusruestungstypen,
@@ -25,30 +25,35 @@ export default async function PsaVerlaufPage() {
   const session = await requirePsaSession();
   if (!session) redirect("/login");
   const onlyOwn = session.isUser;
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 
-  const pruefRows = await db
-    .select({
-      id: psaPruefungen.id,
-      datum: psaPruefungen.datum,
-      ergebnis: psaPruefungen.ergebnis,
-      pruefer: psaPruefungen.pruefer,
-      naechstePruefung: psaPruefungen.naechstePruefung,
-      notizen: psaPruefungen.notizen,
-      foto: psaPruefungen.foto,
-      seriennummer: psaAusruestungstuecke.seriennummer,
-      typName: psaAusruestungstypen.bezeichnung,
-    })
-    .from(psaPruefungen)
-    .leftJoin(
-      psaAusruestungstuecke,
-      eq(psaAusruestungstuecke.id, psaPruefungen.ausruestungstueckId),
-    )
-    .leftJoin(
-      psaAusruestungstypen,
-      eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
-    )
-    .where(onlyOwn ? eq(psaPruefungen.kameradId, session.kameradId) : undefined)
-    .orderBy(desc(psaPruefungen.datum));
+  const pruefRows = await withScope(scope, (tx) =>
+    tx
+      .select({
+        id: psaPruefungen.id,
+        datum: psaPruefungen.datum,
+        ergebnis: psaPruefungen.ergebnis,
+        pruefer: psaPruefungen.pruefer,
+        naechstePruefung: psaPruefungen.naechstePruefung,
+        notizen: psaPruefungen.notizen,
+        foto: psaPruefungen.foto,
+        seriennummer: psaAusruestungstuecke.seriennummer,
+        typName: psaAusruestungstypen.bezeichnung,
+      })
+      .from(psaPruefungen)
+      .leftJoin(
+        psaAusruestungstuecke,
+        eq(psaAusruestungstuecke.id, psaPruefungen.ausruestungstueckId),
+      )
+      .leftJoin(
+        psaAusruestungstypen,
+        eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
+      )
+      .where(
+        onlyOwn ? eq(psaPruefungen.kameradId, session.kameradId) : undefined,
+      )
+      .orderBy(desc(psaPruefungen.datum)),
+  );
   const pruefungen: PruefungRow[] = pruefRows.map((r) => ({
     id: r.id,
     datum: r.datum,
@@ -60,26 +65,30 @@ export default async function PsaVerlaufPage() {
     stueckLabel: label(r.typName, r.seriennummer),
   }));
 
-  const wRows = await db
-    .select({
-      id: psaWaesche.id,
-      datum: psaWaesche.datum,
-      waescheart: psaWaesche.waescheart,
-      notizen: psaWaesche.notizen,
-      seriennummer: psaAusruestungstuecke.seriennummer,
-      typName: psaAusruestungstypen.bezeichnung,
-    })
-    .from(psaWaesche)
-    .leftJoin(
-      psaAusruestungstuecke,
-      eq(psaAusruestungstuecke.id, psaWaesche.ausruestungstueckId),
-    )
-    .leftJoin(
-      psaAusruestungstypen,
-      eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
-    )
-    .where(onlyOwn ? eq(psaWaesche.kameradId, session.kameradId) : undefined)
-    .orderBy(desc(psaWaesche.datum));
+  const wRows = await withScope(scope, (tx) =>
+    tx
+      .select({
+        id: psaWaesche.id,
+        datum: psaWaesche.datum,
+        waescheart: psaWaesche.waescheart,
+        notizen: psaWaesche.notizen,
+        seriennummer: psaAusruestungstuecke.seriennummer,
+        typName: psaAusruestungstypen.bezeichnung,
+      })
+      .from(psaWaesche)
+      .leftJoin(
+        psaAusruestungstuecke,
+        eq(psaAusruestungstuecke.id, psaWaesche.ausruestungstueckId),
+      )
+      .leftJoin(
+        psaAusruestungstypen,
+        eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
+      )
+      .where(
+        onlyOwn ? eq(psaWaesche.kameradId, session.kameradId) : undefined,
+      )
+      .orderBy(desc(psaWaesche.datum)),
+  );
   const waesche: WaescheRow[] = wRows.map((r) => ({
     id: r.id,
     datum: r.datum,
@@ -88,31 +97,36 @@ export default async function PsaVerlaufPage() {
     stueckLabel: label(r.typName, r.seriennummer),
   }));
 
-  const sRows = await db
-    .select({
-      id: psaSchadensdokumentation.id,
-      datum: psaSchadensdokumentation.datum,
-      beschreibung: psaSchadensdokumentation.beschreibung,
-      foto: psaSchadensdokumentation.foto,
-      seriennummer: psaAusruestungstuecke.seriennummer,
-      typName: psaAusruestungstypen.bezeichnung,
-      kameradId: psaAusruestungstuecke.kameradId,
-    })
-    .from(psaSchadensdokumentation)
-    .leftJoin(
-      psaAusruestungstuecke,
-      eq(psaAusruestungstuecke.id, psaSchadensdokumentation.ausruestungstueckId),
-    )
-    .leftJoin(
-      psaAusruestungstypen,
-      eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
-    )
-    .where(
-      onlyOwn
-        ? eq(psaAusruestungstuecke.kameradId, session.kameradId)
-        : undefined,
-    )
-    .orderBy(desc(psaSchadensdokumentation.datum));
+  const sRows = await withScope(scope, (tx) =>
+    tx
+      .select({
+        id: psaSchadensdokumentation.id,
+        datum: psaSchadensdokumentation.datum,
+        beschreibung: psaSchadensdokumentation.beschreibung,
+        foto: psaSchadensdokumentation.foto,
+        seriennummer: psaAusruestungstuecke.seriennummer,
+        typName: psaAusruestungstypen.bezeichnung,
+        kameradId: psaAusruestungstuecke.kameradId,
+      })
+      .from(psaSchadensdokumentation)
+      .leftJoin(
+        psaAusruestungstuecke,
+        eq(
+          psaAusruestungstuecke.id,
+          psaSchadensdokumentation.ausruestungstueckId,
+        ),
+      )
+      .leftJoin(
+        psaAusruestungstypen,
+        eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
+      )
+      .where(
+        onlyOwn
+          ? eq(psaAusruestungstuecke.kameradId, session.kameradId)
+          : undefined,
+      )
+      .orderBy(desc(psaSchadensdokumentation.datum)),
+  );
   const schaeden: SchadenRow[] = sRows.map((r) => ({
     id: r.id,
     datum: r.datum,
@@ -121,23 +135,25 @@ export default async function PsaVerlaufPage() {
     stueckLabel: label(r.typName, r.seriennummer),
   }));
 
-  const pieceRows = await db
-    .select({
-      id: psaAusruestungstuecke.id,
-      seriennummer: psaAusruestungstuecke.seriennummer,
-      typName: psaAusruestungstypen.bezeichnung,
-    })
-    .from(psaAusruestungstuecke)
-    .leftJoin(
-      psaAusruestungstypen,
-      eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
-    )
-    .where(
-      onlyOwn
-        ? eq(psaAusruestungstuecke.kameradId, session.kameradId)
-        : undefined,
-    )
-    .orderBy(asc(psaAusruestungstuecke.seriennummer));
+  const pieceRows = await withScope(scope, (tx) =>
+    tx
+      .select({
+        id: psaAusruestungstuecke.id,
+        seriennummer: psaAusruestungstuecke.seriennummer,
+        typName: psaAusruestungstypen.bezeichnung,
+      })
+      .from(psaAusruestungstuecke)
+      .leftJoin(
+        psaAusruestungstypen,
+        eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
+      )
+      .where(
+        onlyOwn
+          ? eq(psaAusruestungstuecke.kameradId, session.kameradId)
+          : undefined,
+      )
+      .orderBy(asc(psaAusruestungstuecke.seriennummer)),
+  );
   const pieces: PieceOption[] = pieceRows.map((p) => ({
     id: p.id,
     label: label(p.typName, p.seriennummer),
