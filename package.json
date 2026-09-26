@@ -10,6 +10,7 @@
     "prod": "npm run build && npm run postbuild && npm run start:standalone",
     "postbuild": "cp -r public .next/standalone/public 2>/dev/null; mkdir -p .next/standalone/.next && cp -r .next/static .next/standalone/.next/static 2>/dev/null; cp .env.local .next/standalone/.env.local 2>/dev/null; echo 'Standalone ready'",
     "lint": "eslint",
+    "type-check": "tsc --noEmit",
     "seed": "npx tsx scripts/seed.ts",
     "setup": "npx tsx scripts/seed.ts"
   },
