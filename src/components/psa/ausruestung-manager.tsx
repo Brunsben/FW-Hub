@@ -38,6 +38,11 @@ export interface PieceRow {
   kameradId: number | null;
   kameradName: string | null;
   naechstePruefung: string | null;
+  kaufdatum: string | null;
+  herstellungsdatum: string | null;
+  lebensendeDatum: string | null;
+  groesse: string | null;
+  notizen: string | null;
 }
 
 export interface TypOption {
@@ -92,6 +97,19 @@ export function AusruestungManager({
     notizen: "",
   });
   const [creating, setCreating] = useState(false);
+
+  // Bearbeiten-Formular
+  const [editForm, setEditForm] = useState<{
+    id: number;
+    seriennummer: string;
+    status: string;
+    groesse: string;
+    kaufdatum: string;
+    herstellungsdatum: string;
+    naechstePruefung: string;
+    lebensendeDatum: string;
+    notizen: string;
+  } | null>(null);
 
   const filtered = useMemo(() => {
     return pieces.filter((p) => {
@@ -201,6 +219,57 @@ export function AusruestungManager({
       setError(err instanceof Error ? err.message : "Unbekannter Fehler");
     } finally {
       setCreating(false);
+    }
+  }
+
+  function startEdit(p: PieceRow) {
+    setError(null);
+    setShowCreate(false);
+    setIssuePiece(null);
+    setEditForm({
+      id: p.id,
+      seriennummer: p.seriennummer ?? "",
+      status: p.status ?? "Lager",
+      groesse: p.groesse ?? "",
+      kaufdatum: (p.kaufdatum ?? "").slice(0, 10),
+      herstellungsdatum: (p.herstellungsdatum ?? "").slice(0, 10),
+      naechstePruefung: (p.naechstePruefung ?? "").slice(0, 10),
+      lebensendeDatum: (p.lebensendeDatum ?? "").slice(0, 10),
+      notizen: p.notizen ?? "",
+    });
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editForm) return;
+    setError(null);
+    setBusyId(editForm.id);
+    try {
+      const res = await fetch("/api/psa/ausruestungstuecke", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editForm.id,
+          seriennummer: editForm.seriennummer.trim() || null,
+          status: editForm.status,
+          groesse: editForm.groesse.trim() || null,
+          kaufdatum: editForm.kaufdatum || null,
+          herstellungsdatum: editForm.herstellungsdatum || null,
+          naechstePruefung: editForm.naechstePruefung || null,
+          lebensendeDatum: editForm.lebensendeDatum || null,
+          notizen: editForm.notizen.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Speichern fehlgeschlagen");
+      }
+      setEditForm(null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -374,6 +443,124 @@ export function AusruestungManager({
           </form>
         )}
 
+        {canEdit && editForm && (
+          <form
+            onSubmit={saveEdit}
+            className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2"
+          >
+            <div className="grid gap-2">
+              <Label htmlFor="e-seriennummer">Seriennummer</Label>
+              <Input
+                id="e-seriennummer"
+                value={editForm.seriennummer}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, seriennummer: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <Select
+                value={editForm.status}
+                onValueChange={(v) => setEditForm({ ...editForm, status: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PSA_STATUS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="e-groesse">Größe</Label>
+              <Input
+                id="e-groesse"
+                value={editForm.groesse}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, groesse: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="e-kaufdatum">Kaufdatum</Label>
+              <Input
+                id="e-kaufdatum"
+                type="date"
+                value={editForm.kaufdatum}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, kaufdatum: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="e-herstellungsdatum">Herstellungsdatum</Label>
+              <Input
+                id="e-herstellungsdatum"
+                type="date"
+                value={editForm.herstellungsdatum}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    herstellungsdatum: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="e-naechstePruefung">Nächste Prüfung</Label>
+              <Input
+                id="e-naechstePruefung"
+                type="date"
+                value={editForm.naechstePruefung}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    naechstePruefung: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="e-lebensende">Lebensende</Label>
+              <Input
+                id="e-lebensende"
+                type="date"
+                value={editForm.lebensendeDatum}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, lebensendeDatum: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="e-notizen">Notizen</Label>
+              <Input
+                id="e-notizen"
+                value={editForm.notizen}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, notizen: e.target.value })
+                }
+              />
+            </div>
+            <div className="flex gap-2 sm:col-span-2">
+              <Button type="submit" disabled={busyId === editForm.id}>
+                {busyId === editForm.id ? "Speichert…" : "Änderungen speichern"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditForm(null)}
+              >
+                Abbrechen
+              </Button>
+            </div>
+          </form>
+        )}
+
         {canEdit && issuePiece && (
           <div className="flex flex-wrap items-end gap-3 rounded-lg border p-4">
             <div className="grid gap-2">
@@ -454,6 +641,15 @@ export function AusruestungManager({
                   {canEdit && (
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startEdit(p)}
+                          disabled={busyId === p.id}
+                        >
+                          Bearbeiten
+                        </Button>
                         {p.status === "Ausgegeben" ? (
                           <Button
                             type="button"

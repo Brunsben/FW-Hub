@@ -47,6 +47,11 @@ const pieceSelection = {
   kameradVorname: kameraden.vorname,
   kameradNachname: kameraden.name,
   naechstePruefung: psaAusruestungstuecke.naechstePruefung,
+  kaufdatum: psaAusruestungstuecke.kaufdatum,
+  herstellungsdatum: psaAusruestungstuecke.herstellungsdatum,
+  lebensendeDatum: psaAusruestungstuecke.lebensendeDatum,
+  groesse: psaAusruestungstuecke.groesse,
+  notizen: psaAusruestungstuecke.notizen,
 };
 
 function toPieceRows(
@@ -60,6 +65,11 @@ function toPieceRows(
     kameradVorname: string | null;
     kameradNachname: string | null;
     naechstePruefung: string | null;
+    kaufdatum: string | null;
+    herstellungsdatum: string | null;
+    lebensendeDatum: string | null;
+    groesse: string | null;
+    notizen: string | null;
   }>,
 ): PieceRow[] {
   return rows.map((r) => ({
@@ -73,6 +83,11 @@ function toPieceRows(
       ? `${r.kameradVorname} ${r.kameradNachname}`
       : null,
     naechstePruefung: r.naechstePruefung,
+    kaufdatum: r.kaufdatum,
+    herstellungsdatum: r.herstellungsdatum,
+    lebensendeDatum: r.lebensendeDatum,
+    groesse: r.groesse,
+    notizen: r.notizen,
   }));
 }
 

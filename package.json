@@ -12,6 +12,7 @@
     "lint": "eslint",
     "type-check": "tsc --noEmit",
     "seed": "npx tsx scripts/seed.ts",
+    "seed:psa": "npx tsx scripts/seed-psa-stammdaten.ts",
     "setup": "npx tsx scripts/seed.ts"
   },
   "dependencies": {

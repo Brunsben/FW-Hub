@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -11,6 +11,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -30,6 +37,16 @@ export interface TypRow {
   norm: string | null;
 }
 
+export interface NormOption {
+  id: number;
+  bezeichnung: string | null;
+  ausruestungstypKategorie: string | null;
+  beschreibung: string | null;
+  pruefintervallMonate: number | null;
+  maxLebensdauerJahre: number | null;
+  maxWaeschen: number | null;
+}
+
 type FormState = {
   id: number | null;
   bezeichnung: string;
@@ -38,6 +55,8 @@ type FormState = {
   maxLebensdauerJahre: string;
   maxWaeschen: string;
   norm: string;
+  normWahl: string;
+  normHinweis: string;
 };
 
 const EMPTY: FormState = {
@@ -48,6 +67,8 @@ const EMPTY: FormState = {
   maxLebensdauerJahre: "",
   maxWaeschen: "",
   norm: "",
+  normWahl: "",
+  normHinweis: "",
 };
 
 function num(s: string): number | null {
@@ -62,11 +83,56 @@ function orNull(s: string): string | null {
   return t ? t : null;
 }
 
-export function TypenManager({ typen }: { typen: TypRow[] }) {
+export function TypenManager({
+  typen,
+  normen,
+}: {
+  typen: TypRow[];
+  normen: NormOption[];
+}) {
   const router = useRouter();
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Normen passend zur aktuellen Kategorie (analog normenFuerAktuellenTyp).
+  const matchingNormen = useMemo(() => {
+    const kat = form?.typ.trim();
+    if (!kat) return [];
+    return normen.filter(
+      (n) => n.bezeichnung && n.ausruestungstypKategorie === kat,
+    );
+  }, [normen, form?.typ]);
+
+  // Bei Auswahl einer Norm deren Kennwerte übernehmen (manuell überschreibbar).
+  function applyNorm(wahl: string) {
+    if (!form) return;
+    if (wahl === "__frei__") {
+      setForm({ ...form, normWahl: wahl, normHinweis: "" });
+      return;
+    }
+    const n = matchingNormen.find((x) => x.bezeichnung === wahl);
+    if (!n) {
+      setForm({ ...form, normWahl: wahl, normHinweis: "" });
+      return;
+    }
+    setForm({
+      ...form,
+      normWahl: wahl,
+      norm: n.bezeichnung ?? "",
+      normHinweis: n.beschreibung ?? "",
+      pruefintervallMonate:
+        n.pruefintervallMonate != null
+          ? String(n.pruefintervallMonate)
+          : form.pruefintervallMonate,
+      maxLebensdauerJahre:
+        n.maxLebensdauerJahre != null
+          ? String(n.maxLebensdauerJahre)
+          : form.maxLebensdauerJahre,
+      maxWaeschen:
+        n.maxWaeschen != null ? String(n.maxWaeschen) : form.maxWaeschen,
+    });
+  }
 
   function startEdit(t: TypRow) {
     setError(null);
@@ -78,6 +144,8 @@ export function TypenManager({ typen }: { typen: TypRow[] }) {
       maxLebensdauerJahre: t.maxLebensdauerJahre?.toString() ?? "",
       maxWaeschen: t.maxWaeschen?.toString() ?? "",
       norm: t.norm ?? "",
+      normWahl: "",
+      normHinweis: "",
     });
   }
 
@@ -193,11 +261,44 @@ export function TypenManager({ typen }: { typen: TypRow[] }) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="t-norm">Norm</Label>
-              <Input
-                id="t-norm"
-                value={form.norm}
-                onChange={(e) => setForm({ ...form, norm: e.target.value })}
-              />
+              {matchingNormen.length > 0 ? (
+                <>
+                  <Select value={form.normWahl} onValueChange={applyNorm}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Norm wählen oder Freitext" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__frei__">Freitext…</SelectItem>
+                      {matchingNormen.map((n) => (
+                        <SelectItem key={n.id} value={n.bezeichnung as string}>
+                          {n.bezeichnung}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {form.normWahl === "__frei__" && (
+                    <Input
+                      value={form.norm}
+                      onChange={(e) =>
+                        setForm({ ...form, norm: e.target.value })
+                      }
+                      placeholder="Norm eingeben…"
+                    />
+                  )}
+                  {form.normHinweis && (
+                    <p className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
+                      {form.normHinweis}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <Input
+                  id="t-norm"
+                  value={form.norm}
+                  onChange={(e) => setForm({ ...form, norm: e.target.value })}
+                  placeholder="z.B. DIN EN 469"
+                />
+              )}
             </div>
 
             {error && (
