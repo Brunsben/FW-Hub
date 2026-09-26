@@ -7,6 +7,7 @@ import {
   uuid,
   date,
   timestamp,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -25,6 +26,8 @@ export const kameraden = core.table("kameraden", {
   dienstgrad: text("dienstgrad"),
   email: text("email"),
   personalnummer: text("personalnummer"),
+  // RFID-Karten-ID — modulübergreifend (FoodBot liest sie); daher in core.
+  kartenId: text("karten_id"),
   aktiv: boolean("aktiv").notNull().default(true),
   // Pro-Modul-Rollen — von der Login-Route als JWT-Claims ausgestellt.
   psaRolle: text("psa_rolle"),
@@ -239,3 +242,307 @@ export const funkDeviceAssignmentsRelations = relations(
 
 export type FunkDevice = typeof funkDevices.$inferSelect;
 export type FunkDeviceAssignment = typeof funkDeviceAssignments.$inferSelect;
+
+// ============================================================================
+// MODUL PSA-VERWALTUNG — eigenes DB-Schema psa. Alle Personenbezüge
+// (kamerad_id) referenzieren core.kameraden.id direkt; das Modul führt KEINE
+// eigene Mitgliederliste. Herkunft der Felder: psa-verwaltung/frontend/src/
+// types/index.ts + setup/migration-rls-kamerad-id.sql (kamerad_id-Spalten).
+//
+// Bewusste Modernisierungen gegenüber dem NocoDB/PostgREST-Original
+// (vor Migrations-Generierung zu bestätigen):
+//  - String-Matching (Ausruestungstyp-Text = Bezeichnung) → echte FKs.
+//  - Denormalisierte Anzeige-Textspalten ("Kamerad", "Ausruestungstyp" auf
+//    Kind-Tabellen) entfernt; Anzeige erfolgt per Join. Der sync_kamerad_id-
+//    Trigger des Originals entfällt damit.
+//  - PSA-spezifische Größenfelder in psa.kamerad_details ausgelagert.
+//  - created_at/updated_at ergänzt (Konsistenz mit fw_funk).
+//  - KartenID (modulübergreifendes FoodBot-RFID-Feld) in core.kameraden.
+//  - schadensdokumentation.erstellt_von als FK → core.kameraden statt des
+//    Benutzernamen-Textes des Originals (saveSchaden setzte Benutzername).
+// ============================================================================
+export const psa = pgSchema("psa");
+
+// PSA-spezifische Zusatzdaten pro Kamerad (1:1 zu core.kameraden).
+export const psaKameradDetails = psa.table("kamerad_details", {
+  id: serial("id").primaryKey(),
+  kameradId: integer("kamerad_id")
+    .notNull()
+    .unique()
+    .references(() => kameraden.id, { onDelete: "cascade" }),
+  jackeGroesse: text("jacke_groesse"),
+  hoseGroesse: text("hose_groesse"),
+  stiefelGroesse: text("stiefel_groesse"),
+  handschuhGroesse: text("handschuh_groesse"),
+  hemdGroesse: text("hemd_groesse"),
+  poloshirtGroesse: text("poloshirt_groesse"),
+  fleeceGroesse: text("fleece_groesse"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Ausrüstungstypen (Katalog): Prüfintervalle, Lebensdauer, Norm-Verweis.
+export const psaAusruestungstypen = psa.table("ausruestungstypen", {
+  id: serial("id").primaryKey(),
+  bezeichnung: text("bezeichnung").notNull(),
+  typ: text("typ"), // Kategorie (z.B. Jacke, Hose, Helm)
+  pruefintervallMonate: integer("pruefintervall_monate"),
+  maxLebensdauerJahre: integer("max_lebensdauer_jahre"),
+  maxWaeschen: integer("max_waeschen"),
+  norm: text("norm"),
+  foto: text("foto"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Normen-Katalog (Referenzwerte je Ausrüstungstyp-Kategorie).
+export const psaNormen = psa.table("normen", {
+  id: serial("id").primaryKey(),
+  bezeichnung: text("bezeichnung"),
+  ausruestungstypKategorie: text("ausruestungstyp_kategorie"),
+  normbezeichnung: text("normbezeichnung"),
+  url: text("url"),
+  pruefintervallMonate: integer("pruefintervall_monate"),
+  maxLebensdauerJahre: integer("max_lebensdauer_jahre"),
+  maxWaeschen: integer("max_waeschen"),
+  beschreibung: text("beschreibung"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Einzelne Ausrüstungsstücke. kamerad_id = aktueller Träger (RLS-relevant).
+export const psaAusruestungstuecke = psa.table(
+  "ausruestungstuecke",
+  {
+    id: serial("id").primaryKey(),
+    ausruestungstypId: integer("ausruestungstyp_id").references(
+      () => psaAusruestungstypen.id,
+      { onDelete: "set null" },
+    ),
+    seriennummer: text("seriennummer"),
+    status: text("status"),
+    kaufdatum: date("kaufdatum"),
+    herstellungsdatum: date("herstellungsdatum"),
+    naechstePruefung: date("naechste_pruefung"),
+    letztePruefung: date("letzte_pruefung"),
+    lebensendeDatum: date("lebensende_datum"),
+    qrCode: text("qr_code"),
+    waescheAnzahl: integer("waesche_anzahl").notNull().default(0),
+    groesse: text("groesse"),
+    notizen: text("notizen"),
+    kameradId: integer("kamerad_id").references(() => kameraden.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    kameradIdx: index("idx_psa_ausruestungstuecke_kamerad_id").on(t.kameradId),
+    typIdx: index("idx_psa_ausruestungstuecke_typ_id").on(t.ausruestungstypId),
+  }),
+);
+
+// Ausgabe-/Rückgabe-Verlauf pro Ausrüstungsstück.
+export const psaAusgaben = psa.table(
+  "ausgaben",
+  {
+    id: serial("id").primaryKey(),
+    ausruestungstueckId: integer("ausruestungstueck_id").references(
+      () => psaAusruestungstuecke.id,
+      { onDelete: "cascade" },
+    ),
+    kameradId: integer("kamerad_id").references(() => kameraden.id, {
+      onDelete: "set null",
+    }),
+    ausgabedatum: date("ausgabedatum"),
+    rueckgabedatum: date("rueckgabedatum"),
+    notizen: text("notizen"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    kameradIdx: index("idx_psa_ausgaben_kamerad_id").on(t.kameradId),
+    tueckIdx: index("idx_psa_ausgaben_tueck_id").on(t.ausruestungstueckId),
+  }),
+);
+
+// Prüfungshistorie pro Ausrüstungsstück.
+export const psaPruefungen = psa.table(
+  "pruefungen",
+  {
+    id: serial("id").primaryKey(),
+    ausruestungstueckId: integer("ausruestungstueck_id").references(
+      () => psaAusruestungstuecke.id,
+      { onDelete: "cascade" },
+    ),
+    kameradId: integer("kamerad_id").references(() => kameraden.id, {
+      onDelete: "set null",
+    }),
+    datum: date("datum"),
+    ergebnis: text("ergebnis"),
+    pruefer: text("pruefer"),
+    naechstePruefung: date("naechste_pruefung"),
+    notizen: text("notizen"),
+    foto: text("foto"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    kameradIdx: index("idx_psa_pruefungen_kamerad_id").on(t.kameradId),
+    tueckIdx: index("idx_psa_pruefungen_tueck_id").on(t.ausruestungstueckId),
+  }),
+);
+
+// Wäsche-Verlauf pro Ausrüstungsstück.
+export const psaWaesche = psa.table(
+  "waesche",
+  {
+    id: serial("id").primaryKey(),
+    ausruestungstueckId: integer("ausruestungstueck_id").references(
+      () => psaAusruestungstuecke.id,
+      { onDelete: "cascade" },
+    ),
+    kameradId: integer("kamerad_id").references(() => kameraden.id, {
+      onDelete: "set null",
+    }),
+    datum: date("datum"),
+    notizen: text("notizen"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    kameradIdx: index("idx_psa_waesche_kamerad_id").on(t.kameradId),
+    tueckIdx: index("idx_psa_waesche_tueck_id").on(t.ausruestungstueckId),
+  }),
+);
+
+// Schadensdokumentation pro Ausrüstungsstück.
+export const psaSchadensdokumentation = psa.table(
+  "schadensdokumentation",
+  {
+    id: serial("id").primaryKey(),
+    ausruestungstueckId: integer("ausruestungstueck_id").references(
+      () => psaAusruestungstuecke.id,
+      { onDelete: "cascade" },
+    ),
+    datum: date("datum"),
+    beschreibung: text("beschreibung"),
+    foto: text("foto"),
+    erstelltVon: integer("erstellt_von").references(() => kameraden.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    tueckIdx: index("idx_psa_schadensdokumentation_tueck_id").on(
+      t.ausruestungstueckId,
+    ),
+  }),
+);
+
+// Audit-/Änderungsprotokoll. Original-RLS: User dürfen nur Einträge mit
+// eigenem Benutzernamen einfügen (changelog_insert) — in Phase 2 abzubilden.
+export const psaChangelog = psa.table("changelog", {
+  id: serial("id").primaryKey(),
+  tabelle: text("tabelle"),
+  aktion: text("aktion"),
+  details: text("details"),
+  benutzer: text("benutzer"),
+  zeitpunkt: timestamp("zeitpunkt", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const psaKameradDetailsRelations = relations(
+  psaKameradDetails,
+  ({ one }) => ({
+    kamerad: one(kameraden, {
+      fields: [psaKameradDetails.kameradId],
+      references: [kameraden.id],
+    }),
+  }),
+);
+
+export const psaAusruestungstypenRelations = relations(
+  psaAusruestungstypen,
+  ({ many }) => ({
+    stuecke: many(psaAusruestungstuecke),
+  }),
+);
+
+export const psaAusruestungstueckeRelations = relations(
+  psaAusruestungstuecke,
+  ({ one, many }) => ({
+    typ: one(psaAusruestungstypen, {
+      fields: [psaAusruestungstuecke.ausruestungstypId],
+      references: [psaAusruestungstypen.id],
+    }),
+    ausgaben: many(psaAusgaben),
+    pruefungen: many(psaPruefungen),
+    waesche: many(psaWaesche),
+    schaeden: many(psaSchadensdokumentation),
+  }),
+);
+
+export const psaSchadensdokumentationRelations = relations(
+  psaSchadensdokumentation,
+  ({ one }) => ({
+    ausruestungstueck: one(psaAusruestungstuecke, {
+      fields: [psaSchadensdokumentation.ausruestungstueckId],
+      references: [psaAusruestungstuecke.id],
+    }),
+  }),
+);
+
+export const psaAusgabenRelations = relations(psaAusgaben, ({ one }) => ({
+  ausruestungstueck: one(psaAusruestungstuecke, {
+    fields: [psaAusgaben.ausruestungstueckId],
+    references: [psaAusruestungstuecke.id],
+  }),
+}));
+
+export const psaPruefungenRelations = relations(psaPruefungen, ({ one }) => ({
+  ausruestungstueck: one(psaAusruestungstuecke, {
+    fields: [psaPruefungen.ausruestungstueckId],
+    references: [psaAusruestungstuecke.id],
+  }),
+}));
+
+export const psaWaescheRelations = relations(psaWaesche, ({ one }) => ({
+  ausruestungstueck: one(psaAusruestungstuecke, {
+    fields: [psaWaesche.ausruestungstueckId],
+    references: [psaAusruestungstuecke.id],
+  }),
+}));
+
+export type PsaKameradDetails = typeof psaKameradDetails.$inferSelect;
+export type PsaAusruestungstyp = typeof psaAusruestungstypen.$inferSelect;
+export type PsaAusruestungstueck = typeof psaAusruestungstuecke.$inferSelect;
+export type PsaAusgabe = typeof psaAusgaben.$inferSelect;
+export type PsaPruefung = typeof psaPruefungen.$inferSelect;
+export type PsaWaesche = typeof psaWaesche.$inferSelect;
+export type PsaNorm = typeof psaNormen.$inferSelect;
+export type PsaSchadensdokumentation =
+  typeof psaSchadensdokumentation.$inferSelect;
+export type PsaChangelogEntry = typeof psaChangelog.$inferSelect;
