@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { psaAusruestungstypen } from "@/lib/db/schema";
+import { psaNormen } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { logChange } from "@/lib/psa-changelog";
 
@@ -11,19 +11,22 @@ function toIntOrNull(v: unknown): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+function toStrOrNull(v: unknown): string | null {
+  return v == null || v === "" ? null : String(v);
+}
+
 export async function GET() {
   const session = await requirePsaSession();
   if (!session) {
     return NextResponse.json({ error: "Nicht autorisiert" }, { status: 401 });
   }
 
-  // Katalog: für alle angemeldeten PSA-Sessions lesbar.
-  const typen = await db
+  const normen = await db
     .select()
-    .from(psaAusruestungstypen)
-    .orderBy(asc(psaAusruestungstypen.bezeichnung));
+    .from(psaNormen)
+    .orderBy(asc(psaNormen.ausruestungstypKategorie), asc(psaNormen.bezeichnung));
 
-  return NextResponse.json({ typen });
+  return NextResponse.json({ normen });
 }
 
 export async function POST(req: NextRequest) {
@@ -33,29 +36,24 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  if (!body.bezeichnung) {
-    return NextResponse.json(
-      { error: "bezeichnung ist erforderlich" },
-      { status: 400 },
-    );
-  }
 
-  const [typ] = await db
-    .insert(psaAusruestungstypen)
+  const [norm] = await db
+    .insert(psaNormen)
     .values({
-      bezeichnung: String(body.bezeichnung),
-      typ: body.typ ? String(body.typ) : null,
+      bezeichnung: toStrOrNull(body.bezeichnung),
+      ausruestungstypKategorie: toStrOrNull(body.ausruestungstypKategorie),
+      normbezeichnung: toStrOrNull(body.normbezeichnung),
+      url: toStrOrNull(body.url),
       pruefintervallMonate: toIntOrNull(body.pruefintervallMonate),
       maxLebensdauerJahre: toIntOrNull(body.maxLebensdauerJahre),
       maxWaeschen: toIntOrNull(body.maxWaeschen),
-      norm: body.norm ? String(body.norm) : null,
-      foto: body.foto ? String(body.foto) : null,
+      beschreibung: toStrOrNull(body.beschreibung),
     })
     .returning();
 
-  await logChange(session, "Typen", "Erstellt", typ.bezeichnung);
+  await logChange(session, "Normen", "Erstellt", norm.bezeichnung);
 
-  return NextResponse.json({ typ }, { status: 201 });
+  return NextResponse.json({ norm }, { status: 201 });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -71,16 +69,20 @@ export async function PATCH(req: NextRequest) {
   }
 
   const update: Record<string, unknown> = {};
-  if ("bezeichnung" in body) update.bezeichnung = String(body.bezeichnung);
-  if ("typ" in body) update.typ = body.typ ? String(body.typ) : null;
+  if ("bezeichnung" in body) update.bezeichnung = toStrOrNull(body.bezeichnung);
+  if ("ausruestungstypKategorie" in body)
+    update.ausruestungstypKategorie = toStrOrNull(body.ausruestungstypKategorie);
+  if ("normbezeichnung" in body)
+    update.normbezeichnung = toStrOrNull(body.normbezeichnung);
+  if ("url" in body) update.url = toStrOrNull(body.url);
   if ("pruefintervallMonate" in body)
     update.pruefintervallMonate = toIntOrNull(body.pruefintervallMonate);
   if ("maxLebensdauerJahre" in body)
     update.maxLebensdauerJahre = toIntOrNull(body.maxLebensdauerJahre);
   if ("maxWaeschen" in body)
     update.maxWaeschen = toIntOrNull(body.maxWaeschen);
-  if ("norm" in body) update.norm = body.norm ? String(body.norm) : null;
-  if ("foto" in body) update.foto = body.foto ? String(body.foto) : null;
+  if ("beschreibung" in body)
+    update.beschreibung = toStrOrNull(body.beschreibung);
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json(
@@ -90,19 +92,19 @@ export async function PATCH(req: NextRequest) {
   }
   update.updatedAt = new Date();
 
-  const [typ] = await db
-    .update(psaAusruestungstypen)
+  const [norm] = await db
+    .update(psaNormen)
     .set(update)
-    .where(eq(psaAusruestungstypen.id, id))
+    .where(eq(psaNormen.id, id))
     .returning();
 
-  if (!typ) {
-    return NextResponse.json({ error: "Typ nicht gefunden" }, { status: 404 });
+  if (!norm) {
+    return NextResponse.json({ error: "Norm nicht gefunden" }, { status: 404 });
   }
 
-  await logChange(session, "Typen", "Bearbeitet", typ.bezeichnung);
+  await logChange(session, "Normen", "Bearbeitet", norm.bezeichnung);
 
-  return NextResponse.json({ typ });
+  return NextResponse.json({ norm });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -117,18 +119,15 @@ export async function DELETE(req: NextRequest) {
   }
 
   const [deleted] = await db
-    .delete(psaAusruestungstypen)
-    .where(eq(psaAusruestungstypen.id, id))
-    .returning({
-      id: psaAusruestungstypen.id,
-      bezeichnung: psaAusruestungstypen.bezeichnung,
-    });
+    .delete(psaNormen)
+    .where(eq(psaNormen.id, id))
+    .returning({ id: psaNormen.id, bezeichnung: psaNormen.bezeichnung });
 
   if (!deleted) {
-    return NextResponse.json({ error: "Typ nicht gefunden" }, { status: 404 });
+    return NextResponse.json({ error: "Norm nicht gefunden" }, { status: 404 });
   }
 
-  await logChange(session, "Typen", "Gelöscht", deleted.bezeichnung);
+  await logChange(session, "Normen", "Gelöscht", deleted.bezeichnung);
 
   return NextResponse.json({ id: deleted.id });
 }

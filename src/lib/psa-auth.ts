@@ -7,6 +7,7 @@ const PSA_ROLES: PsaRole[] = ["Admin", "Kleiderwart", "User"];
 export interface PsaSession {
   kameradId: number;
   kameradName: string;
+  benutzername: string; // sub-Claim — für Changelog-Einträge (Benutzer)
   psaRole: PsaRole;
   canEdit: boolean; // Admin oder Kleiderwart: Vollzugriff
   isUser: boolean; // reine Leseansicht der eigenen Daten
@@ -25,6 +26,7 @@ export async function requirePsaSession(): Promise<PsaSession | null> {
   return {
     kameradId: user.kamerad_id,
     kameradName: user.kamerad_name,
+    benutzername: user.sub,
     psaRole,
     canEdit: psaRole === "Admin" || psaRole === "Kleiderwart",
     isUser: psaRole === "User",

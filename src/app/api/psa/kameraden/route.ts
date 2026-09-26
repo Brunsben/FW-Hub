@@ -3,6 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { kameraden, psaKameradDetails } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
+import { logChange } from "@/lib/psa-changelog";
 
 // Größenfelder liegen in psa.kamerad_details, werden aber gemeinsam mit dem
 // Kameraden ausgeliefert/entgegengenommen.
@@ -114,6 +115,13 @@ export async function POST(req: NextRequest) {
     return k;
   });
 
+  await logChange(
+    session,
+    "Kameraden",
+    "Erstellt",
+    `${kamerad.vorname} ${kamerad.name}`,
+  );
+
   return NextResponse.json({ kamerad }, { status: 201 });
 }
 
@@ -182,6 +190,13 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  await logChange(
+    session,
+    "Kameraden",
+    "Bearbeitet",
+    `${kamerad.vorname} ${kamerad.name}`,
+  );
+
   return NextResponse.json({ kamerad });
 }
 
@@ -202,7 +217,11 @@ export async function DELETE(req: NextRequest) {
     .update(kameraden)
     .set({ aktiv: false, updatedAt: new Date() })
     .where(eq(kameraden.id, id))
-    .returning({ id: kameraden.id });
+    .returning({
+      id: kameraden.id,
+      vorname: kameraden.vorname,
+      name: kameraden.name,
+    });
 
   if (!deactivated) {
     return NextResponse.json(
@@ -210,6 +229,13 @@ export async function DELETE(req: NextRequest) {
       { status: 404 },
     );
   }
+
+  await logChange(
+    session,
+    "Kameraden",
+    "Deaktiviert",
+    `${deactivated.vorname} ${deactivated.name}`,
+  );
 
   return NextResponse.json({ id: deactivated.id, aktiv: false });
 }

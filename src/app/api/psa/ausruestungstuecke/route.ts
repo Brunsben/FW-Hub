@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { psaAusruestungstuecke } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
+import { logChange, typNameById } from "@/lib/psa-changelog";
 
 function toIntOrNull(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -75,6 +76,14 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
+  const typName = await typNameById(stueck.ausruestungstypId);
+  await logChange(
+    session,
+    "Ausrüstung",
+    "Erstellt",
+    `${typName} (${stueck.seriennummer ?? ""})`,
+  );
+
   return NextResponse.json({ stueck }, { status: 201 });
 }
 
@@ -133,6 +142,14 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  const typName = await typNameById(stueck.ausruestungstypId);
+  await logChange(
+    session,
+    "Ausrüstung",
+    "Bearbeitet",
+    `${typName} (${stueck.seriennummer ?? ""})`,
+  );
+
   return NextResponse.json({ stueck });
 }
 
@@ -150,7 +167,11 @@ export async function DELETE(req: NextRequest) {
   const [deleted] = await db
     .delete(psaAusruestungstuecke)
     .where(eq(psaAusruestungstuecke.id, id))
-    .returning({ id: psaAusruestungstuecke.id });
+    .returning({
+      id: psaAusruestungstuecke.id,
+      ausruestungstypId: psaAusruestungstuecke.ausruestungstypId,
+      seriennummer: psaAusruestungstuecke.seriennummer,
+    });
 
   if (!deleted) {
     return NextResponse.json(
@@ -158,6 +179,14 @@ export async function DELETE(req: NextRequest) {
       { status: 404 },
     );
   }
+
+  const typName = await typNameById(deleted.ausruestungstypId);
+  await logChange(
+    session,
+    "Ausrüstung",
+    "Gelöscht",
+    `${typName} (${deleted.seriennummer ?? ""})`,
+  );
 
   return NextResponse.json({ id: deleted.id });
 }
