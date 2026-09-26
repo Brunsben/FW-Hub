@@ -13,6 +13,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   compress: true,
+  allowedDevOrigins: ["10.10.20.11"],
   serverExternalPackages: [],
   images: {
     unoptimized: true, // No sharp dependency needed on Raspberry Pi
