@@ -41,6 +41,7 @@ Frontend-Formulare) — siehe invariant-checker.agent.md für das Vorgehen.
 | Pro-Modul-Rollen-Claim (z.B. funk_rolle) wird bei Login ausgestellt | Schema-Spalte + Login-Route | Pro Modul einzeln aufzubauen |
 | exp-Claim ist bei JEDER Verifizierung Pflicht | requireExp: true an allen jwtVerify-Aufrufen | Aufzubauen |
 | pv_monitoring-Schema unangetastet | Konvention, keine technische Sperre | Einzuhalten |
+| core.kameraden wird nie hart gelöscht, nur über aktiv=false (Soft-Delete) | Durchsetzung in jeder DELETE-Route, die Kameraden anfasst | Ab PSA-Migration eingeführt, für alle künftigen Module verbindlich |
 
 ## Modul-Übersicht
 | Modul | Route | Quelle | Status |
