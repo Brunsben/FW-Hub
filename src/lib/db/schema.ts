@@ -376,6 +376,9 @@ export const psaAusgaben = psa.table(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => ({
     kameradIdx: index("idx_psa_ausgaben_kamerad_id").on(t.kameradId),
