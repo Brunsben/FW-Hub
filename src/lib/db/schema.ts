@@ -40,7 +40,15 @@ export const kameraden = core.table("kameraden", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => ({
+  // NULL mehrfach erlaubt → partielle Unique-Indizes nur für Nicht-NULL-Werte.
+  kartenIdUnique: uniqueIndex("idx_kameraden_karten_id")
+    .on(t.kartenId)
+    .where(sql`${t.kartenId} is not null`),
+  personalnummerUnique: uniqueIndex("idx_kameraden_personalnummer")
+    .on(t.personalnummer)
+    .where(sql`${t.personalnummer} is not null`),
+}));
 
 // ============================================================================
 // BENUTZER — Login-Accounts. kamerad_id ist NOT NULL: jeder Account (auch
@@ -550,3 +558,140 @@ export type PsaNorm = typeof psaNormen.$inferSelect;
 export type PsaSchadensdokumentation =
   typeof psaSchadensdokumentation.$inferSelect;
 export type PsaChangelogEntry = typeof psaChangelog.$inferSelect;
+
+// ============================================================================
+// MODUL KÜCHE/FOODBOT — eigenes DB-Schema fw_food. Personenbezug (kamerad_id)
+// referenziert core.kameraden.id direkt; das Modul führt KEINE eigene
+// Mitgliederliste (die alte users-Tabelle entfällt). Herkunft: FoodBot/src/
+// lib/db/schema.ts. menus/guests/preset_menus/admin_log unverändert übernommen;
+// registrations.user_id → kamerad_id; neue Tabelle mobile_tokens ersetzt die
+// users.mobile_token-Spalte.
+// ============================================================================
+export const fwFood = pgSchema("fw_food");
+
+export const foodMenus = fwFood.table(
+  "menus",
+  {
+    id: serial("id").primaryKey(),
+    date: date("date", { mode: "string" }).notNull().defaultNow(),
+    description: text("description").notNull(),
+    zweiMenuesAktiv: boolean("zwei_menues_aktiv").notNull().default(false),
+    menu1Name: text("menu1_name"),
+    menu2Name: text("menu2_name"),
+    registrationDeadline: text("registration_deadline")
+      .notNull()
+      .default("19:45"),
+    deadlineEnabled: boolean("deadline_enabled").notNull().default(true),
+  },
+  (t) => ({
+    dateUnique: uniqueIndex("menus_date_idx").on(t.date),
+  }),
+);
+
+export const foodRegistrations = fwFood.table(
+  "registrations",
+  {
+    id: serial("id").primaryKey(),
+    kameradId: integer("kamerad_id")
+      .notNull()
+      .references(() => kameraden.id, { onDelete: "cascade" }),
+    date: date("date", { mode: "string" }).notNull().defaultNow(),
+    menuChoice: integer("menu_choice").notNull().default(1),
+  },
+  (t) => ({
+    kameradDateUnique: uniqueIndex("registrations_kamerad_date_idx").on(
+      t.kameradId,
+      t.date,
+    ),
+    dateKameradIdx: index("registrations_date_kamerad_idx").on(
+      t.date,
+      t.kameradId,
+    ),
+  }),
+);
+
+export const foodGuests = fwFood.table(
+  "guests",
+  {
+    id: serial("id").primaryKey(),
+    date: date("date", { mode: "string" }).notNull().defaultNow(),
+    menuChoice: integer("menu_choice").notNull().default(1),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => ({
+    dateMenuUnique: uniqueIndex("guests_date_menu_idx").on(t.date, t.menuChoice),
+    dateIdx: index("guests_date_idx").on(t.date),
+  }),
+);
+
+export const foodAdminLog = fwFood.table(
+  "admin_log",
+  {
+    id: serial("id").primaryKey(),
+    timestamp: timestamp("timestamp", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    adminUser: text("admin_user").notNull(),
+    action: text("action").notNull(),
+    details: text("details"),
+  },
+  (t) => ({
+    timestampIdx: index("admin_log_timestamp_idx").on(t.timestamp),
+    adminUserIdx: index("admin_log_admin_user_idx").on(t.adminUser),
+  }),
+);
+
+export const foodPresetMenus = fwFood.table("preset_menus", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// Ersetzt die alte users.mobile_token-Spalte: Token für die mobile
+// QR-Registrierung, verknüpft mit einem Kameraden.
+export const foodMobileTokens = fwFood.table(
+  "mobile_tokens",
+  {
+    id: serial("id").primaryKey(),
+    kameradId: integer("kamerad_id")
+      .notNull()
+      .references(() => kameraden.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    // 1 Token pro Kamerad (wie die alte users.mobile_token-Spalte).
+    kameradUnique: uniqueIndex("idx_food_mobile_tokens_kamerad_id").on(
+      t.kameradId,
+    ),
+  }),
+);
+
+export const foodRegistrationsRelations = relations(
+  foodRegistrations,
+  ({ one }) => ({
+    kamerad: one(kameraden, {
+      fields: [foodRegistrations.kameradId],
+      references: [kameraden.id],
+    }),
+  }),
+);
+
+export const foodMobileTokensRelations = relations(
+  foodMobileTokens,
+  ({ one }) => ({
+    kamerad: one(kameraden, {
+      fields: [foodMobileTokens.kameradId],
+      references: [kameraden.id],
+    }),
+  }),
+);
+
+export type FoodMenu = typeof foodMenus.$inferSelect;
+export type FoodRegistration = typeof foodRegistrations.$inferSelect;
+export type FoodGuest = typeof foodGuests.$inferSelect;
+export type FoodAdminLogEntry = typeof foodAdminLog.$inferSelect;
+export type FoodPresetMenu = typeof foodPresetMenus.$inferSelect;
+export type FoodMobileToken = typeof foodMobileTokens.$inferSelect;

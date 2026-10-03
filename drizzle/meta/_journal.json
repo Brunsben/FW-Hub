@@ -22,6 +22,13 @@
       "when": 1790460270751,
       "tag": "0002_lovely_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791040974719,
+      "tag": "0003_adorable_steel_serpent",
+      "breakpoints": true
     }
   ]
 }
