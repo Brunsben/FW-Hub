@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
       return {
         date: menu.date,
         description: menu.description,
+        zweiMenuesAktiv: menu.zweiMenuesAktiv,
         menu1: menu1Regs,
         menu2: menu2Regs,
         guests_menu1: menu1Guests,

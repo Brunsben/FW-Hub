@@ -41,6 +41,30 @@ export async function getRegistrationCount(date: string) {
   return result?.count || 0;
 }
 
+// Gästezahl für Datum + Menüwahl setzen (Upsert).
+export async function setGuestCount(
+  date: string,
+  menuChoice: number,
+  count: number,
+) {
+  const [existing] = await db
+    .select()
+    .from(foodGuests)
+    .where(and(eq(foodGuests.date, date), eq(foodGuests.menuChoice, menuChoice)))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(foodGuests)
+      .set({ count: Math.max(0, count) })
+      .where(eq(foodGuests.id, existing.id));
+  } else if (count > 0) {
+    await db
+      .insert(foodGuests)
+      .values({ date, menuChoice, count: Math.max(0, count) });
+  }
+}
+
 // Prüft, ob die Anmeldung für ein Menü noch offen ist (Deadline-Check).
 export function isRegistrationOpen(menu: {
   registrationDeadline: string;
