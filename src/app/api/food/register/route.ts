@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withFoodPublicScope } from "@/lib/db/scoped";
 import {
   findKameradByCardOrPersonal,
   getMenuForDate,
@@ -8,8 +9,12 @@ import {
   unregisterForDate,
 } from "@/lib/food-utils";
 
+type Result = { status: number; body: Record<string, unknown> };
+
 // RFID-Kiosk + mobile QR-Registrierung: bewusst ohne Session (Identifikation
-// über Karten-ID/Personalnummer). Kein portal_member_id-Fallback mehr.
+// über Karten-ID/Personalnummer). Markiert sich über withFoodPublicScope als
+// vertrauenswürdiger öffentlicher Zugriff (app.food_public), statt ungescoped
+// zu laufen.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -22,49 +27,55 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const kamerad = await findKameradByCardOrPersonal(card_id, personal_number);
-    if (!kamerad) {
-      return NextResponse.json(
-        { error: "Benutzer nicht gefunden" },
-        { status: 404 },
+    const result = await withFoodPublicScope<Result>(async (tx) => {
+      const kamerad = await findKameradByCardOrPersonal(
+        card_id,
+        personal_number,
+        tx,
       );
-    }
+      if (!kamerad) {
+        return { status: 404, body: { error: "Benutzer nicht gefunden" } };
+      }
 
-    const dateStr = today();
-    const menu = await getMenuForDate(dateStr);
+      const menu = await getMenuForDate(today(), tx);
 
-    // Zwei-Menü-Modus aktiv und keine Wahl übergeben → Rückfrage.
-    if (menu?.zweiMenuesAktiv && !menu_choice) {
-      return NextResponse.json({
-        success: true,
-        need_menu_choice: true,
-        kamerad_id: kamerad.id,
-        menu1: menu.menu1Name,
-        menu2: menu.menu2Name,
-        user: {
-          name: `${kamerad.vorname} ${kamerad.name}`,
-          personal_number: kamerad.personalnummer,
+      // Zwei-Menü-Modus aktiv und keine Wahl übergeben → Rückfrage.
+      if (menu?.zweiMenuesAktiv && !menu_choice) {
+        return {
+          status: 200,
+          body: {
+            success: true,
+            need_menu_choice: true,
+            kamerad_id: kamerad.id,
+            menu1: menu.menu1Name,
+            menu2: menu.menu2Name,
+            user: {
+              name: `${kamerad.vorname} ${kamerad.name}`,
+              personal_number: kamerad.personalnummer,
+            },
+          },
+        };
+      }
+
+      if (menu && !isRegistrationOpen(menu)) {
+        return { status: 403, body: { error: "Anmeldefrist abgelaufen" } };
+      }
+
+      const reg = await toggleRegistration(kamerad.id, menu_choice || 1, tx);
+      return {
+        status: 200,
+        body: {
+          success: true,
+          registered: reg.registered,
+          user: {
+            name: `${kamerad.vorname} ${kamerad.name}`,
+            personal_number: kamerad.personalnummer,
+          },
         },
-      });
-    }
-
-    if (menu && !isRegistrationOpen(menu)) {
-      return NextResponse.json(
-        { error: "Anmeldefrist abgelaufen" },
-        { status: 403 },
-      );
-    }
-
-    const result = await toggleRegistration(kamerad.id, menu_choice || 1);
-
-    return NextResponse.json({
-      success: true,
-      registered: result.registered,
-      user: {
-        name: `${kamerad.vorname} ${kamerad.name}`,
-        personal_number: kamerad.personalnummer,
-      },
+      };
     });
+
+    return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     console.error("Food register error:", error);
     return NextResponse.json({ error: "Interner Fehler" }, { status: 500 });
@@ -85,30 +96,38 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const kamerad = await findKameradByCardOrPersonal(card_id, personal_number);
-    if (!kamerad) {
-      return NextResponse.json(
-        { error: "Benutzer nicht gefunden" },
-        { status: 404 },
+    const result = await withFoodPublicScope<Result>(async (tx) => {
+      const kamerad = await findKameradByCardOrPersonal(
+        card_id,
+        personal_number,
+        tx,
       );
-    }
+      if (!kamerad) {
+        return { status: 404, body: { error: "Benutzer nicht gefunden" } };
+      }
 
-    const removed = await unregisterForDate(kamerad.id);
-    if (!removed) {
-      return NextResponse.json(
-        { error: "Keine Anmeldung für heute gefunden" },
-        { status: 404 },
-      );
-    }
+      const removed = await unregisterForDate(kamerad.id, today(), tx);
+      if (!removed) {
+        return {
+          status: 404,
+          body: { error: "Keine Anmeldung für heute gefunden" },
+        };
+      }
 
-    return NextResponse.json({
-      success: true,
-      registered: false,
-      user: {
-        name: `${kamerad.vorname} ${kamerad.name}`,
-        personal_number: kamerad.personalnummer,
-      },
+      return {
+        status: 200,
+        body: {
+          success: true,
+          registered: false,
+          user: {
+            name: `${kamerad.vorname} ${kamerad.name}`,
+            personal_number: kamerad.personalnummer,
+          },
+        },
+      };
     });
+
+    return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     console.error("Food unregister error:", error);
     return NextResponse.json({ error: "Interner Fehler" }, { status: 500 });

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { db } from "@/lib/db";
 import { foodMobileTokens } from "@/lib/db/schema";
+import { withFoodScope } from "@/lib/db/scoped";
 import { requireFoodSession } from "@/lib/food-auth";
 import { logFoodAdmin } from "@/lib/food-utils";
 
@@ -27,14 +27,18 @@ export async function POST(req: NextRequest) {
   const token = randomBytes(24).toString("hex");
 
   try {
-    const [row] = await db
-      .insert(foodMobileTokens)
-      .values({ kameradId, token })
-      .onConflictDoUpdate({
-        target: foodMobileTokens.kameradId,
-        set: { token, createdAt: new Date() },
-      })
-      .returning({ token: foodMobileTokens.token });
+    const [row] = await withFoodScope(
+      { kameradId: session.kameradId, foodRolle: session.foodRole },
+      (tx) =>
+        tx
+          .insert(foodMobileTokens)
+          .values({ kameradId, token })
+          .onConflictDoUpdate({
+            target: foodMobileTokens.kameradId,
+            set: { token, createdAt: new Date() },
+          })
+          .returning({ token: foodMobileTokens.token }),
+    );
 
     await logFoodAdmin(
       session.kameradName,

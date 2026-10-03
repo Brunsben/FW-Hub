@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import type { ScopedTx } from "@/lib/db/scoped";
 import {
   foodAdminLog,
   foodGuests,
@@ -8,13 +9,17 @@ import {
   kameraden,
 } from "@/lib/db/schema";
 
+// Ausführungs-Kontext: globaler Pool (db) ODER eine gescopte Transaktion (tx).
+// So können dieselben Helfer innerhalb eines withFoodPublicScope laufen.
+type Executor = typeof db | ScopedTx;
+
 // Heutiges Datum als YYYY-MM-DD.
 export function today(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-export async function getMenuForDate(date: string) {
-  const [menu] = await db
+export async function getMenuForDate(date: string, exec: Executor = db) {
+  const [menu] = await exec
     .select()
     .from(foodMenus)
     .where(eq(foodMenus.date, date))
@@ -82,10 +87,11 @@ export function isRegistrationOpen(menu: {
 export async function toggleRegistration(
   kameradId: number,
   menuChoice: number = 1,
+  exec: Executor = db,
 ) {
   const dateStr = today();
 
-  const [existing] = await db
+  const [existing] = await exec
     .select()
     .from(foodRegistrations)
     .where(
@@ -97,13 +103,13 @@ export async function toggleRegistration(
     .limit(1);
 
   if (existing) {
-    await db
+    await exec
       .delete(foodRegistrations)
       .where(eq(foodRegistrations.id, existing.id));
     return { registered: false, menuChoice: existing.menuChoice };
   }
 
-  await db
+  await exec
     .insert(foodRegistrations)
     .values({ kameradId, date: dateStr, menuChoice });
   return { registered: true, menuChoice };
@@ -113,8 +119,9 @@ export async function toggleRegistration(
 export async function unregisterForDate(
   kameradId: number,
   dateStr = today(),
+  exec: Executor = db,
 ) {
-  const removed = await db
+  const removed = await exec
     .delete(foodRegistrations)
     .where(
       and(
@@ -131,9 +138,10 @@ export async function unregisterForDate(
 export async function findKameradByCardOrPersonal(
   cardId?: string | null,
   personalNumber?: string | null,
+  exec: Executor = db,
 ) {
   if (cardId) {
-    const [k] = await db
+    const [k] = await exec
       .select()
       .from(kameraden)
       .where(and(eq(kameraden.kartenId, String(cardId)), eq(kameraden.aktiv, true)))
@@ -141,7 +149,7 @@ export async function findKameradByCardOrPersonal(
     if (k) return k;
   }
   if (personalNumber) {
-    const [k] = await db
+    const [k] = await exec
       .select()
       .from(kameraden)
       .where(

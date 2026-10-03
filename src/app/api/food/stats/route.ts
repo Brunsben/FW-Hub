@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { desc, gte, sql } from "drizzle-orm";
-import { db } from "@/lib/db";
 import { foodGuests, foodMenus, foodRegistrations } from "@/lib/db/schema";
+import { withFoodPublicScope } from "@/lib/db/scoped";
 
 // Öffentlich: physischer Küchen-Bildschirm ruft diese aggregierten Zähler
 // ohne Session ab (wie im Original). Personenbezug steckt nur im Export.
@@ -17,26 +17,33 @@ export async function GET(req: NextRequest) {
     since.setDate(since.getDate() - days);
     const sinceStr = since.toISOString().split("T")[0];
 
-    const menuData = await db
-      .select()
-      .from(foodMenus)
-      .where(gte(foodMenus.date, sinceStr))
-      .orderBy(desc(foodMenus.date));
+    // reg_counts liest fw_food.registrations (RLS) → öffentlicher Food-Scope.
+    const { menuData, regCounts, guestData } = await withFoodPublicScope(
+      async (tx) => {
+        const menuData = await tx
+          .select()
+          .from(foodMenus)
+          .where(gte(foodMenus.date, sinceStr))
+          .orderBy(desc(foodMenus.date));
 
-    const regCounts = await db
-      .select({
-        date: foodRegistrations.date,
-        menuChoice: foodRegistrations.menuChoice,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(foodRegistrations)
-      .where(gte(foodRegistrations.date, sinceStr))
-      .groupBy(foodRegistrations.date, foodRegistrations.menuChoice);
+        const regCounts = await tx
+          .select({
+            date: foodRegistrations.date,
+            menuChoice: foodRegistrations.menuChoice,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(foodRegistrations)
+          .where(gte(foodRegistrations.date, sinceStr))
+          .groupBy(foodRegistrations.date, foodRegistrations.menuChoice);
 
-    const guestData = await db
-      .select()
-      .from(foodGuests)
-      .where(gte(foodGuests.date, sinceStr));
+        const guestData = await tx
+          .select()
+          .from(foodGuests)
+          .where(gte(foodGuests.date, sinceStr));
+
+        return { menuData, regCounts, guestData };
+      },
+    );
 
     const stats = menuData.map((menu) => {
       const dayRegs = regCounts.filter((r) => r.date === menu.date);
