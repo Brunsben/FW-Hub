@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import {
   Card,
   CardContent,
@@ -185,9 +186,9 @@ export function KameradenCardsManager({
                 Schließen
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              QR-Bild-Darstellung ausstehend (qrcode-Paket nicht installiert).
-            </p>
+            <div className="rounded-lg bg-white p-4">
+              <QRCodeSVG value={qrLink.url} size={192} />
+            </div>
           </div>
         )}
 
