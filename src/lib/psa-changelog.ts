@@ -13,7 +13,9 @@ import type { ScopedTx } from "@/lib/db/scoped";
 // Fehler werden nur geloggt, nie an den Aufrufer weitergereicht — ein
 // fehlgeschlagenes Audit-Log darf die eigentliche Mutation nicht kippen.
 export async function logChange(
-  session: PsaSession,
+  // Nur der Benutzername wird gebraucht – so können auch Routen ohne
+  // PSA-Session (z. B. globaler Admin beim Löschen eines Stücks) protokollieren.
+  session: Pick<PsaSession, "benutzername">,
   tabelle: string,
   aktion: string,
   details: string | null,

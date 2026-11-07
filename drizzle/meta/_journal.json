@@ -71,6 +71,13 @@
       "when": 1794050797622,
       "tag": "0009_login_attempts_revoke_fw_app",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794064779610,
+      "tag": "0010_psa_historie_rls",
+      "breakpoints": true
     }
   ]
 }

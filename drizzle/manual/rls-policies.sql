@@ -22,6 +22,12 @@ BEGIN;
 -- Weitere Policies auf core.kameraden liegen NICHT in dieser Datei:
 --   kameraden_food_public_read, kameraden_food_admin_read → rls-policies-food.sql
 --   kameraden_funk_read → drizzle/0004_funk_kameraden_read.sql (via migrate.mjs)
+--
+-- RLS für psa.ausgaben, psa.pruefungen, psa.waesche liegt in
+-- drizzle/0010_psa_historie_rls.sql (via migrate.mjs). Muster dort:
+--   <t>_priv         FOR ALL    Admin/Kleiderwart lesen und schreiben alles
+--   <t>_eigene_lesen FOR SELECT sonst nur kamerad_id = app.kamerad_id LESEN
+-- (User schreiben nie – bewusst strenger als ausruestungstuecke_scope).
 
 -- ── core.kameraden ────────────────────────────────────────────
 ALTER TABLE core.kameraden ENABLE ROW LEVEL SECURITY;

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { and, desc, eq, type SQL } from "drizzle-orm";
 import { withScope } from "@/lib/db/scoped";
 import { expectRows, NoRowsAffectedError } from "@/lib/db/rows";
 import { psaAusgaben, psaAusruestungstuecke } from "@/lib/db/schema";
@@ -25,7 +24,8 @@ const stueckNichtGefunden = () =>
     { status: 404 },
   );
 
-// psa.ausgaben hat keine RLS; User werden über ihre kamerad_id eingeschränkt.
+// psa.ausgaben liegt hinter RLS (ausgaben_priv / ausgaben_eigene_lesen) →
+// Lesen im Scope. Der App-Filter auf die eigene kamerad_id bleibt zusätzlich.
 export async function GET(req: NextRequest) {
   const session = await requirePsaSession();
   if (!session) {
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   }
 
   const params = req.nextUrl.searchParams;
-  const conditions = [];
+  const conditions: SQL[] = [];
 
   const tueckId = toIntOrNull(params.get("ausruestungstueckId"));
   if (tueckId !== null)
@@ -47,11 +47,14 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(psaAusgaben.kameradId, kameradId));
   }
 
-  const ausgaben = await db
-    .select()
-    .from(psaAusgaben)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(psaAusgaben.ausgabedatum));
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+  const ausgaben = await withScope(scope, (tx) =>
+    tx
+      .select()
+      .from(psaAusgaben)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(psaAusgaben.ausgabedatum)),
+  );
 
   return NextResponse.json({ ausgaben });
 }

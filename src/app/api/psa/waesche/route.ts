@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { and, desc, eq, type SQL } from "drizzle-orm";
 import { withScope } from "@/lib/db/scoped";
 import { psaWaesche } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
@@ -23,7 +22,7 @@ export async function GET(req: NextRequest) {
   }
 
   const params = req.nextUrl.searchParams;
-  const conditions = [];
+  const conditions: SQL[] = [];
 
   const tueckId = toIntOrNull(params.get("ausruestungstueckId"));
   if (tueckId !== null)
@@ -37,11 +36,15 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(psaWaesche.kameradId, kameradId));
   }
 
-  const waesche = await db
-    .select()
-    .from(psaWaesche)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(psaWaesche.datum));
+  // psa.waesche liegt hinter RLS → Lesen im Scope; App-Filter bleibt.
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+  const waesche = await withScope(scope, (tx) =>
+    tx
+      .select()
+      .from(psaWaesche)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(psaWaesche.datum)),
+  );
 
   return NextResponse.json({ waesche });
 }

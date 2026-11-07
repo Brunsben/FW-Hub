@@ -47,9 +47,18 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
 
 ### RLS-Scopes (src/lib/db/scoped.ts)
 Jeder Zugriff auf RLS-Tabellen (core.kameraden, core.benutzer,
-core.login_attempts, psa.ausruestungstuecke, fw_food.registrations,
-fw_food.mobile_tokens) läuft in einem Scope, der die app.*-GUCs
-transaktionslokal setzt:
+core.login_attempts, psa.ausruestungstuecke, psa.ausgaben, psa.pruefungen,
+psa.waesche, fw_food.registrations, fw_food.mobile_tokens) läuft in einem
+Scope, der die app.*-GUCs transaktionslokal setzt.
+
+Policy-Muster für die PSA-Historie (ausgaben, pruefungen, waesche; Migration
+0010): `<t>_priv` FOR ALL für app.psa_rolle Admin/Kleiderwart und
+`<t>_eigene_lesen` FOR SELECT für kamerad_id = app.kamerad_id. User lesen
+nur eigene Zeilen und schreiben nie, auch nicht eigene (bewusst strenger als
+ausruestungstuecke_scope, das eigene Zeilen schreiben lässt). Neue
+PSA-Historientabellen folgen diesem Muster.
+
+Scopes:
 - withScope({ kameradId, psaRolle }): PSA und eigene Zeile
 - withFoodScope({ kameradId, foodRolle }): Küchen-Admin, darf core.kameraden
   nur lesen. Karten-IDs schreibt ausschließlich core.set_karten_id

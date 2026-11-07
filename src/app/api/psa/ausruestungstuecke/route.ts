@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
-import { withScope } from "@/lib/db/scoped";
+import { withGlobalAdminScope, withScope } from "@/lib/db/scoped";
 import { psaAusruestungstuecke } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
+import { requireGlobalAdmin } from "@/lib/benutzer-admin";
 import { logChange, typNameById } from "@/lib/psa-changelog";
 
 function toIntOrNull(v: unknown): number | null {
@@ -167,19 +168,22 @@ export async function PATCH(req: NextRequest) {
 // Prüfungen, Wäsche und Schäden hängen per ON DELETE CASCADE am Stück und
 // würden sonst mitgelöscht. Stücke mit Historie werden über den Status
 // "Ausgesondert" stillgelegt (PATCH), nicht gelöscht.
+//
+// Scope: withGlobalAdminScope (nach requireGlobalAdmin). Mit dem PSA-Scope der
+// Session sähe ein globaler Admin mit psa_rolle "User" unter RLS nur eigene
+// Historienzeilen; die Prüfung hielte ein eigenes Stück mit fremder Historie
+// für historienlos, und die Kaskade (läuft ohne RLS) löschte fremde Historie.
 export async function DELETE(req: NextRequest) {
-  const session = await requirePsaSession();
-  if (!session?.isGlobalAdmin) {
-    return NextResponse.json({ error: "Nicht berechtigt" }, { status: 403 });
-  }
+  const guard = await requireGlobalAdmin();
+  if (!guard.ok) return guard.response;
+  const admin = guard.user;
 
   const id = Number(req.nextUrl.searchParams.get("id"));
   if (!id || Number.isNaN(id)) {
     return NextResponse.json({ error: "id erforderlich" }, { status: 400 });
   }
 
-  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
-  const outcome = await withScope(scope, async (tx) => {
+  const outcome = await withGlobalAdminScope(admin, async (tx) => {
     // Zeile sperren: Neue Historie (FK → FOR KEY SHARE am Stück) wartet, bis
     // diese Transaktion fertig ist. Damit kann zwischen Prüfung und DELETE
     // keine Historie entstehen.
@@ -228,7 +232,7 @@ export async function DELETE(req: NextRequest) {
 
   const typName = await typNameById(deleted.ausruestungstypId);
   await logChange(
-    session,
+    { benutzername: admin.sub },
     "Ausrüstung",
     "Gelöscht",
     `${typName} (${deleted.seriennummer ?? ""})`,
