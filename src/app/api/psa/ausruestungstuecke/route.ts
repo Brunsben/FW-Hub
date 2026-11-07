@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { and, desc, eq, type SQL } from "drizzle-orm";
+import { withScope } from "@/lib/db/scoped";
 import { psaAusruestungstuecke } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { logChange, typNameById } from "@/lib/psa-changelog";
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   }
 
   const params = req.nextUrl.searchParams;
-  const conditions = [];
+  const conditions: SQL[] = [];
 
   const typId = toIntOrNull(params.get("ausruestungstypId"));
   if (typId !== null)
@@ -40,11 +40,14 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(psaAusruestungstuecke.kameradId, kameradId));
   }
 
-  const stuecke = await db
-    .select()
-    .from(psaAusruestungstuecke)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(psaAusruestungstuecke.createdAt));
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+  const stuecke = await withScope(scope, (tx) =>
+    tx
+      .select()
+      .from(psaAusruestungstuecke)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(psaAusruestungstuecke.createdAt)),
+  );
 
   return NextResponse.json({ stuecke });
 }
@@ -56,25 +59,28 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 
-  const [stueck] = await db
-    .insert(psaAusruestungstuecke)
-    .values({
-      ausruestungstypId: toIntOrNull(body.ausruestungstypId),
-      seriennummer: toStrOrNull(body.seriennummer),
-      status: toStrOrNull(body.status),
-      kaufdatum: toStrOrNull(body.kaufdatum),
-      herstellungsdatum: toStrOrNull(body.herstellungsdatum),
-      naechstePruefung: toStrOrNull(body.naechstePruefung),
-      letztePruefung: toStrOrNull(body.letztePruefung),
-      lebensendeDatum: toStrOrNull(body.lebensendeDatum),
-      qrCode: toStrOrNull(body.qrCode),
-      waescheAnzahl: toIntOrNull(body.waescheAnzahl) ?? 0,
-      groesse: toStrOrNull(body.groesse),
-      notizen: toStrOrNull(body.notizen),
-      kameradId: toIntOrNull(body.kameradId),
-    })
-    .returning();
+  const [stueck] = await withScope(scope, (tx) =>
+    tx
+      .insert(psaAusruestungstuecke)
+      .values({
+        ausruestungstypId: toIntOrNull(body.ausruestungstypId),
+        seriennummer: toStrOrNull(body.seriennummer),
+        status: toStrOrNull(body.status),
+        kaufdatum: toStrOrNull(body.kaufdatum),
+        herstellungsdatum: toStrOrNull(body.herstellungsdatum),
+        naechstePruefung: toStrOrNull(body.naechstePruefung),
+        letztePruefung: toStrOrNull(body.letztePruefung),
+        lebensendeDatum: toStrOrNull(body.lebensendeDatum),
+        qrCode: toStrOrNull(body.qrCode),
+        waescheAnzahl: toIntOrNull(body.waescheAnzahl) ?? 0,
+        groesse: toStrOrNull(body.groesse),
+        notizen: toStrOrNull(body.notizen),
+        kameradId: toIntOrNull(body.kameradId),
+      })
+      .returning(),
+  );
 
   const typName = await typNameById(stueck.ausruestungstypId);
   await logChange(
@@ -128,12 +134,16 @@ export async function PATCH(req: NextRequest) {
     );
   }
   update.updatedAt = new Date();
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 
-  const [stueck] = await db
-    .update(psaAusruestungstuecke)
-    .set(update)
-    .where(eq(psaAusruestungstuecke.id, id))
-    .returning();
+  // 0 Zeilen (unbekannt/nicht berechtigt) → 404 unten, kein Erfolg.
+  const [stueck] = await withScope(scope, (tx) =>
+    tx
+      .update(psaAusruestungstuecke)
+      .set(update)
+      .where(eq(psaAusruestungstuecke.id, id))
+      .returning(),
+  );
 
   if (!stueck) {
     return NextResponse.json(
@@ -164,14 +174,17 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "id erforderlich" }, { status: 400 });
   }
 
-  const [deleted] = await db
-    .delete(psaAusruestungstuecke)
-    .where(eq(psaAusruestungstuecke.id, id))
-    .returning({
-      id: psaAusruestungstuecke.id,
-      ausruestungstypId: psaAusruestungstuecke.ausruestungstypId,
-      seriennummer: psaAusruestungstuecke.seriennummer,
-    });
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+  const [deleted] = await withScope(scope, (tx) =>
+    tx
+      .delete(psaAusruestungstuecke)
+      .where(eq(psaAusruestungstuecke.id, id))
+      .returning({
+        id: psaAusruestungstuecke.id,
+        ausruestungstypId: psaAusruestungstuecke.ausruestungstypId,
+        seriennummer: psaAusruestungstuecke.seriennummer,
+      }),
+  );
 
   if (!deleted) {
     return NextResponse.json(

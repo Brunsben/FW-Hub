@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { and, desc, eq, type SQL } from "drizzle-orm";
+import { withScope } from "@/lib/db/scoped";
 import { psaAusruestungstuecke, psaSchadensdokumentation } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { logChange, typNameByStueck } from "@/lib/psa-changelog";
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   }
 
   const params = req.nextUrl.searchParams;
-  const conditions = [];
+  const conditions: SQL[] = [];
 
   const tueckId = toIntOrNull(params.get("ausruestungstueckId"));
   if (tueckId !== null)
@@ -33,23 +33,26 @@ export async function GET(req: NextRequest) {
   if (session.isUser)
     conditions.push(eq(psaAusruestungstuecke.kameradId, session.kameradId));
 
-  const schaeden = await db
-    .select({
-      id: psaSchadensdokumentation.id,
-      ausruestungstueckId: psaSchadensdokumentation.ausruestungstueckId,
-      datum: psaSchadensdokumentation.datum,
-      beschreibung: psaSchadensdokumentation.beschreibung,
-      foto: psaSchadensdokumentation.foto,
-      erstelltVon: psaSchadensdokumentation.erstelltVon,
-      createdAt: psaSchadensdokumentation.createdAt,
-    })
-    .from(psaSchadensdokumentation)
-    .leftJoin(
-      psaAusruestungstuecke,
-      eq(psaAusruestungstuecke.id, psaSchadensdokumentation.ausruestungstueckId),
-    )
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(psaSchadensdokumentation.datum));
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+  const schaeden = await withScope(scope, (tx) =>
+    tx
+      .select({
+        id: psaSchadensdokumentation.id,
+        ausruestungstueckId: psaSchadensdokumentation.ausruestungstueckId,
+        datum: psaSchadensdokumentation.datum,
+        beschreibung: psaSchadensdokumentation.beschreibung,
+        foto: psaSchadensdokumentation.foto,
+        erstelltVon: psaSchadensdokumentation.erstelltVon,
+        createdAt: psaSchadensdokumentation.createdAt,
+      })
+      .from(psaSchadensdokumentation)
+      .leftJoin(
+        psaAusruestungstuecke,
+        eq(psaAusruestungstuecke.id, psaSchadensdokumentation.ausruestungstueckId),
+      )
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(psaSchadensdokumentation.datum)),
+  );
 
   return NextResponse.json({ schaeden });
 }
@@ -74,18 +77,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "foto ist erforderlich" }, { status: 400 });
   }
 
-  const [schaden] = await db
-    .insert(psaSchadensdokumentation)
-    .values({
-      ausruestungstueckId,
-      datum: toStrOrNull(body.datum),
-      beschreibung: toStrOrNull(body.beschreibung),
-      foto,
-      erstelltVon: session.kameradId,
-    })
-    .returning();
-
-  const typName = await typNameByStueck(ausruestungstueckId);
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+  const { schaden, typName } = await withScope(scope, async (tx) => {
+    const [schaden] = await tx
+      .insert(psaSchadensdokumentation)
+      .values({
+        ausruestungstueckId,
+        datum: toStrOrNull(body.datum),
+        beschreibung: toStrOrNull(body.beschreibung),
+        foto,
+        erstelltVon: session.kameradId,
+      })
+      .returning();
+    return {
+      schaden,
+      typName: await typNameByStueck(ausruestungstueckId, tx),
+    };
+  });
   await logChange(
     session,
     "Schadensdokumentation",

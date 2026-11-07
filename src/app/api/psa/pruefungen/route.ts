@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { withScope } from "@/lib/db/scoped";
+import { expectRows, NoRowsAffectedError } from "@/lib/db/rows";
 import {
   psaAusruestungstuecke,
   psaAusruestungstypen,
@@ -64,59 +66,84 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Nächste Prüfung: explizit mitgesendet ODER serverseitig aus dem
-  // Prüfintervall des Ausrüstungstyps (Prüfdatum + Intervall) berechnet.
-  let naechste = toStrOrNull(body.naechstePruefung);
-  if (!naechste) {
-    const [typRow] = await db
-      .select({ intervall: psaAusruestungstypen.pruefintervallMonate })
-      .from(psaAusruestungstuecke)
-      .leftJoin(
-        psaAusruestungstypen,
-        eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
-      )
-      .where(eq(psaAusruestungstuecke.id, ausruestungstueckId))
-      .limit(1);
-    if (typRow?.intervall) {
-      const basis = toStrOrNull(body.datum) ?? new Date().toISOString().slice(0, 10);
-      const d = new Date(basis);
-      d.setMonth(d.getMonth() + typRow.intervall);
-      naechste = d.toISOString().slice(0, 10);
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+
+  // Alles in einer gescopten Transaktion: Intervall-Lookup am Stück, Insert
+  // der Prüfung und Nachzug von naechste_pruefung am Stück. Trifft der
+  // Nachzug keine Zeile (RLS/unbekannte id), wird die Prüfung zurückgerollt.
+  let result;
+  try {
+    result = await withScope(scope, async (tx) => {
+      // Nächste Prüfung: explizit mitgesendet ODER serverseitig aus dem
+      // Prüfintervall des Ausrüstungstyps (Prüfdatum + Intervall) berechnet.
+      let naechste = toStrOrNull(body.naechstePruefung);
+      if (!naechste) {
+        const [typRow] = await tx
+          .select({ intervall: psaAusruestungstypen.pruefintervallMonate })
+          .from(psaAusruestungstuecke)
+          .leftJoin(
+            psaAusruestungstypen,
+            eq(psaAusruestungstypen.id, psaAusruestungstuecke.ausruestungstypId),
+          )
+          .where(eq(psaAusruestungstuecke.id, ausruestungstueckId))
+          .limit(1);
+        // Stück unsichtbar/unbekannt → abbrechen, auch wenn ohne Intervall
+        // später kein UPDATE (und damit keine Zeilenprüfung) folgen würde.
+        if (!typRow) throw new NoRowsAffectedError("Prüfung");
+        if (typRow.intervall) {
+          const basis =
+            toStrOrNull(body.datum) ?? new Date().toISOString().slice(0, 10);
+          const d = new Date(basis);
+          d.setMonth(d.getMonth() + typRow.intervall);
+          naechste = d.toISOString().slice(0, 10);
+        }
+      }
+
+      const [row] = await tx
+        .insert(psaPruefungen)
+        .values({
+          ausruestungstueckId,
+          kameradId: toIntOrNull(body.kameradId),
+          datum: toStrOrNull(body.datum),
+          ergebnis: toStrOrNull(body.ergebnis),
+          pruefer: toStrOrNull(body.pruefer),
+          naechstePruefung: naechste,
+          notizen: toStrOrNull(body.notizen),
+          foto: toStrOrNull(body.foto),
+        })
+        .returning();
+
+      if (naechste) {
+        expectRows(
+          await tx
+            .update(psaAusruestungstuecke)
+            .set({ naechstePruefung: naechste, updatedAt: new Date() })
+            .where(eq(psaAusruestungstuecke.id, ausruestungstueckId))
+            .returning({ id: psaAusruestungstuecke.id }),
+          "Prüfung",
+        );
+      }
+      return {
+        pruefung: row,
+        typName: await typNameByStueck(ausruestungstueckId, tx),
+      };
+    });
+  } catch (e) {
+    if (e instanceof NoRowsAffectedError) {
+      return NextResponse.json(
+        { error: "Ausrüstungsstück nicht gefunden oder nicht berechtigt" },
+        { status: 404 },
+      );
     }
+    throw e;
   }
 
-  // Insert + Nachzug am Stück atomar in einer Transaktion.
-  const pruefung = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(psaPruefungen)
-      .values({
-        ausruestungstueckId,
-        kameradId: toIntOrNull(body.kameradId),
-        datum: toStrOrNull(body.datum),
-        ergebnis: toStrOrNull(body.ergebnis),
-        pruefer: toStrOrNull(body.pruefer),
-        naechstePruefung: naechste,
-        notizen: toStrOrNull(body.notizen),
-        foto: toStrOrNull(body.foto),
-      })
-      .returning();
-
-    if (naechste) {
-      await tx
-        .update(psaAusruestungstuecke)
-        .set({ naechstePruefung: naechste, updatedAt: new Date() })
-        .where(eq(psaAusruestungstuecke.id, ausruestungstueckId));
-    }
-    return row;
-  });
-
-  const typName = await typNameByStueck(ausruestungstueckId);
   await logChange(
     session,
     "Prüfungen",
     "Geprüft",
-    `${typName} – ${toStrOrNull(body.ergebnis) ?? ""}`,
+    `${result.typName} – ${toStrOrNull(body.ergebnis) ?? ""}`,
   );
 
-  return NextResponse.json({ pruefung }, { status: 201 });
+  return NextResponse.json({ pruefung: result.pruefung }, { status: 201 });
 }

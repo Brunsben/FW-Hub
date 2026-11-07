@@ -42,9 +42,14 @@ export async function typNameById(typId: number | null): Promise<string> {
   return row?.bezeichnung ?? "?";
 }
 
-export async function typNameByStueck(stueckId: number | null): Promise<string> {
+// psa.ausruestungstuecke liegt hinter RLS: Der Aufrufer reicht seine
+// (gescopte) Transaktion durch. Pflichtparameter, kein Fallback auf db.
+export async function typNameByStueck(
+  stueckId: number | null,
+  exec: ScopedTx,
+): Promise<string> {
   if (stueckId == null) return "?";
-  const [row] = await db
+  const [row] = await exec
     .select({ bezeichnung: psaAusruestungstypen.bezeichnung })
     .from(psaAusruestungstuecke)
     .leftJoin(

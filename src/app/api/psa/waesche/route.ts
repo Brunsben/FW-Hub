@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { withScope } from "@/lib/db/scoped";
 import { psaWaesche } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { logChange, typNameByStueck } from "@/lib/psa-changelog";
@@ -60,18 +61,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const [waesche] = await db
-    .insert(psaWaesche)
-    .values({
-      ausruestungstueckId,
-      kameradId: toIntOrNull(body.kameradId),
-      datum: toStrOrNull(body.datum),
-      waescheart: toStrOrNull(body.waescheart) ?? "Normal",
-      notizen: toStrOrNull(body.notizen),
-    })
-    .returning();
-
-  const typName = await typNameByStueck(ausruestungstueckId);
+  const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
+  const { waesche, typName } = await withScope(scope, async (tx) => {
+    const [waesche] = await tx
+      .insert(psaWaesche)
+      .values({
+        ausruestungstueckId,
+        kameradId: toIntOrNull(body.kameradId),
+        datum: toStrOrNull(body.datum),
+        waescheart: toStrOrNull(body.waescheart) ?? "Normal",
+        notizen: toStrOrNull(body.notizen),
+      })
+      .returning();
+    return {
+      waesche,
+      typName: await typNameByStueck(ausruestungstueckId, tx),
+    };
+  });
   await logChange(session, "Wäsche", "Gewaschen", typName);
 
   return NextResponse.json({ waesche }, { status: 201 });
