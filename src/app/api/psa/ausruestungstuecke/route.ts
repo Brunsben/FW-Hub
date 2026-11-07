@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { withScope } from "@/lib/db/scoped";
 import { psaAusruestungstuecke } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
@@ -163,9 +163,13 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ stueck });
 }
 
+// Hartes Löschen nur für den globalen Admin und nur ohne Historie. Ausgaben,
+// Prüfungen, Wäsche und Schäden hängen per ON DELETE CASCADE am Stück und
+// würden sonst mitgelöscht. Stücke mit Historie werden über den Status
+// "Ausgesondert" stillgelegt (PATCH), nicht gelöscht.
 export async function DELETE(req: NextRequest) {
   const session = await requirePsaSession();
-  if (!session?.canEdit) {
+  if (!session?.isGlobalAdmin) {
     return NextResponse.json({ error: "Nicht berechtigt" }, { status: 403 });
   }
 
@@ -175,23 +179,52 @@ export async function DELETE(req: NextRequest) {
   }
 
   const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
-  const [deleted] = await withScope(scope, (tx) =>
-    tx
+  const outcome = await withScope(scope, async (tx) => {
+    // Zeile sperren: Neue Historie (FK → FOR KEY SHARE am Stück) wartet, bis
+    // diese Transaktion fertig ist. Damit kann zwischen Prüfung und DELETE
+    // keine Historie entstehen.
+    const [stueck] = await tx
+      .select({ id: psaAusruestungstuecke.id })
+      .from(psaAusruestungstuecke)
+      .where(eq(psaAusruestungstuecke.id, id))
+      .for("update");
+    if (!stueck) return { kind: "notFound" as const };
+
+    const [{ historie }] = await tx.execute<{ historie: boolean }>(sql`
+      select exists (select 1 from psa.ausgaben where ausruestungstueck_id = ${id})
+          or exists (select 1 from psa.pruefungen where ausruestungstueck_id = ${id})
+          or exists (select 1 from psa.waesche where ausruestungstueck_id = ${id})
+          or exists (select 1 from psa.schadensdokumentation where ausruestungstueck_id = ${id})
+          as historie`);
+    if (historie) return { kind: "hasHistory" as const };
+
+    const [deleted] = await tx
       .delete(psaAusruestungstuecke)
       .where(eq(psaAusruestungstuecke.id, id))
       .returning({
         id: psaAusruestungstuecke.id,
         ausruestungstypId: psaAusruestungstuecke.ausruestungstypId,
         seriennummer: psaAusruestungstuecke.seriennummer,
-      }),
-  );
+      });
+    return { kind: "deleted" as const, deleted };
+  });
 
-  if (!deleted) {
+  if (outcome.kind === "notFound") {
     return NextResponse.json(
       { error: "Ausrüstungsstück nicht gefunden" },
       { status: 404 },
     );
   }
+  if (outcome.kind === "hasHistory") {
+    return NextResponse.json(
+      {
+        error:
+          'Das Stück hat eine Historie (Ausgabe, Prüfung, Wäsche oder Schaden) und kann nicht gelöscht werden. Bitte stattdessen den Status "Ausgesondert" setzen.',
+      },
+      { status: 409 },
+    );
+  }
+  const { deleted } = outcome;
 
   const typName = await typNameById(deleted.ausruestungstypId);
   await logChange(

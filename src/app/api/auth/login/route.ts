@@ -5,17 +5,41 @@ import { authDb } from "@/lib/db/auth-client";
 import { withScope } from "@/lib/db/scoped";
 import { benutzer, kameraden } from "@/lib/db/schema";
 import { signJwt, setAuthCookie } from "@/lib/auth";
+import { checkLock, getClientIp, recordAttempt } from "@/lib/login-throttle";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const username: string = body.benutzername || body.username;
-    const password: string = body.pin || body.password;
+    const username: unknown = body.benutzername || body.username;
+    const password: unknown = body.pin || body.password;
 
-    if (!username || !password) {
+    if (
+      typeof username !== "string" ||
+      typeof password !== "string" ||
+      !username ||
+      !password
+    ) {
       return NextResponse.json(
         { error: "Benutzername und PIN erforderlich" },
         { status: 400 },
+      );
+    }
+
+    // Login-Sperre VOR dem Benutzer-Lookup und ohne bcrypt. Gesperrte
+    // Anfragen werden nicht als Fehlversuch gezählt.
+    const nameKey = username.toLowerCase();
+    const ip = getClientIp(req);
+    const lock = await checkLock(nameKey, ip);
+    if (lock.locked) {
+      return NextResponse.json(
+        {
+          error: "Zu viele Fehlversuche. Bitte später erneut versuchen.",
+          retryAfterSec: lock.retryAfterSec,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(lock.retryAfterSec) },
+        },
       );
     }
 
@@ -34,6 +58,9 @@ export async function POST(req: NextRequest) {
     const valid = user
       ? await compare(password, user.pin)
       : await compare(password, "$2a$12$invalidinvalidinvalidinvalidinvalidino");
+
+    // Auch unbekannte/inaktive Namen zählen (keine Enumeration über die Sperre).
+    await recordAttempt(nameKey, ip, Boolean(user && valid));
 
     if (!user || !valid) {
       return NextResponse.json(

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { HashScroll } from "@/components/psa/hash-scroll";
+import { LogoutButton } from "@/components/logout-button";
 
 export default async function PsaLayout({
   children,
@@ -38,6 +39,9 @@ export default async function PsaLayout({
               {i.label}
             </Link>
           ))}
+          <div className="ml-auto">
+            <LogoutButton />
+          </div>
         </div>
       </nav>
       {children}

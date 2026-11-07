@@ -11,6 +11,7 @@ export interface PsaSession {
   psaRole: PsaRole;
   canEdit: boolean; // Admin oder Kleiderwart: Vollzugriff
   isUser: boolean; // reine Leseansicht der eigenen Daten
+  isGlobalAdmin: boolean; // app_role (core.benutzer.rolle) = Admin, modulübergreifend
 }
 
 // Kein eigener Login: verifiziert das Portal-JWT und liest den psa_rolle-Claim.
@@ -30,5 +31,6 @@ export async function requirePsaSession(): Promise<PsaSession | null> {
     psaRole,
     canEdit: psaRole === "Admin" || psaRole === "Kleiderwart",
     isUser: psaRole === "User",
+    isGlobalAdmin: user.app_role === "Admin",
   };
 }

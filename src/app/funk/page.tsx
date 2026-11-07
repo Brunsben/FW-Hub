@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { withFunkScope } from "@/lib/db/scoped";
 import { redirectNoModuleAccess } from "@/lib/module-guard";
+import { LogoutButton } from "@/components/logout-button";
 import {
   funkDeviceAssignments,
   funkDevices,
@@ -104,11 +105,14 @@ export default async function FunkPage() {
 
     return (
       <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
-        <div>
-          <h1 className="text-2xl font-bold">Funktechnik – Geräte</h1>
-          <p className="text-sm text-muted-foreground">
-            Angemeldet als {session.kameradName} ({session.funkRole})
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Funktechnik – Geräte</h1>
+            <p className="text-sm text-muted-foreground">
+              Angemeldet als {session.kameradName} ({session.funkRole})
+            </p>
+          </div>
+          <LogoutButton />
         </div>
 
         <Card>
@@ -220,11 +224,14 @@ export default async function FunkPage() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">Meine Funkgeräte</h1>
-        <p className="text-sm text-muted-foreground">
-          Angemeldet als {session.kameradName} ({session.funkRole})
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Meine Funkgeräte</h1>
+          <p className="text-sm text-muted-foreground">
+            Angemeldet als {session.kameradName} ({session.funkRole})
+          </p>
+        </div>
+        <LogoutButton />
       </div>
 
       <Card>

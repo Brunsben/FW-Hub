@@ -71,6 +71,32 @@ export const benutzer = core.table("benutzer", {
     .defaultNow(),
 });
 
+// ============================================================================
+// LOGIN_ATTEMPTS — Login-Sperre (Brute-Force-Schutz). Zugriff ausschließlich
+// über authDb (fw_auth, BYPASSRLS). RLS aktiv ohne Policy: fw_app sieht nichts.
+// Gesperrte Anfragen werden NICHT eingetragen. Rettungsweg siehe
+// drizzle/manual/login-sperre.md.
+// ============================================================================
+export const loginAttempts = core.table(
+  "login_attempts",
+  {
+    id: serial("id").primaryKey(),
+    benutzername: text("benutzername").notNull(), // lowercase
+    ip: text("ip"),
+    erfolgreich: boolean("erfolgreich").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    benutzerIdx: index("idx_login_attempts_benutzer_zeit").on(
+      t.benutzername,
+      t.createdAt,
+    ),
+    ipIdx: index("idx_login_attempts_ip_zeit").on(t.ip, t.createdAt),
+  }),
+);
+
 export const kameradenRelations = relations(kameraden, ({ many }) => ({
   benutzer: many(benutzer),
 }));

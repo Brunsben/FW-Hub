@@ -72,5 +72,12 @@ $$;
 GRANT USAGE ON SCHEMA core TO fw_auth;
 GRANT SELECT ON core.benutzer TO fw_auth;
 -- Bewusst KEIN Zugriff auf core.kameraden, psa.*, fw_funk.* und kein
--- INSERT/UPDATE/DELETE. fw_auth dient allein dem Benutzer-Lookup beim Login.
+-- INSERT/UPDATE/DELETE auf core.benutzer. fw_auth dient dem Benutzer-Lookup
+-- beim Login.
+--
+-- Ausnahme (seit Login-Sperre, per Migration drizzle/0007_login_attempts_rls.sql,
+-- hier nur zur Dokumentation):
+--   GRANT SELECT, INSERT, DELETE ON core.login_attempts TO fw_auth;
+--   GRANT USAGE ON SEQUENCE core.login_attempts_id_seq TO fw_auth;
+-- Siehe drizzle/manual/login-sperre.md.
 
