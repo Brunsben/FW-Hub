@@ -48,15 +48,22 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
 ### RLS-Scopes (src/lib/db/scoped.ts)
 Jeder Zugriff auf RLS-Tabellen (core.kameraden, core.benutzer,
 core.login_attempts, psa.ausruestungstuecke, psa.ausgaben, psa.pruefungen,
-psa.waesche, fw_food.registrations, fw_food.mobile_tokens) läuft in einem
-Scope, der die app.*-GUCs transaktionslokal setzt.
+psa.waesche, psa.schadensdokumentation, psa.kamerad_details,
+fw_food.registrations, fw_food.mobile_tokens) läuft in einem Scope, der die
+app.*-GUCs transaktionslokal setzt.
 
-Policy-Muster für die PSA-Historie (ausgaben, pruefungen, waesche; Migration
-0010): `<t>_priv` FOR ALL für app.psa_rolle Admin/Kleiderwart und
-`<t>_eigene_lesen` FOR SELECT für kamerad_id = app.kamerad_id. User lesen
-nur eigene Zeilen und schreiben nie, auch nicht eigene (bewusst strenger als
-ausruestungstuecke_scope, das eigene Zeilen schreiben lässt). Neue
-PSA-Historientabellen folgen diesem Muster.
+Policy-Muster für ALLE PSA-Tabellen (Migrationen 0010 und 0011):
+`<t>_priv` FOR ALL für app.psa_rolle Admin/Kleiderwart und
+`<t>_eigene_lesen` FOR SELECT für die eigenen Zeilen. User lesen nur eigene
+Zeilen und schreiben in PSA-Tabellen nie, auch nicht eigene.
+- ausruestungstuecke, ausgaben, pruefungen, waesche, kamerad_details: eigene
+  Zeile = kamerad_id = app.kamerad_id
+- schadensdokumentation (keine kamerad_id): eigene Zeile = Schaden an einem
+  Stück, dessen aktueller Träger der Benutzer ist (Unterabfrage auf
+  ausruestungstuecke, läuft selbst unter RLS)
+- Die frühere Policy ausruestungstuecke_scope (FOR ALL inkl. eigener
+  Schreibrechte) ist durch 0011 ersetzt und wird nirgends mehr angelegt.
+Neue PSA-Tabellen folgen diesem Muster.
 
 Scopes:
 - withScope({ kameradId, psaRolle }): PSA und eigene Zeile

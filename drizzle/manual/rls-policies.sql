@@ -23,11 +23,17 @@ BEGIN;
 --   kameraden_food_public_read, kameraden_food_admin_read → rls-policies-food.sql
 --   kameraden_funk_read → drizzle/0004_funk_kameraden_read.sql (via migrate.mjs)
 --
--- RLS für psa.ausgaben, psa.pruefungen, psa.waesche liegt in
--- drizzle/0010_psa_historie_rls.sql (via migrate.mjs). Muster dort:
+-- Die Policies aller PSA-Tabellen liegen in Migrationen (via migrate.mjs):
+--   drizzle/0010_psa_historie_rls.sql            psa.ausgaben, pruefungen, waesche
+--   drizzle/0011_psa_schaden_details_stuecke_rls.sql
+--                                                psa.schadensdokumentation,
+--                                                psa.kamerad_details und Austausch
+--                                                der Policy auf psa.ausruestungstuecke
+-- Einheitliches Muster:
 --   <t>_priv         FOR ALL    Admin/Kleiderwart lesen und schreiben alles
---   <t>_eigene_lesen FOR SELECT sonst nur kamerad_id = app.kamerad_id LESEN
--- (User schreiben nie – bewusst strenger als ausruestungstuecke_scope).
+--   <t>_eigene_lesen FOR SELECT sonst nur eigene Zeilen LESEN (kamerad_id =
+--                               app.kamerad_id; Schäden über den Träger des Stücks)
+-- User schreiben in PSA-Tabellen nie.
 
 -- ── core.kameraden ────────────────────────────────────────────
 ALTER TABLE core.kameraden ENABLE ROW LEVEL SECURITY;
@@ -62,19 +68,13 @@ CREATE POLICY benutzer_scope ON core.benutzer
   );
 
 -- ── psa.ausruestungstuecke ────────────────────────────────────
+-- RLS bleibt hier aktiviert (idempotent). Die frühere Policy
+-- ausruestungstuecke_scope (FOR ALL, User durften eigene Stücke schreiben) ist
+-- ENTFALLEN: drizzle/0011_psa_schaden_details_stuecke_rls.sql löscht sie und
+-- legt ausruestungstuecke_priv / ausruestungstuecke_eigene_lesen an.
+-- Diese Datei legt sie bewusst NICHT mehr an – sonst würde ein erneutes
+-- Ausführen die lockerere Policy permissiv (ODER-verknüpft) zurückbringen.
 ALTER TABLE psa.ausruestungstuecke ENABLE ROW LEVEL SECURITY;
 ALTER TABLE psa.ausruestungstuecke FORCE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS ausruestungstuecke_scope ON psa.ausruestungstuecke;
-CREATE POLICY ausruestungstuecke_scope ON psa.ausruestungstuecke
-  FOR ALL
-  USING (
-    current_setting('app.psa_rolle', true) IN ('Admin', 'Kleiderwart')
-    OR kamerad_id = NULLIF(current_setting('app.kamerad_id', true), '')::int
-  )
-  WITH CHECK (
-    current_setting('app.psa_rolle', true) IN ('Admin', 'Kleiderwart')
-    OR kamerad_id = NULLIF(current_setting('app.kamerad_id', true), '')::int
-  );
 
 COMMIT;

@@ -78,6 +78,13 @@
       "when": 1794064779610,
       "tag": "0010_psa_historie_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794065247078,
+      "tag": "0011_psa_schaden_details_stuecke_rls",
+      "breakpoints": true
     }
   ]
 }
