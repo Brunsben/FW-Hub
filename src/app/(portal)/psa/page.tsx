@@ -244,11 +244,11 @@ export default async function PsaPage() {
         <StatCard label="Prüfung fällig" value={pruefungFaellig} />
       </div>
 
-      <section id="kameraden" className="scroll-mt-4">
+      <section id="kameraden" className="scroll-mt-20">
         <KameradenManager kameraden={kameradenRows} />
       </section>
 
-      <section id="ausruestung" className="scroll-mt-4">
+      <section id="ausruestung" className="scroll-mt-20">
         <AusruestungManager
           pieces={pieces}
           typen={typen}

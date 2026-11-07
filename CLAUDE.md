@@ -12,6 +12,7 @@ Zusätzliche Regeln für Claude Code:
 - Nach jeder Dateioperation durch erneutes Lesen prüfen. Erfolg erst melden, wenn tsc, Build oder ein Test es belegt.
 - Kein git commit/push ohne ausdrückliche Anweisung.
 - Secrets nie in Ausgaben wiederholen.
+- Oberfläche: nur Theme-Tokens, keine festen Farbklassen. Portalseiten gehören nach src/app/(portal)/ (die Kopfzeile kommt vom Layout), Kiosk /food und /food/m/[token] bleiben außerhalb. Details in copilot-instructions.md, Abschnitt "Oberfläche".
 - withGlobalAdminScope (setzt app.psa_rolle/app.app_rolle = 'Admin') nur nach requireGlobalAdmin() (API-Routen) bzw. requireGlobalAdminPage() (Seiten) und im Erst-Setup verwenden. Nie mit einem nicht geprüften Benutzer aufrufen.
 
 <!-- BEGIN:nextjs-agent-rules -->

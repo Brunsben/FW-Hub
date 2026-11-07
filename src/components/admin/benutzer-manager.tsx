@@ -194,7 +194,7 @@ export function BenutzerManager({
           role={meldung.ok ? "status" : "alert"}
           className={
             meldung.ok
-              ? "rounded-md border border-green-600/40 bg-green-600/10 p-3 text-sm"
+              ? "rounded-md border border-success/40 bg-success/10 p-3 text-sm"
               : "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
           }
         >
@@ -286,7 +286,7 @@ export function BenutzerManager({
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <p className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+            <p className="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm">
               {ABMELDE_HINWEIS}
             </p>
 

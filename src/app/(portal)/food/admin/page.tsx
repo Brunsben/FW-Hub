@@ -4,7 +4,6 @@ import { asc, gte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { withFoodScope } from "@/lib/db/scoped";
 import { redirectNoModuleAccess } from "@/lib/module-guard";
-import { AppHeader } from "@/components/app-header";
 import { foodMenus, foodPresetMenus, kameraden } from "@/lib/db/schema";
 import { requireFoodSession } from "@/lib/food-auth";
 import { today } from "@/lib/food-utils";
@@ -69,8 +68,6 @@ export default async function FoodAdminPage() {
   );
 
   return (
-    <>
-    <AppHeader aktiv="food" />
     <main className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
@@ -97,6 +94,5 @@ export default async function FoodAdminPage() {
       <KameradenCardsManager kameraden={kameradenList} />
       <StatsView />
     </main>
-    </>
   );
 }

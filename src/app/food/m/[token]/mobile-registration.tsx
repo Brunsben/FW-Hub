@@ -131,7 +131,7 @@ export function MobileRegistration({ user, menu, initialRegistration }: Props) {
             </p>
           ) : registration ? (
             <div className="flex flex-col gap-3">
-              <p className="text-center font-medium text-green-600">
+              <p className="text-center font-medium text-success">
                 Angemeldet
                 {menu?.zweiMenuesAktiv
                   ? ` (Menü ${registration.menuChoice})`
@@ -158,7 +158,7 @@ export function MobileRegistration({ user, menu, initialRegistration }: Props) {
               </Button>
               <Button
                 type="button"
-                className="h-16 flex-1 bg-green-600 hover:bg-green-700"
+                className="h-16 flex-1 bg-success text-success-foreground hover:bg-success/90"
                 onClick={() => register(2)}
                 disabled={loading}
               >
@@ -180,7 +180,7 @@ export function MobileRegistration({ user, menu, initialRegistration }: Props) {
             <p
               className={`text-center text-sm ${
                 message.type === "success"
-                  ? "text-green-600"
+                  ? "text-success"
                   : "text-destructive"
               }`}
             >

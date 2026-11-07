@@ -29,6 +29,10 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -51,6 +55,7 @@
 }
 
 :root {
+  color-scheme: light;
   --radius: 0.75rem;
   --background: #ffffff;
   --foreground: #111827;
@@ -63,10 +68,16 @@
   --secondary: #f3f4f6;
   --secondary-foreground: #1f2937;
   --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
+  /* 5,6:1 auch auf --muted/--accent (vorher #6b7280 = 4,39:1) */
+  --muted-foreground: #5b6370;
   --accent: #f3f4f6;
   --accent-foreground: #1f2937;
   --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  /* Status-Tokens: Erfolg (Anmeldung ok, Hinweise) und Warnung */
+  --success: #15803d;
+  --success-foreground: #ffffff;
+  --warning: #b45309;
   --border: #e5e7eb;
   --input: #e5e7eb;
   --ring: #dc2626;
@@ -86,24 +97,31 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #111827;
   --foreground: #f9fafb;
   --card: #1f2937;
   --card-foreground: #f9fafb;
   --popover: #1f2937;
   --popover-foreground: #f9fafb;
-  --primary: #dc2626;
-  --primary-foreground: #ffffff;
+  /* Helleres Rot mit dunklem Text: #dc2626 hatte als Text auf dem dunklen
+     Hintergrund nur 3,67:1 (auf Karten 3,04:1). */
+  --primary: #f87171;
+  --primary-foreground: #111827;
   --secondary: #374151;
   --secondary-foreground: #f9fafb;
   --muted: #374151;
-  --muted-foreground: #9ca3af;
+  --muted-foreground: #b0b8c4;
   --accent: #374151;
   --accent-foreground: #f9fafb;
-  --destructive: #dc2626;
+  --destructive: #f87171;
+  --destructive-foreground: #111827;
+  --success: #4ade80;
+  --success-foreground: #052e16;
+  --warning: #fbbf24;
   --border: #374151;
   --input: #4b5563;
-  --ring: #dc2626;
+  --ring: #f87171;
   --chart-1: #ef4444;
   --chart-2: #34d399;
   --chart-3: #60a5fa;
@@ -111,12 +129,12 @@
   --chart-5: #a78bfa;
   --sidebar: #111827;
   --sidebar-foreground: #f9fafb;
-  --sidebar-primary: #dc2626;
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary: #f87171;
+  --sidebar-primary-foreground: #111827;
   --sidebar-accent: #1f2937;
   --sidebar-accent-foreground: #f9fafb;
   --sidebar-border: #374151;
-  --sidebar-ring: #dc2626;
+  --sidebar-ring: #f87171;
 }
 
 @layer base {

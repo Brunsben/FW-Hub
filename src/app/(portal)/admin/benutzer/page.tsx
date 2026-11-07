@@ -3,7 +3,6 @@ import { withGlobalAdminScope } from "@/lib/db/scoped";
 import { benutzer, kameraden } from "@/lib/db/schema";
 import { requireGlobalAdminPage } from "@/lib/module-guard";
 import { MODUL_ROLLEN, APP_ROLES } from "@/lib/rollen";
-import { AppHeader } from "@/components/app-header";
 import {
   BenutzerManager,
   type BenutzerRow,
@@ -48,8 +47,6 @@ export default async function AdminBenutzerPage() {
   });
 
   return (
-    <>
-    <AppHeader aktiv="admin" />
     <main className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
       <div>
         <h1 className="text-2xl font-bold">Benutzerverwaltung</h1>
@@ -70,6 +67,5 @@ export default async function AdminBenutzerPage() {
         appRollen={[...APP_ROLES]}
       />
     </main>
-    </>
   );
 }

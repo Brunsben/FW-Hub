@@ -201,14 +201,20 @@ export default function FoodKioskPage() {
               <div className="flex flex-wrap justify-center gap-2">
                 {stat.zweiMenuesAktiv && (
                   <>
-                    <Badge variant="secondary">Menü 1: {stat.menu1}</Badge>
-                    <Badge variant="secondary">Menü 2: {stat.menu2}</Badge>
+                    <Badge variant="secondary" className="px-3 py-1 text-base">
+                      Menü 1: {stat.menu1}
+                    </Badge>
+                    <Badge variant="secondary" className="px-3 py-1 text-base">
+                      Menü 2: {stat.menu2}
+                    </Badge>
                   </>
                 )}
-                <Badge variant="outline">
+                <Badge variant="outline" className="px-3 py-1 text-base">
                   Gäste: {stat.guests_menu1 + stat.guests_menu2}
                 </Badge>
-                <Badge>Gesamt: {stat.total}</Badge>
+                <Badge className="px-3 py-1 text-base">
+                  Gesamt: {stat.total}
+                </Badge>
               </div>
             </>
           ) : (
@@ -219,9 +225,9 @@ export default function FoodKioskPage() {
         </CardContent>
       </Card>
 
-      <div className="w-full max-w-lg rounded-2xl border-2 border-dashed p-8 text-center">
+      <div className="w-full max-w-lg rounded-2xl border-2 border-dashed border-muted-foreground/50 p-8 text-center">
         <p className="text-xl font-medium">Karte an den Scanner halten</p>
-        <p className="mt-1 text-sm text-muted-foreground">RFID / Barcode</p>
+        <p className="mt-1 text-base text-muted-foreground">RFID / Barcode</p>
       </div>
 
       <form onSubmit={handleManualSubmit} className="flex w-full max-w-lg gap-3">
@@ -240,7 +246,8 @@ export default function FoodKioskPage() {
       <Button
         type="button"
         variant="ghost"
-        size="sm"
+        size="lg"
+        className="h-12 px-6 text-base"
         onClick={() => document.documentElement.requestFullscreen?.()}
       >
         Vollbild
@@ -248,8 +255,10 @@ export default function FoodKioskPage() {
 
       {status && (
         <div
-          className={`fixed left-1/2 top-8 z-50 -translate-x-1/2 rounded-xl px-8 py-4 text-xl font-semibold text-white shadow-2xl ${
-            status.type === "success" ? "bg-green-600" : "bg-destructive"
+          className={`fixed left-1/2 top-8 z-50 -translate-x-1/2 rounded-xl px-10 py-5 text-2xl font-semibold shadow-2xl ${
+            status.type === "success"
+              ? "bg-success text-success-foreground"
+              : "bg-destructive text-destructive-foreground"
           }`}
         >
           {status.message}
@@ -257,7 +266,7 @@ export default function FoodKioskPage() {
       )}
 
       {pending && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
           <Card className="w-full max-w-md">
             <CardHeader>
               <CardTitle className="text-center text-2xl">
@@ -277,7 +286,7 @@ export default function FoodKioskPage() {
                 <Button
                   type="button"
                   size="lg"
-                  className="h-24 flex-1 bg-green-600 text-xl hover:bg-green-700"
+                  className="h-24 flex-1 bg-success text-xl text-success-foreground hover:bg-success/90"
                   onClick={() => handleMenuChoice(2)}
                 >
                   {pending.menu2 || "Menü 2"}
@@ -286,6 +295,7 @@ export default function FoodKioskPage() {
               <Button
                 type="button"
                 variant="ghost"
+                className="h-14 text-lg"
                 onClick={() => setPending(null)}
               >
                 Abbrechen

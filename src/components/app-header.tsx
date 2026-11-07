@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { getAuthUser, isGlobalAdmin, type JwtPayload } from "@/lib/auth";
+import { HeaderLink } from "@/components/header-link";
 import { LogoutButton } from "@/components/logout-button";
-
-export type NavKey = "start" | "psa" | "food" | "funk" | "admin" | "profil";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export interface ModulLink {
-  key: Exclude<NavKey, "start" | "profil">;
+  key: "psa" | "food" | "funk" | "admin";
   href: string;
   label: string;
   beschreibung: string;
@@ -33,38 +33,36 @@ export function sichtbareModule(user: JwtPayload): ModulLink[] {
   return module;
 }
 
-// Gemeinsame Kopfzeile: Modulnavigation, Name, Profil, Abmelden.
-// Eingebunden in /, /psa, /funk, /food/admin, /admin/benutzer, /profil.
-export async function AppHeader({ aktiv }: { aktiv?: NavKey }) {
+// Gemeinsame Kopfzeile: Modulnavigation, Name, Profil, Farbschema, Abmelden.
+// Wird ausschließlich vom Seitenrahmen app/(portal)/layout.tsx eingebunden und
+// steht damit auf jeder Portalseite als Erstes (sticky am oberen Rand).
+export async function AppHeader() {
   const user = await getAuthUser();
   if (!user) return null; // Seiten sind selbst geschützt
 
-  const linkClass = (key: NavKey) =>
-    `rounded-md px-3 py-1.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground ${
-      aktiv === key ? "bg-accent text-accent-foreground" : ""
-    }`;
-
   return (
-    <header data-app-header className="border-b bg-background">
+    <header
+      data-app-header
+      className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur"
+    >
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 p-3">
         <Link href="/" className="mr-2 text-base font-bold">
           FW-Hub
         </Link>
         <nav className="flex flex-wrap items-center gap-1" aria-label="Module">
-          <Link href="/" className={linkClass("start")}>
+          <HeaderLink href="/" exakt>
             Start
-          </Link>
+          </HeaderLink>
           {sichtbareModule(user).map((m) => (
-            <Link key={m.key} href={m.href} className={linkClass(m.key)}>
+            <HeaderLink key={m.key} href={m.href}>
               {m.label}
-            </Link>
+            </HeaderLink>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">{user.kamerad_name}</span>
-          <Link href="/profil" className={linkClass("profil")}>
-            Profil
-          </Link>
+          <HeaderLink href="/profil">Profil</HeaderLink>
+          <ThemeToggle />
           <LogoutButton />
         </div>
       </div>

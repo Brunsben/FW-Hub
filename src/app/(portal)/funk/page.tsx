@@ -1,7 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { withFunkScope } from "@/lib/db/scoped";
 import { redirectNoModuleAccess } from "@/lib/module-guard";
-import { AppHeader } from "@/components/app-header";
 import {
   funkDeviceAssignments,
   funkDevices,
@@ -104,8 +103,6 @@ export default async function FunkPage() {
     }));
 
     return (
-      <>
-      <AppHeader aktiv="funk" />
       <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
         <div>
           <h1 className="text-2xl font-bold">Funktechnik – Geräte</h1>
@@ -194,7 +191,6 @@ export default async function FunkPage() {
           </CardContent>
         </Card>
       </main>
-      </>
     );
   }
 
@@ -223,8 +219,6 @@ export default async function FunkPage() {
   );
 
   return (
-    <>
-    <AppHeader aktiv="funk" />
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <div>
         <h1 className="text-2xl font-bold">Meine Funkgeräte</h1>
@@ -280,6 +274,5 @@ export default async function FunkPage() {
         </CardContent>
       </Card>
     </main>
-    </>
   );
 }

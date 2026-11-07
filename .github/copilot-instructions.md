@@ -103,6 +103,23 @@ Scopes:
   Container gleichzeitig auf dieses Volume zugreifen lassen. NIEMALS
   docker compose down mit -v/--volumes in diesem Zusammenhang ausführen
 
+## Oberfläche
+- Farben nur über Theme-Tokens aus src/app/globals.css (bg-background,
+  bg-card, text-foreground, text-muted-foreground, border-border, bg-primary,
+  bg-destructive, bg-success, border-warning usw.). Keine festen Farbklassen
+  (bg-white, text-gray-*, bg-green-600 …) und keine Hex-Werte in Komponenten.
+  Einzige Ausnahme: die QR-Code-Ruhezone (bg-white, sonst nicht scanbar)
+- Hell- und Dunkelwerte stehen in `:root` und `.dark`. Neue Tokens in beiden
+  Blöcken UND in `@theme inline` anlegen, Textkontrast mindestens 4,5:1
+  (WCAG AA) in beiden Themes prüfen
+- Dunkelmodus über next-themes: ThemeProvider im Root-Layout (Klasse `dark`
+  am `<html>`, Standard System). Umschalter (components/theme-toggle.tsx) in
+  der Kopfzeile sowie auf /login und /setup
+- Portalseiten liegen in src/app/(portal)/ und bekommen die Kopfzeile
+  (components/app-header.tsx) vom Layout. Nicht pro Seite einbinden.
+  Außerhalb des Rahmens bleiben der Kiosk /food, /food/m/[token], /login,
+  /setup und /api
+
 ## Verbindliche System-Invarianten
 Eine Invariante hat NIE nur einen Durchsetzungsort. Bei jeder neuen Regel
 IMMER nach allen Stellen suchen (Schema, Erst-Setup, laufender Betrieb,

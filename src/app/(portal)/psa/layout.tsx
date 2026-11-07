@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { HashScroll } from "@/components/psa/hash-scroll";
-import { AppHeader } from "@/components/app-header";
 
 export default async function PsaLayout({
   children,
@@ -28,8 +27,8 @@ export default async function PsaLayout({
   return (
     <div>
       <HashScroll />
-      <AppHeader aktiv="psa" />
-      {/* PSA-Unternavigation; Abmelden/Profil liegen in der gemeinsamen Kopfzeile */}
+      {/* PSA-Unternavigation; Kopfzeile, Profil und Abmelden kommen aus dem
+          Seitenrahmen app/(portal)/layout.tsx */}
       <nav className="border-b bg-card" aria-label="PSA">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 p-3">
           {items.map((i) => (

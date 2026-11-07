@@ -16,7 +16,7 @@ function MeldungBox({ m }: { m: Meldung }) {
       role={m.ok ? "status" : "alert"}
       className={
         m.ok
-          ? "rounded-md border border-green-600/40 bg-green-600/10 p-3 text-sm"
+          ? "rounded-md border border-success/40 bg-success/10 p-3 text-sm"
           : "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
       }
     >

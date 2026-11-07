@@ -186,8 +186,11 @@ export function KameradenCardsManager({
                 Schließen
               </Button>
             </div>
+            {/* Bewusst fest weiß (kein Theme-Token): Ein QR-Code braucht eine
+                helle Ruhezone mit dunklen Modulen, sonst ist er im Dunkelmodus
+                nicht scanbar. */}
             <div className="rounded-lg bg-white p-4">
-              <QRCodeSVG value={qrLink.url} size={192} />
+              <QRCodeSVG value={qrLink.url} size={192} bgColor="#ffffff" fgColor="#000000" />
             </div>
           </div>
         )}
