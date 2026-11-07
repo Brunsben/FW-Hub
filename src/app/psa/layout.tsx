@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { HashScroll } from "@/components/psa/hash-scroll";
-import { LogoutButton } from "@/components/logout-button";
+import { AppHeader } from "@/components/app-header";
 
 export default async function PsaLayout({
   children,
@@ -28,7 +28,9 @@ export default async function PsaLayout({
   return (
     <div>
       <HashScroll />
-      <nav className="border-b bg-card">
+      <AppHeader aktiv="psa" />
+      {/* PSA-Unternavigation; Abmelden/Profil liegen in der gemeinsamen Kopfzeile */}
+      <nav className="border-b bg-card" aria-label="PSA">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 p-3">
           {items.map((i) => (
             <Link
@@ -39,9 +41,6 @@ export default async function PsaLayout({
               {i.label}
             </Link>
           ))}
-          <div className="ml-auto">
-            <LogoutButton />
-          </div>
         </div>
       </nav>
       {children}

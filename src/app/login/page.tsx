@@ -34,7 +34,7 @@ export default function LoginPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Anmeldung fehlgeschlagen");
       }
-      router.replace("/funk");
+      router.replace("/");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler");

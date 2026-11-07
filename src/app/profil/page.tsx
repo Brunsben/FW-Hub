@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { withScope } from "@/lib/db/scoped";
 import { benutzer, kameraden } from "@/lib/db/schema";
 import { requireSessionPage } from "@/lib/module-guard";
-import { LogoutButton } from "@/components/logout-button";
+import { AppHeader } from "@/components/app-header";
 import { ProfilForm } from "@/components/profil/profil-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -42,15 +42,14 @@ export default async function ProfilPage() {
   ] as const;
 
   return (
+    <>
+    <AppHeader aktiv="profil" />
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Mein Profil</h1>
-          <p className="text-sm text-muted-foreground">
-            {profil?.vorname} {profil?.name} · Benutzername {profil?.benutzername}
-          </p>
-        </div>
-        <LogoutButton />
+      <div>
+        <h1 className="text-2xl font-bold">Mein Profil</h1>
+        <p className="text-sm text-muted-foreground">
+          {profil?.vorname} {profil?.name} · Benutzername {profil?.benutzername}
+        </p>
       </div>
 
       <Card>
@@ -73,5 +72,6 @@ export default async function ProfilPage() {
 
       <ProfilForm />
     </main>
+    </>
   );
 }

@@ -3,10 +3,11 @@
 Projektkontext und verbindliche Regeln: @.github/copilot-instructions.md
 
 Zusätzliche Regeln für Claude Code:
+
 - Nur lokal arbeiten (Docker-Container fwhub-postgres-dev). Nie Befehle gegen den Server oder dessen Datenbank.
 - Die App läuft lokal als fw_app (NOBYPASSRLS). Tests als Postgres-Superuser sind für RLS wertlos.
 - Migrationen: drizzle-kit generate lokal. Anwenden nur über ein migrate.mjs-Skript mit MIGRATE_DATABASE_URL (Owner-Rolle), nie mit fw_app. drizzle-kit migrate verschluckt hier Fehler.
-- Dev-Server: npx next dev --webpack (Turbopack scheitert an UNC-Pfaden).
+- Dev-Server: npx next dev --webpack.
 - Shell ist PowerShell: keine Bash-Heredocs, kein < für Eingabeumleitung.
 - Nach jeder Dateioperation durch erneutes Lesen prüfen. Erfolg erst melden, wenn tsc, Build oder ein Test es belegt.
 - Kein git commit/push ohne ausdrückliche Anweisung.

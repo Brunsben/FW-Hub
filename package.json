@@ -8,7 +8,7 @@
     "start": "next start -H 0.0.0.0",
     "start:standalone": "DATABASE_URL=${DATABASE_URL} PORT=3000 HOSTNAME=0.0.0.0 node .next/standalone/server.js",
     "prod": "npm run build && npm run postbuild && npm run start:standalone",
-    "postbuild": "cp -r public .next/standalone/public 2>/dev/null; mkdir -p .next/standalone/.next && cp -r .next/static .next/standalone/.next/static 2>/dev/null; cp .env.local .next/standalone/.env.local 2>/dev/null; echo 'Standalone ready'",
+    "postbuild": "node scripts/postbuild.mjs",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
     "db:migrate": "node scripts/migrate.mjs",
