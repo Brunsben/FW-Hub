@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { asc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { psaAusruestungstypen, psaNormen } from "@/lib/db/schema";
@@ -11,7 +12,7 @@ import {
 
 export default async function PsaTypenPage() {
   const session = await requirePsaSession();
-  if (!session) redirect("/login");
+  if (!session) return redirectNoModuleAccess("psa");
   if (!session.canEdit) redirect("/psa");
 
   const typen: TypRow[] = await db

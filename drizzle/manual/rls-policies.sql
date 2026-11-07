@@ -18,6 +18,10 @@
 BEGIN;
 
 -- Hilfsausdrücke inline: NULLIF(...,'')::int ergibt NULL, wenn nicht gesetzt.
+--
+-- Weitere Policies auf core.kameraden liegen NICHT in dieser Datei:
+--   kameraden_food_public_read, kameraden_food_admin_read → rls-policies-food.sql
+--   kameraden_funk_read → drizzle/0004_funk_kameraden_read.sql (via migrate.mjs)
 
 -- ── core.kameraden ────────────────────────────────────────────
 ALTER TABLE core.kameraden ENABLE ROW LEVEL SECURITY;

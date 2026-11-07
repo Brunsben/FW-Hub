@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { asc, gte } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { withFoodScope } from "@/lib/db/scoped";
+import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { foodMenus, foodPresetMenus, kameraden } from "@/lib/db/schema";
 import { requireFoodSession } from "@/lib/food-auth";
 import { today } from "@/lib/food-utils";
@@ -18,7 +20,7 @@ import { StatsView } from "@/components/food/stats-view";
 
 export default async function FoodAdminPage() {
   const session = await requireFoodSession();
-  if (!session) redirect("/login");
+  if (!session) return redirectNoModuleAccess("food");
   if (!session.isAdmin) redirect("/food");
 
   const todayStr = today();
@@ -46,17 +48,23 @@ export default async function FoodAdminPage() {
     .from(foodPresetMenus)
     .orderBy(asc(foodPresetMenus.sortOrder), asc(foodPresetMenus.name));
 
-  const kameradenList: KameradCardRow[] = await db
-    .select({
-      id: kameraden.id,
-      vorname: kameraden.vorname,
-      name: kameraden.name,
-      personalnummer: kameraden.personalnummer,
-      kartenId: kameraden.kartenId,
-      aktiv: kameraden.aktiv,
-    })
-    .from(kameraden)
-    .orderBy(asc(kameraden.name), asc(kameraden.vorname));
+  // core.kameraden liegt hinter RLS → Lesen nur im Food-Admin-Scope
+  // (Policy kameraden_food_admin_read).
+  const kameradenList: KameradCardRow[] = await withFoodScope(
+    { kameradId: session.kameradId, foodRolle: session.foodRole },
+    (tx) =>
+      tx
+        .select({
+          id: kameraden.id,
+          vorname: kameraden.vorname,
+          name: kameraden.name,
+          personalnummer: kameraden.personalnummer,
+          kartenId: kameraden.kartenId,
+          aktiv: kameraden.aktiv,
+        })
+        .from(kameraden)
+        .orderBy(asc(kameraden.name), asc(kameraden.vorname)),
+  );
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-6 p-6">

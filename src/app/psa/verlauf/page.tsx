@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { asc, desc, eq } from "drizzle-orm";
 import { withScope } from "@/lib/db/scoped";
 import {
@@ -23,7 +23,7 @@ function label(typName: string | null, seriennummer: string | null): string {
 
 export default async function PsaVerlaufPage() {
   const session = await requirePsaSession();
-  if (!session) redirect("/login");
+  if (!session) return redirectNoModuleAccess("psa");
   const onlyOwn = session.isUser;
   const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 

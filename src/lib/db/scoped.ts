@@ -50,6 +50,29 @@ export async function withFoodScope<T>(
   });
 }
 
+export interface FunkScope {
+  kameradId: number;
+  funkRolle: string;
+}
+
+// Funk-Scope: setzt app.funk_rolle (+ kamerad_id). Admin/Gerätewart dürfen
+// über die Policy kameraden_funk_read alle core.kameraden lesen, andere Rollen
+// nur die eigene Zeile (kameraden_scope).
+export async function withFunkScope<T>(
+  scope: FunkScope,
+  fn: (tx: ScopedTx) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('app.kamerad_id', ${String(scope.kameradId)}, true)`,
+    );
+    await tx.execute(
+      sql`select set_config('app.funk_rolle', ${scope.funkRolle}, true)`,
+    );
+    return fn(tx);
+  });
+}
+
 // Bewusst login-freier, aber als vertrauenswürdig markierter öffentlicher
 // Food-Zugriff (Kiosk/Mobile): setzt app.food_public='true' statt eines
 // personen-/rollenbezogenen Scopes.

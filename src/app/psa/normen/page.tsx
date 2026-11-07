@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { asc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { psaNormen } from "@/lib/db/schema";
@@ -7,7 +8,7 @@ import { NormenManager, type NormRow } from "@/components/psa/normen-manager";
 
 export default async function PsaNormenPage() {
   const session = await requirePsaSession();
-  if (!session) redirect("/login");
+  if (!session) return redirectNoModuleAccess("psa");
   if (!session.canEdit) redirect("/psa");
 
   const normen: NormRow[] = await db

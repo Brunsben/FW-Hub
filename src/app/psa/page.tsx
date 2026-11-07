@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { and, asc, count, eq, isNotNull, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { withScope } from "@/lib/db/scoped";
@@ -94,7 +94,7 @@ function toPieceRows(
 
 export default async function PsaPage() {
   const session = await requirePsaSession();
-  if (!session) redirect("/login");
+  if (!session) return redirectNoModuleAccess("psa");
 
   const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 

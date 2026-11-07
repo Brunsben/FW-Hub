@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { redirectNoModuleAccess } from "@/lib/module-guard";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { HashScroll } from "@/components/psa/hash-scroll";
 
@@ -9,7 +9,7 @@ export default async function PsaLayout({
   children: React.ReactNode;
 }) {
   const session = await requirePsaSession();
-  if (!session) redirect("/login");
+  if (!session) return redirectNoModuleAccess("psa");
 
   const canEdit = session.canEdit;
 

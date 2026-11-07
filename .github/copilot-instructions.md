@@ -39,7 +39,7 @@ Frontend-Formulare) — siehe invariant-checker.agent.md für das Vorgehen.
 | kamerad_id ist im JWT für JEDEN Account gesetzt, niemals null (auch nicht für Admin) | Schema NOT NULL + Erst-Setup legt bei Bedarf Kameraden-Datensatz mit an (Henne-Ei-Problem) + laufende Benutzer-Anlage | Aufzubauen im FW-Hub-Schema, siehe Modul-Tabelle |
 | Jedes Modul referenziert Kameraden.id direkt, führt KEINE eigene Mitgliederliste | Schema-Design | Bekannter Stolperstein — Funk-App hatte versehentlich eine eigene users-Tabelle gebaut, wurde korrigiert. Bei jedem neuen Modul explizit prüfen |
 | Pro-Modul-Rollen-Claim (z.B. funk_rolle) wird bei Login ausgestellt | Schema-Spalte + Login-Route | Pro Modul einzeln aufzubauen |
-| exp-Claim ist bei JEDER Verifizierung Pflicht | requireExp: true an allen jwtVerify-Aufrufen | Aufzubauen |
+| exp-Claim ist bei JEDER Verifizierung Pflicht | requiredClaims: ["exp"] an allen jwtVerify-Aufrufen | Aufzubauen |
 | pv_monitoring-Schema unangetastet | Konvention, keine technische Sperre | Einzuhalten |
 | core.kameraden wird nie hart gelöscht, nur über aktiv=false (Soft-Delete) | Durchsetzung in jeder DELETE-Route, die Kameraden anfasst | Ab PSA-Migration eingeführt, für alle künftigen Module verbindlich |
 

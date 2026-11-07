@@ -107,7 +107,9 @@ export async function POST(req: NextRequest) {
           : null,
         kartenId: body.kartenId ? String(body.kartenId) : null,
         aktiv: body.aktiv === undefined ? true : Boolean(body.aktiv),
-        psaRolle: body.psaRolle ? String(body.psaRolle) : null,
+        // Rollenspalten (psa_rolle, food_rolle, fk_rolle, funk_rolle) werden
+        // hier bewusst NICHT aus dem Body übernommen. Sie dürfen nur über
+        // /api/admin/rollen/[kameradId] (globaler Admin) geschrieben werden.
       })
       .returning();
 
@@ -154,8 +156,7 @@ export async function PATCH(req: NextRequest) {
   if ("kartenId" in body)
     coreUpdate.kartenId = body.kartenId ? String(body.kartenId) : null;
   if ("aktiv" in body) coreUpdate.aktiv = Boolean(body.aktiv);
-  if ("psaRolle" in body)
-    coreUpdate.psaRolle = body.psaRolle ? String(body.psaRolle) : null;
+  // Rollenspalten werden ignoriert, siehe POST (nur /api/admin/rollen/[kameradId]).
 
   const { sizes, present } = extractSizes(body);
   const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };

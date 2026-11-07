@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { withFunkScope } from "@/lib/db/scoped";
+import { redirectNoModuleAccess } from "@/lib/module-guard";
 import {
   funkDeviceAssignments,
   funkDevices,
@@ -47,40 +47,47 @@ function StatusBadge({ status }: { status: DeviceStatus }) {
 
 export default async function FunkPage() {
   const session = await requireFunkSession();
-  if (!session) redirect("/login");
+  if (!session) return redirectNoModuleAccess("funk");
+
+  const scope = { kameradId: session.kameradId, funkRolle: session.funkRole };
 
   // Admin/Gerätewart: alle Geräte inkl. aktueller Zuweisung + Formulare.
+  // core.kameraden liegt hinter RLS → Lesen nur im Funk-Scope.
   if (session.isAdmin) {
-    const rows = await db
-      .select({
-        id: funkDevices.id,
-        serialNumber: funkDevices.serialNumber,
-        deviceType: funkDevices.deviceType,
-        status: funkDevices.status,
-        ownerId: funkDeviceAssignments.ownerId,
-        ownerName: kameraden.name,
-        ownerVorname: kameraden.vorname,
-      })
-      .from(funkDevices)
-      .leftJoin(
-        funkDeviceAssignments,
-        and(
-          eq(funkDeviceAssignments.deviceId, funkDevices.id),
-          isNull(funkDeviceAssignments.returnedAt),
-        ),
-      )
-      .leftJoin(kameraden, eq(kameraden.id, funkDeviceAssignments.ownerId))
-      .orderBy(asc(funkDevices.serialNumber));
+    const { rows, kameradenRows } = await withFunkScope(scope, async (tx) => {
+      const rows = await tx
+        .select({
+          id: funkDevices.id,
+          serialNumber: funkDevices.serialNumber,
+          deviceType: funkDevices.deviceType,
+          status: funkDevices.status,
+          ownerId: funkDeviceAssignments.ownerId,
+          ownerName: kameraden.name,
+          ownerVorname: kameraden.vorname,
+        })
+        .from(funkDevices)
+        .leftJoin(
+          funkDeviceAssignments,
+          and(
+            eq(funkDeviceAssignments.deviceId, funkDevices.id),
+            isNull(funkDeviceAssignments.returnedAt),
+          ),
+        )
+        .leftJoin(kameraden, eq(kameraden.id, funkDeviceAssignments.ownerId))
+        .orderBy(asc(funkDevices.serialNumber));
 
-    const kameradenRows = await db
-      .select({
-        id: kameraden.id,
-        name: kameraden.name,
-        vorname: kameraden.vorname,
-      })
-      .from(kameraden)
-      .where(eq(kameraden.aktiv, true))
-      .orderBy(asc(kameraden.name), asc(kameraden.vorname));
+      const kameradenRows = await tx
+        .select({
+          id: kameraden.id,
+          name: kameraden.name,
+          vorname: kameraden.vorname,
+        })
+        .from(kameraden)
+        .where(eq(kameraden.aktiv, true))
+        .orderBy(asc(kameraden.name), asc(kameraden.vorname));
+
+      return { rows, kameradenRows };
+    });
 
     const assignableDevices: AssignableDevice[] = rows
       .filter((r) => r.ownerId === null && r.status === "active")
@@ -188,26 +195,28 @@ export default async function FunkPage() {
   }
 
   // Einsatzleiter/Mitglied: nur Leseansicht der eigenen zugeteilten Geräte.
-  const myRows = await db
-    .select({
-      id: funkDevices.id,
-      serialNumber: funkDevices.serialNumber,
-      deviceType: funkDevices.deviceType,
-      status: funkDevices.status,
-      assignmentDate: funkDeviceAssignments.assignmentDate,
-    })
-    .from(funkDeviceAssignments)
-    .innerJoin(
-      funkDevices,
-      eq(funkDevices.id, funkDeviceAssignments.deviceId),
-    )
-    .where(
-      and(
-        eq(funkDeviceAssignments.ownerId, session.kameradId),
-        isNull(funkDeviceAssignments.returnedAt),
-      ),
-    )
-    .orderBy(asc(funkDevices.serialNumber));
+  const myRows = await withFunkScope(scope, (tx) =>
+    tx
+      .select({
+        id: funkDevices.id,
+        serialNumber: funkDevices.serialNumber,
+        deviceType: funkDevices.deviceType,
+        status: funkDevices.status,
+        assignmentDate: funkDeviceAssignments.assignmentDate,
+      })
+      .from(funkDeviceAssignments)
+      .innerJoin(
+        funkDevices,
+        eq(funkDevices.id, funkDeviceAssignments.deviceId),
+      )
+      .where(
+        and(
+          eq(funkDeviceAssignments.ownerId, session.kameradId),
+          isNull(funkDeviceAssignments.returnedAt),
+        ),
+      )
+      .orderBy(asc(funkDevices.serialNumber)),
+  );
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
