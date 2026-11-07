@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
-import { getAuthUser } from "@/lib/auth";
+import { getAuthUser, isGlobalAdmin, type JwtPayload } from "@/lib/auth";
 
-export type ModulKey = "psa" | "food" | "funk" | "fk";
+export type ModulKey = "psa" | "food" | "funk" | "fk" | "admin";
 
 export const MODUL_LABELS: Record<ModulKey, string> = {
   psa: "PSA-Verwaltung",
   food: "Küche",
   funk: "Funktechnik",
   fk: "Führerscheinkontrolle",
+  admin: "Benutzerverwaltung",
 };
 
 export function isModulKey(value: unknown): value is ModulKey {
@@ -21,4 +22,22 @@ export async function redirectNoModuleAccess(modul: ModulKey): Promise<never> {
   const user = await getAuthUser();
   if (!user) redirect("/login");
   redirect(`/?kein_zugriff=${modul}`);
+}
+
+// Seiten-Gegenstück zu requireGlobalAdmin() (lib/benutzer-admin.ts, für
+// API-Routen): ohne Session → /login, ohne globale Admin-Rolle →
+// /?kein_zugriff=admin. Liefert den verifizierten Benutzer (inkl.
+// token_version-Prüfung aus getAuthUser) für withGlobalAdminScope.
+export async function requireGlobalAdminPage(): Promise<JwtPayload> {
+  const user = await getAuthUser();
+  if (!user) redirect("/login");
+  if (!isGlobalAdmin(user)) redirect("/?kein_zugriff=admin");
+  return user;
+}
+
+// Für Seiten, die nur eine gültige Session brauchen (z. B. /profil).
+export async function requireSessionPage(): Promise<JwtPayload> {
+  const user = await getAuthUser();
+  if (!user) redirect("/login");
+  return user;
 }
