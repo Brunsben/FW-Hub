@@ -1,0 +1,21 @@
+# Geheimnisse und lokale Konfiguration
+.env*
+!.env.example
+
+# Versionsverwaltung und Werkzeuge
+.git
+.github
+.claude
+.vscode
+**/*.md
+
+# Abhängigkeiten und Build-Ausgaben (werden im Image neu erzeugt)
+node_modules
+.next
+*.tsbuildinfo
+
+# Logs und Docker-Dateien
+*.log
+Dockerfile
+docker-compose*.yml
+.dockerignore

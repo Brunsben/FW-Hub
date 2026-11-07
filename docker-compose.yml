@@ -30,15 +30,12 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  # ── nginx (Reverse-Proxy für alle Services) ───────────────────────────────
   nginx:
     image: nginx:1.29-alpine
     container_name: fw_nginx
     logging: *default-logging
     ports:
       - "${PORTAL_PORT:-8180}:8080"
-    environment:
-      N8N_API_KEY: "${N8N_API_KEY:?N8N_API_KEY muss in .env gesetzt sein}"
     volumes:
       - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
       - ./nginx-ratelimit.conf:/etc/nginx/conf.d/ratelimit.conf:ro
@@ -50,18 +47,17 @@ services:
       - fw-network
     restart: unless-stopped
 
-  # ── Portal (Next.js — Auth + Dashboard + Mitglieder-Verwaltung) ───────────
   portal:
     build:
       context: .
     container_name: fw_portal
     logging: *default-logging
     environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-nocodb}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nocodb}"
+      # App-Verbindung: eingeschraenkte Rolle fw_app, unterliegt RLS
+      DATABASE_URL: "postgresql://fw_app:${FW_APP_PASSWORD:?FW_APP_PASSWORD muss in .env gesetzt sein}@postgres:5432/${POSTGRES_DB:-nocodb}"
+      # Login-Verbindung: fw_auth (BYPASSRLS), nur fuer Login, Sperre und Sitzungspruefung
+      AUTH_DATABASE_URL: "postgresql://fw_auth:${FW_AUTH_PASSWORD:?FW_AUTH_PASSWORD muss in .env gesetzt sein}@postgres:5432/${POSTGRES_DB:-nocodb}"
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET muss in .env gesetzt sein}"
-      FEUERWEHR_NAME: "${FEUERWEHR_NAME:-Meine Feuerwehr}"
-      ENCRYPTION_KEY: "${FW_ENCRYPTION_KEY:?FW_ENCRYPTION_KEY muss in .env gesetzt sein}"
-      BACKUP_API_KEY: "${FW_BACKUP_API_KEY:?FW_BACKUP_API_KEY muss in .env gesetzt sein}"
       NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
       postgres:

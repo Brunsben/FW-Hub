@@ -9,6 +9,7 @@ import {
 import { today } from "@/lib/food-utils";
 import { MobileRegistration } from "./mobile-registration";
 
+export const dynamic = "force-dynamic";
 export default async function MobilePage({
   params,
 }: {

@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+export const dynamic = "force-dynamic";
 
 // Portal-Startseite.
 //  * Noch kein Benutzer angelegt → /setup (Prüfung über authDb).
