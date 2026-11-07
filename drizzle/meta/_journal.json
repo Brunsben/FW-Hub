@@ -36,6 +36,13 @@
       "when": 1794047998045,
       "tag": "0004_funk_kameraden_read",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794049050554,
+      "tag": "0005_food_set_karten_id",
+      "breakpoints": true
     }
   ]
 }

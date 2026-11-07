@@ -7,6 +7,7 @@ import {
   psaChangelog,
 } from "@/lib/db/schema";
 import type { PsaSession } from "@/lib/psa-auth";
+import type { ScopedTx } from "@/lib/db/scoped";
 
 // Schreibt einen Changelog-Eintrag. Benutzer stammt aus der Session (sub).
 // Fehler werden nur geloggt, nie an den Aufrufer weitergereicht — ein
@@ -55,9 +56,15 @@ export async function typNameByStueck(stueckId: number | null): Promise<string> 
   return row?.bezeichnung ?? "?";
 }
 
-export async function kameradName(kameradId: number | null): Promise<string> {
+// core.kameraden liegt hinter RLS: Der Aufrufer reicht seine (gescopte)
+// Transaktion durch. Bewusst Pflichtparameter, kein Fallback auf den
+// ungescopten Pool.
+export async function kameradName(
+  kameradId: number | null,
+  exec: ScopedTx,
+): Promise<string> {
   if (kameradId == null) return "?";
-  const [row] = await db
+  const [row] = await exec
     .select({ vorname: kameraden.vorname, name: kameraden.name })
     .from(kameraden)
     .where(eq(kameraden.id, kameradId))

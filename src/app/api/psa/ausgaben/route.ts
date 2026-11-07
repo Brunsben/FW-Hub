@@ -65,7 +65,9 @@ export async function POST(req: NextRequest) {
 
   // Ausgabe: Stück dem Empfänger zuordnen + auf "Ausgegeben" setzen und den
   // Ausgaben-Datensatz anlegen — atomar in einer Transaktion.
-  const ausgabe = await db.transaction(async (tx) => {
+  // Der Empfängername wird in derselben Transaktion gelesen (kameradName
+  // verlangt den Executor des Aufrufers).
+  const { ausgabe, empfaenger } = await db.transaction(async (tx) => {
     await tx
       .update(psaAusruestungstuecke)
       .set({ kameradId, status: "Ausgegeben", updatedAt: new Date() })
@@ -80,11 +82,11 @@ export async function POST(req: NextRequest) {
         notizen: toStrOrNull(body.notizen),
       })
       .returning();
-    return row;
+    const empfaenger = await kameradName(kameradId, tx);
+    return { ausgabe: row, empfaenger };
   });
 
   const typName = await typNameByStueck(ausruestungstueckId);
-  const empfaenger = await kameradName(kameradId);
   await logChange(session, "Ausgaben", "Ausgegeben", `${typName} → ${empfaenger}`);
 
   return NextResponse.json({ ausgabe }, { status: 201 });

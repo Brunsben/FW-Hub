@@ -45,7 +45,9 @@ export async function GET() {
       );
     }
 
-    const csv = lines.join("\n");
+    // UTF-8-BOM vorangestellt, damit Excel die Datei als UTF-8 erkennt und
+    // Umlaute korrekt anzeigt (sonst z. B. "MenÃ¼").
+    const csv = String.fromCharCode(0xfeff) + lines.join("\n");
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",

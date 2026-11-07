@@ -133,6 +133,20 @@ export async function unregisterForDate(
   return removed.length > 0;
 }
 
+// Einziger Schreibweg des Food-Moduls auf core.kameraden: setzt karten_id über
+// die SECURITY-DEFINER-Funktion core.set_karten_id. Muss innerhalb von
+// withFoodScope (app.food_rolle = 'Admin') laufen, sonst SQLSTATE 42501.
+// Weitere Fehler: 23505 (Karten-ID vergeben), P0002 (Kamerad unbekannt).
+export async function setKartenId(
+  tx: ScopedTx,
+  kameradId: number,
+  kartenId: string | null,
+) {
+  await tx.execute(
+    sql`select core.set_karten_id(${kameradId}::integer, ${kartenId ?? ""}::text)`,
+  );
+}
+
 // Kamerad über Karten-ID oder Personalnummer finden (kein portal_member_id mehr).
 // Nur aktive Kameraden: Deaktivierte dürfen sich nicht zum Essen anmelden.
 export async function findKameradByCardOrPersonal(
