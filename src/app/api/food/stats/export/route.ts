@@ -3,6 +3,7 @@ import { asc, desc, eq, gte } from "drizzle-orm";
 import { foodMenus, foodRegistrations, kameraden } from "@/lib/db/schema";
 import { withFoodScope } from "@/lib/db/scoped";
 import { requireFoodSession } from "@/lib/food-auth";
+import { addDays, today } from "@/lib/zeit";
 
 // Export: Join mit core.kameraden statt der alten users-Tabelle.
 export async function GET() {
@@ -15,9 +16,7 @@ export async function GET() {
   }
 
   try {
-    const since = new Date();
-    since.setDate(since.getDate() - 365);
-    const sinceStr = since.toISOString().split("T")[0];
+    const sinceStr = addDays(today(), -365);
 
     const data = await withFoodScope(
       { kameradId: session.kameradId, foodRolle: session.foodRole },
@@ -51,7 +50,7 @@ export async function GET() {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="essensmeldung_export_${new Date().toISOString().split("T")[0]}.csv"`,
+        "Content-Disposition": `attachment; filename="essensmeldung_export_${today()}.csv"`,
       },
     });
   } catch (error) {

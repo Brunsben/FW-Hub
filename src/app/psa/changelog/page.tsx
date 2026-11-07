@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { today } from "@/lib/zeit";
 
 export default async function PsaChangelogPage() {
   const session = await requirePsaSession();
@@ -62,7 +63,7 @@ export default async function PsaChangelogPage() {
                 eintraege.map((e) => (
                   <TableRow key={e.id}>
                     <TableCell>
-                      {new Date(e.zeitpunkt).toLocaleString("de-DE")}
+                      {new Date(e.zeitpunkt).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}
                     </TableCell>
                     <TableCell>{e.tabelle ?? "—"}</TableCell>
                     <TableCell>{e.aktion ?? "—"}</TableCell>

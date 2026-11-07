@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { today } from "@/lib/zeit";
 
 interface DayStat {
   date: string;
@@ -25,7 +26,7 @@ interface DayStat {
 type Identifier = { card_id?: string; personal_number?: string };
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return today();
 }
 
 export default function FoodKioskPage() {

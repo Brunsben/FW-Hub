@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { resizeImageToDataUrl } from "@/lib/psa-foto";
+import { today } from "@/lib/zeit";
 
 export interface PruefungRow {
   id: number;
@@ -62,7 +63,7 @@ export interface PieceOption {
 
 type Tab = "pruefungen" | "waesche" | "schaeden";
 
-const heute = () => new Date().toISOString().slice(0, 10);
+const heute = () => today();
 
 function fmt(d: string | null): string {
   if (!d) return "—";

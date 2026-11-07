@@ -8,15 +8,13 @@ import {
   foodRegistrations,
   kameraden,
 } from "@/lib/db/schema";
+import { today, nowHHMM } from "@/lib/zeit";
+export { today, nowHHMM } from "@/lib/zeit";
 
 // Ausführungs-Kontext: globaler Pool (db) ODER eine gescopte Transaktion (tx).
 // So können dieselben Helfer innerhalb eines withFoodPublicScope laufen.
 type Executor = typeof db | ScopedTx;
 
-// Heutiges Datum als YYYY-MM-DD.
-export function today(): string {
-  return new Date().toISOString().split("T")[0];
-}
 
 export async function getMenuForDate(date: string, exec: Executor = db) {
   const [menu] = await exec
@@ -76,11 +74,12 @@ export function isRegistrationOpen(menu: {
   deadlineEnabled: boolean;
 }) {
   if (!menu.deadlineEnabled) return true;
-  const now = new Date();
-  const [hours, minutes] = menu.registrationDeadline.split(":").map(Number);
-  const deadline = new Date();
-  deadline.setHours(hours, minutes, 0, 0);
-  return now < deadline;
+  const [h, m] = menu.registrationDeadline.split(":").map(Number);
+  // Ungültige Frist: wie bisher geschlossen
+  if (Number.isNaN(h) || Number.isNaN(m)) return false;
+  const frist = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  // Beide Werte sind HH:MM mit führender Null, der Textvergleich entspricht dem Zeitvergleich.
+  return nowHHMM() < frist;
 }
 
 // An-/Abmeldung für heute umschalten. Umgestellt von userId auf kameradId.

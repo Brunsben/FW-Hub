@@ -5,6 +5,7 @@ import { expectRows, NoRowsAffectedError } from "@/lib/db/rows";
 import { psaAusgaben, psaAusruestungstuecke } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { kameradName, logChange, typNameByStueck } from "@/lib/psa-changelog";
+import { today } from "@/lib/zeit";
 
 function toIntOrNull(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -16,7 +17,7 @@ function toStrOrNull(v: unknown): string | null {
   return v == null || v === "" ? null : String(v);
 }
 
-const heute = () => new Date().toISOString().slice(0, 10);
+const heute = () => today();
 
 const stueckNichtGefunden = () =>
   NextResponse.json(

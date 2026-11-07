@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { desc, gte, sql } from "drizzle-orm";
 import { foodGuests, foodMenus, foodRegistrations } from "@/lib/db/schema";
 import { withFoodPublicScope } from "@/lib/db/scoped";
+import { addDays, today } from "@/lib/zeit";
 
 // Öffentlich: physischer Küchen-Bildschirm ruft diese aggregierten Zähler
 // ohne Session ab (wie im Original). Personenbezug steckt nur im Export.
@@ -13,9 +14,7 @@ export async function GET(req: NextRequest) {
       90,
     );
 
-    const since = new Date();
-    since.setDate(since.getDate() - days);
-    const sinceStr = since.toISOString().split("T")[0];
+    const sinceStr = addDays(today(), -days);
 
     // reg_counts liest fw_food.registrations (RLS) → öffentlicher Food-Scope.
     const { menuData, regCounts, guestData } = await withFoodPublicScope(

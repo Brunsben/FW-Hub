@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { asc, gte } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -71,11 +72,19 @@ export default async function FoodAdminPage() {
     <>
     <AppHeader aktiv="food" />
     <main className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">FoodBot – Verwaltung</h1>
-        <p className="text-sm text-muted-foreground">
-          Angemeldet als {session.kameradName} ({session.foodRole})
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">FoodBot – Verwaltung</h1>
+          <p className="text-sm text-muted-foreground">
+            Angemeldet als {session.kameradName} ({session.foodRole})
+          </p>
+        </div>
+        <Link
+          href="/food/admin/heute"
+          className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Heutige Anmeldungen
+        </Link>
       </div>
 
       <MenuManager

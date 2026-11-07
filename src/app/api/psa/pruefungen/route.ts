@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { logChange, typNameByStueck } from "@/lib/psa-changelog";
+import { today } from "@/lib/zeit";
 
 function toIntOrNull(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
         if (!typRow) throw new NoRowsAffectedError("Prüfung");
         if (typRow.intervall) {
           const basis =
-            toStrOrNull(body.datum) ?? new Date().toISOString().slice(0, 10);
+            toStrOrNull(body.datum) ?? today();
           const d = new Date(basis);
           d.setMonth(d.getMonth() + typRow.intervall);
           naechste = d.toISOString().slice(0, 10);

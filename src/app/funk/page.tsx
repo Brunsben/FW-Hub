@@ -270,7 +270,7 @@ export default async function FunkPage() {
                       <StatusBadge status={r.status as DeviceStatus} />
                     </TableCell>
                     <TableCell>
-                      {new Date(r.assignmentDate).toLocaleDateString("de-DE")}
+                      {new Date(r.assignmentDate).toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })}
                     </TableCell>
                   </TableRow>
                 ))
