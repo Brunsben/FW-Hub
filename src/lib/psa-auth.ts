@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 
 export type PsaRole = "Admin" | "Kleiderwart" | "User";
 
-const PSA_ROLES: PsaRole[] = ["Admin", "Kleiderwart", "User"];
+export const PSA_ROLES: PsaRole[] = ["Admin", "Kleiderwart", "User"];
 
 export interface PsaSession {
   kameradId: number;

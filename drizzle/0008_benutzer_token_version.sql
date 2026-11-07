@@ -1,0 +1,2 @@
+ALTER TABLE "core"."benutzer" ADD COLUMN "token_version" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_benutzer_benutzername_lower" ON "core"."benutzer" USING btree (lower("benutzername"));

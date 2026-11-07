@@ -1,5 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { eq } from "drizzle-orm";
+import { authDb } from "@/lib/db/auth-client";
+import { benutzer } from "@/lib/db/schema";
 
 const COOKIE_NAME = "fw_jwt";
 const COOKIE_MAX_AGE = 28800; // 8 Stunden, passend zur JWT-Laufzeit
@@ -14,6 +17,8 @@ function getJwtSecret() {
 export interface JwtPayload {
   sub: string;
   app_role: string;
+  benutzer_id: number; // core.benutzer.id
+  tv: number; // core.benutzer.token_version zum Ausstellungszeitpunkt
   kamerad_id: number; // niemals null — durch NOT-NULL-Constraint garantiert
   kamerad_name: string;
   email?: string;
@@ -38,9 +43,15 @@ export async function verifyJwt(token: string): Promise<JwtPayload | null> {
       requiredClaims: ["exp"],
     });
     if (typeof payload.kamerad_id !== "number") return null;
+    // Tokens ohne benutzer_id/tv (z. B. vor Einführung von token_version
+    // ausgestellt) sind ungültig.
+    if (!Number.isInteger(payload.benutzer_id) || !Number.isInteger(payload.tv))
+      return null;
     return {
       sub: payload.sub as string,
       app_role: payload.app_role as string,
+      benutzer_id: payload.benutzer_id as number,
+      tv: payload.tv as number,
       kamerad_id: payload.kamerad_id,
       kamerad_name: payload.kamerad_name as string,
       email: payload.email as string | undefined,
@@ -76,9 +87,40 @@ export async function clearAuthCookie(isHttps: boolean) {
   });
 }
 
+// Verifiziert das JWT und prüft danach live gegen core.benutzer (über authDb,
+// fw_auth hat SELECT): Benutzer aktiv, token_version unverändert, kamerad_id
+// und Rolle stimmen. So wirken Deaktivierung, PIN-/Rollenänderung und
+// "überall abmelden" beim nächsten Request, nicht erst bei exp.
 export async function getAuthUser(): Promise<JwtPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifyJwt(token);
+  const payload = await verifyJwt(token);
+  if (!payload) return null;
+
+  const [row] = await authDb
+    .select({
+      aktiv: benutzer.aktiv,
+      tokenVersion: benutzer.tokenVersion,
+      kameradId: benutzer.kameradId,
+      rolle: benutzer.rolle,
+    })
+    .from(benutzer)
+    .where(eq(benutzer.id, payload.benutzer_id))
+    .limit(1);
+
+  if (
+    !row ||
+    !row.aktiv ||
+    row.tokenVersion !== payload.tv ||
+    row.kameradId !== payload.kamerad_id ||
+    row.rolle !== payload.app_role
+  ) {
+    return null;
+  }
+  return payload;
+}
+
+export function isGlobalAdmin(user: JwtPayload | null): boolean {
+  return user?.app_role === "Admin";
 }

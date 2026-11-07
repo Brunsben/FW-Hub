@@ -28,6 +28,31 @@ export async function withScope<T>(
   });
 }
 
+// Scope für die Admin-Routen (/api/admin/*). Die bestehenden Policies auf
+// core.benutzer/core.kameraden erlauben fremde Zeilen nur mit
+// app.psa_rolle IN ('Admin','Kleiderwart'). Ein globaler Admin (app_role Admin)
+// hat nicht zwingend eine psa_rolle — mit seinem eigenen Scope sähe er nur die
+// eigene Zeile. Daher setzt dieser Scope für VERIFIZIERTE globale Admins
+// app.psa_rolle = 'Admin'. Zusätzlich app.app_rolle = 'Admin' als Vorbereitung
+// für die Policy-Verschärfung (drizzle/manual/benutzer-scope-verschaerfung.sql).
+// Nur in Admin-Routen nach requireGlobalAdmin() verwenden.
+export async function withGlobalAdminScope<T>(
+  admin: { kamerad_id: number; app_role: string },
+  fn: (tx: ScopedTx) => Promise<T>,
+): Promise<T> {
+  if (admin.app_role !== "Admin") {
+    throw new Error("withGlobalAdminScope: kein globaler Admin");
+  }
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('app.kamerad_id', ${String(admin.kamerad_id)}, true)`,
+    );
+    await tx.execute(sql`select set_config('app.psa_rolle', 'Admin', true)`);
+    await tx.execute(sql`select set_config('app.app_rolle', 'Admin', true)`);
+    return fn(tx);
+  });
+}
+
 export interface FoodScope {
   kameradId: number;
   foodRolle: string;

@@ -80,4 +80,12 @@ GRANT SELECT ON core.benutzer TO fw_auth;
 --   GRANT SELECT, INSERT, DELETE ON core.login_attempts TO fw_auth;
 --   GRANT USAGE ON SEQUENCE core.login_attempts_id_seq TO fw_auth;
 -- Siehe drizzle/manual/login-sperre.md.
+--
+-- WICHTIG: Die ALTER DEFAULT PRIVILEGES oben geben fw_app auf JEDE neue
+-- Tabelle/Sequenz in core, psa und fw_funk automatisch Rechte. Tabellen, die
+-- nur fw_auth gehören sollen (z. B. core.login_attempts), müssen nach dem
+-- Anlegen bereinigt werden:
+--   REVOKE ALL ON core.<tabelle> FROM fw_app;
+--   REVOKE ALL ON SEQUENCE core.<tabelle>_id_seq FROM fw_app;
+-- Für core.login_attempts erledigt das drizzle/0009_login_attempts_revoke_fw_app.sql.
 

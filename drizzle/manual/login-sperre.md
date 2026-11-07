@@ -22,9 +22,17 @@ Migrationen: `drizzle/0006_login_attempts.sql` (Tabelle) und
 
 - Zugriff ausschließlich über `authDb` (Rolle `fw_auth`, BYPASSRLS):
   `GRANT SELECT, INSERT, DELETE` auf die Tabelle und `USAGE` auf die Sequenz.
-- `fw_app` erhält über die Default-Privileges zwar Tabellenrechte, aber RLS ist
-  mit `FORCE` aktiv und hat **keine Policy**. `fw_app` sieht und schreibt
-  deshalb nichts.
+- RLS ist mit `FORCE` aktiv und hat **keine Policy**. `fw_app` sieht und
+  schreibt deshalb nichts.
+- Zusätzlich hat `fw_app` **keine Rechte** auf Tabelle und Sequenz. `ALTER
+  DEFAULT PRIVILEGES` (create-fw-app-role.sql) hatte `fw_app` beim Anlegen
+  automatisch `arwd` gegeben. `drizzle/0009_login_attempts_revoke_fw_app.sql`
+  entzieht das wieder (`REVOKE ALL … FROM fw_app` auf Tabelle und Sequenz).
+- **Allgemeine Regel:** Jede Tabelle, die nur `fw_auth` gehören soll, muss
+  nach dem Anlegen so bereinigt werden. Sonst erhält `fw_app` über die
+  Default-Privileges automatisch Rechte.
+- Prüfung: `\dp core.login_attempts` und `\dp core.login_attempts_id_seq`
+  zeigen nur `postgres` (Eigentümer) und `fw_auth`.
 
 ## Rettungsweg (Konto vorzeitig entsperren)
 

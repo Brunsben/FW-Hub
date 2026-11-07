@@ -5,6 +5,7 @@ import { authDb } from "@/lib/db/auth-client";
 import { withScope } from "@/lib/db/scoped";
 import { kameraden, benutzer } from "@/lib/db/schema";
 import { signJwt, setAuthCookie } from "@/lib/auth";
+import { buildJwtPayload } from "@/lib/session-token";
 
 // Erst-Einrichtung: nur möglich, solange noch kein Benutzer existiert.
 // Henne-Ei-Problem: benutzer.kamerad_id ist NOT NULL, beim allerersten Account
@@ -78,17 +79,8 @@ export async function POST(req: NextRequest) {
       },
     );
 
-    const token = await signJwt({
-      sub: created.user.benutzername,
-      app_role: "Admin",
-      kamerad_id: created.kamerad.id,
-      kamerad_name: `${created.kamerad.vorname} ${created.kamerad.name}`,
-      email: created.kamerad.email ?? undefined,
-      psa_rolle: "Admin",
-      food_rolle: "Admin",
-      fk_rolle: "Admin",
-      funk_rolle: "Admin",
-    });
+    // Claims inkl. benutzer_id und tv (token_version) aus den angelegten Zeilen.
+    const token = await signJwt(buildJwtPayload(created.user, created.kamerad));
 
     const isHttps = req.headers.get("x-forwarded-proto") === "https";
     await setAuthCookie(token, isHttps);

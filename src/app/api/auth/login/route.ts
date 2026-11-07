@@ -6,6 +6,7 @@ import { withScope } from "@/lib/db/scoped";
 import { benutzer, kameraden } from "@/lib/db/schema";
 import { signJwt, setAuthCookie } from "@/lib/auth";
 import { checkLock, getClientIp, recordAttempt } from "@/lib/login-throttle";
+import { buildJwtPayload } from "@/lib/session-token";
 
 export async function POST(req: NextRequest) {
   try {
@@ -70,10 +71,11 @@ export async function POST(req: NextRequest) {
     }
 
     // core.kameraden liegt hinter RLS. fw_auth darf es NICHT lesen; daher mit
-    // dem jetzt bekannten Scope des Benutzers über den regulären Client lesen
-    // (eigene kamerad_id bzw. Admin/Kleiderwart-Vollzugriff).
+    // dem jetzt bekannten Scope des Benutzers über den regulären Client lesen.
+    // Die eigene Zeile ist über kameraden_scope (id = app.kamerad_id) sichtbar;
+    // die App-Rolle wird bewusst NICHT als psa_rolle in den Scope gesetzt.
     const [kamerad] = await withScope(
-      { kameradId: user.kameradId, psaRolle: user.rolle },
+      { kameradId: user.kameradId, psaRolle: "" },
       (tx) =>
         tx
           .select()
@@ -82,17 +84,8 @@ export async function POST(req: NextRequest) {
           .limit(1),
     );
 
-    const token = await signJwt({
-      sub: user.benutzername,
-      app_role: user.rolle,
-      kamerad_id: user.kameradId,
-      kamerad_name: `${kamerad.vorname} ${kamerad.name}`,
-      email: kamerad.email ?? undefined,
-      psa_rolle: kamerad.psaRolle,
-      food_rolle: kamerad.foodRolle,
-      fk_rolle: kamerad.fkRolle,
-      funk_rolle: kamerad.funkRolle,
-    });
+    // Claims inkl. benutzer_id und tv (token_version).
+    const token = await signJwt(buildJwtPayload(user, kamerad));
 
     const isHttps = req.headers.get("x-forwarded-proto") === "https";
     await setAuthCookie(token, isHttps);

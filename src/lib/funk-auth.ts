@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 
 export type FunkRole = "Admin" | "Gerätewart" | "Einsatzleiter" | "Mitglied";
 
-const FUNK_ROLES: FunkRole[] = [
+export const FUNK_ROLES: FunkRole[] = [
   "Admin",
   "Gerätewart",
   "Einsatzleiter",

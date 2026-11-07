@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 
 export type FoodRole = "Admin" | "Mitglied";
 
-const FOOD_ROLES: FoodRole[] = ["Admin", "Mitglied"];
+export const FOOD_ROLES: FoodRole[] = ["Admin", "Mitglied"];
 
 export interface FoodSession {
   kameradId: number;

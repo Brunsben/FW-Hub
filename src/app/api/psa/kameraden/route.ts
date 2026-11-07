@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, asc, eq } from "drizzle-orm";
 import { kameraden, psaKameradDetails } from "@/lib/db/schema";
 import { withScope } from "@/lib/db/scoped";
+import {
+  deaktiviereBenutzerVonKamerad,
+  konfliktResponse,
+} from "@/lib/benutzer-admin";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { logChange } from "@/lib/psa-changelog";
 
@@ -161,33 +165,45 @@ export async function PATCH(req: NextRequest) {
   const { sizes, present } = extractSizes(body);
   const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 
-  const kamerad = await withScope(scope, async (tx) => {
-    let updated;
-    if (Object.keys(coreUpdate).length > 0) {
-      coreUpdate.updatedAt = new Date();
-      [updated] = await tx
-        .update(kameraden)
-        .set(coreUpdate)
-        .where(eq(kameraden.id, id))
-        .returning();
-    } else {
-      [updated] = await tx
-        .select()
-        .from(kameraden)
-        .where(eq(kameraden.id, id));
-    }
+  let kamerad;
+  try {
+    kamerad = await withScope(scope, async (tx) => {
+      // Invariante: Deaktivierung des Kameraden deaktiviert die verknüpften
+      // Benutzer in derselben Transaktion (inkl. token_version + 1).
+      if (coreUpdate.aktiv === false) {
+        await deaktiviereBenutzerVonKamerad(tx, id, session.kameradId);
+      }
+      let updated;
+      if (Object.keys(coreUpdate).length > 0) {
+        coreUpdate.updatedAt = new Date();
+        [updated] = await tx
+          .update(kameraden)
+          .set(coreUpdate)
+          .where(eq(kameraden.id, id))
+          .returning();
+      } else {
+        [updated] = await tx
+          .select()
+          .from(kameraden)
+          .where(eq(kameraden.id, id));
+      }
 
-    if (present) {
-      await tx
-        .insert(psaKameradDetails)
-        .values({ kameradId: id, ...sizes })
-        .onConflictDoUpdate({
-          target: psaKameradDetails.kameradId,
-          set: { ...sizes, updatedAt: new Date() },
-        });
-    }
-    return updated;
-  });
+      if (present) {
+        await tx
+          .insert(psaKameradDetails)
+          .values({ kameradId: id, ...sizes })
+          .onConflictDoUpdate({
+            target: psaKameradDetails.kameradId,
+            set: { ...sizes, updatedAt: new Date() },
+          });
+      }
+      return updated;
+    });
+  } catch (e) {
+    const konflikt = konfliktResponse(e);
+    if (konflikt) return konflikt;
+    throw e;
+  }
 
   if (!kamerad) {
     return NextResponse.json(
@@ -220,17 +236,26 @@ export async function DELETE(req: NextRequest) {
   // Soft-Delete: core.kameraden ist modulübergreifend referenziert und wird
   // nie hart gelöscht — nur deaktiviert.
   const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
-  const rows = await withScope(scope, (tx) =>
-    tx
-      .update(kameraden)
-      .set({ aktiv: false, updatedAt: new Date() })
-      .where(eq(kameraden.id, id))
-      .returning({
-        id: kameraden.id,
-        vorname: kameraden.vorname,
-        name: kameraden.name,
-      }),
-  );
+  let rows;
+  try {
+    rows = await withScope(scope, async (tx) => {
+      // Invariante: verknüpfte Benutzer in derselben Transaktion deaktivieren.
+      await deaktiviereBenutzerVonKamerad(tx, id, session.kameradId);
+      return tx
+        .update(kameraden)
+        .set({ aktiv: false, updatedAt: new Date() })
+        .where(eq(kameraden.id, id))
+        .returning({
+          id: kameraden.id,
+          vorname: kameraden.vorname,
+          name: kameraden.name,
+        });
+    });
+  } catch (e) {
+    const konflikt = konfliktResponse(e);
+    if (konflikt) return konflikt;
+    throw e;
+  }
   const deactivated = rows[0];
 
   if (!deactivated) {

@@ -57,6 +57,20 @@
       "when": 1794050082552,
       "tag": "0007_login_attempts_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794050792077,
+      "tag": "0008_benutzer_token_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794050797622,
+      "tag": "0009_login_attempts_revoke_fw_app",
+      "breakpoints": true
     }
   ]
 }

@@ -54,22 +54,35 @@ export const kameraden = core.table("kameraden", {
 // BENUTZER — Login-Accounts. kamerad_id ist NOT NULL: jeder Account (auch
 // Admin) ist mit genau einem Kameraden verknüpft (System-Invariante).
 // ============================================================================
-export const benutzer = core.table("benutzer", {
-  id: serial("id").primaryKey(),
-  benutzername: text("benutzername").notNull().unique(),
-  pin: text("pin").notNull(), // bcrypt-Hash
-  rolle: text("rolle").notNull().default("User"),
-  kameradId: integer("kamerad_id")
-    .notNull()
-    .references(() => kameraden.id),
-  aktiv: boolean("aktiv").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const benutzer = core.table(
+  "benutzer",
+  {
+    id: serial("id").primaryKey(),
+    benutzername: text("benutzername").notNull().unique(),
+    pin: text("pin").notNull(), // bcrypt-Hash
+    rolle: text("rolle").notNull().default("User"),
+    kameradId: integer("kamerad_id")
+      .notNull()
+      .references(() => kameraden.id),
+    aktiv: boolean("aktiv").notNull().default(true),
+    // Wird bei Deaktivierung, PIN-Änderung, Rollenänderung und "überall
+    // abmelden" erhöht. Das JWT trägt den Stand als Claim tv; getAuthUser()
+    // verwirft Tokens mit abweichendem Stand.
+    tokenVersion: integer("token_version").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    // Benutzernamen sind case-insensitiv eindeutig (Login vergleicht lower()).
+    benutzernameLowerUnique: uniqueIndex("idx_benutzer_benutzername_lower").on(
+      sql`lower(${t.benutzername})`,
+    ),
+  }),
+);
 
 // ============================================================================
 // LOGIN_ATTEMPTS — Login-Sperre (Brute-Force-Schutz). Zugriff ausschließlich
