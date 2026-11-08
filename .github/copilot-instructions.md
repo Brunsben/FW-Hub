@@ -162,16 +162,90 @@ Volume starten. Das Skript
 - reicht alle Argumente an scripts/migrate.mjs durch. Ohne Argument werden ALLE
   ausstehenden Migrationen in EINER Transaktion angewendet, `--bis 0012` endet
   nach dieser Nummer
-- gibt am Ende die Zahl der Migrationen und der Policies in core aus und endet
-  mit dem Exit-Code der Migration
-Erwartete Ausgabe: `Migrationen eingetragen: <vorher> -> <nachher>`, danach
-`Migrationen: <Anzahl>` und `Policies in core: <Anzahl>`. Die Migrationsrolle
+- gibt VOR und NACH der Migration die Zahl der Migrationen und der Policies in
+  core aus und endet mit dem Exit-Code der Migration
+Erwartete Ausgabe: je ein Block `Migrationen: <Anzahl>` und `Policies in core:
+<Anzahl>` unter "Stand VORHER" und "Stand NACHHER", dazwischen `Migrationen
+eingetragen: <vorher> -> <nachher>`. Die Migrationsrolle
 ist POSTGRES_USER des Containers und muss Eigentümerin der Tabellen sein
 (aktuell `nocodb`, siehe "Offene Punkte").
 
 App ausrollen: in `~/fw/fwhub-stack` `docker compose build portal && docker
 compose up -d portal`. Nie `docker compose down -v` (das Postgres-Volume
 setup_postgres_data ist external).
+
+### Produktion: Backup
+`scripts/server-backup.sh` sichert die Datenbank `fwhub` aus dem Container
+`fw_postgres` (`pg_dump -Fc`) nach `/root/backups/fwhub/` und läuft täglich per
+Cron als root.
+
+Was das Skript tut
+- Schreibt `fwhub_JJJJ-MM-TT_HHMM.dump` mit Rechten 600 (Verzeichnis 700). Erst
+  entsteht eine `.tmp`-Datei, die nach der Prüfung umbenannt wird
+- Prüft, dass die Datei größer als 0 Byte ist und `pg_restore --list` sie lesen
+  kann. Sonst Exit 1, eine `FEHLER`-Zeile im Log und kein Dump
+- Aufbewahrung: alle Dumps der letzten 14 Tage, davor je der neueste Dump pro
+  Kalenderwoche für 8 Wochen, der Rest wird gelöscht. Es werden nur Dateien nach
+  dem Namensmuster angefasst, andere Dateien nie (z. B. ein von Hand angelegter
+  Dump mit eigenem Namen)
+- Eine Zeile pro Lauf in `/root/backups/fwhub/backup.log` (`OK …`, `WARNUNG …`
+  oder `FEHLER …`). Bei Fehlern zusätzlich Ausgabe auf stderr und Exit 1
+- Optional eine Kopie in ein zweites Verzeichnis (Variable `FWHUB_BACKUP_KOPIE`,
+  leer = keine Kopie). Dieselbe Aufbewahrung gilt dort. Schlägt die Kopie fehl,
+  bleibt das lokale Backup erhalten, das Skript endet trotzdem mit Exit 1
+- `scripts/server-backup.sh --nur-aufraeumen` wendet nur die Aufbewahrung an
+
+Installation (einmalig, als root auf dem Server; Pfad anpassen, falls das Repo
+nicht unter `/root/fw/FW-Hub` liegt)
+1. Das Exec-Bit ist im Repo gesetzt. Falls nicht:
+   `chmod +x /root/fw/FW-Hub/scripts/server-backup.sh`
+2. Probelauf: `/root/fw/FW-Hub/scripts/server-backup.sh`. Erwartet: keine Ausgabe,
+   Exit 0, eine `OK`-Zeile im Log und eine neue `.dump`-Datei
+3. Rechte prüfen: `ls -l /root/backups/fwhub` zeigt `-rw-------` für den Dump,
+   `ls -ld /root/backups/fwhub` zeigt `drwx------`
+4. Cron, `crontab -e` als root, täglich um 03:15:
+   ```
+   15 3 * * * /root/fw/FW-Hub/scripts/server-backup.sh
+   ```
+   Mit Kopie, zum Beispiel auf einen NAS-Mount:
+   ```
+   15 3 * * * FWHUB_BACKUP_KOPIE=/mnt/nas/fwhub /root/fw/FW-Hub/scripts/server-backup.sh
+   ```
+   Das Zielverzeichnis muss existieren und beschreibbar sein (Mount prüfen)
+5. Laufende Kontrolle: `tail -n 3 /root/backups/fwhub/backup.log` zeigt den
+   letzten Lauf. Eine `FEHLER`- oder `WARNUNG`-Zeile braucht Aufmerksamkeit.
+   Fehlt der Eintrag für einen Tag ganz, hat Cron das Skript nicht gestartet
+
+Wiederherstellung testen (in eine Test-Datenbank, nie über die laufende fwhub).
+Mindestens einmal nach der Einrichtung, danach z. B. quartalsweise:
+```
+U=$(docker exec fw_postgres printenv POSTGRES_USER)
+docker exec fw_postgres createdb -U "$U" fwhub_restore_test
+docker exec -i fw_postgres pg_restore -U "$U" -d fwhub_restore_test --exit-on-error \
+  < /root/backups/fwhub/fwhub_<JJJJ-MM-TT_HHMM>.dump
+docker exec fw_postgres psql -U "$U" -d fwhub_restore_test -At \
+  -c "select count(*) from drizzle.__drizzle_migrations" \
+  -c "select count(*) from core.kameraden" \
+  -c "select count(*) from core.benutzer"
+```
+Die Zahlen mit derselben Abfrage gegen `-d fwhub` vergleichen (sie weichen nur
+um Änderungen seit dem Backup ab). Danach aufräumen:
+`docker exec fw_postgres dropdb -U "$U" fwhub_restore_test`.
+Lokal ist genau diese Abfolge mit einem Dump der Entwicklungsdatenbank getestet
+(Benutzer, Kameraden, Migrationen, Policies und Trigger stimmten überein).
+Für eine echte Wiederherstellung dieselbe Abfolge in eine neue, leere
+Datenbank, die App vorher stoppen. Die Rollen (`fw_app`, `fw_auth`, der
+Migrationsbenutzer) stehen nicht im Dump: Auf einem neuen Server vorher
+drizzle/manual/create-fw-app-role.sql ausführen.
+
+**Ein Backup nur auf demselben Server ist kein echtes Backup.** Festplatten-
+ausfall, Diebstahl, Brand, Verschlüsselungstrojaner oder ein Fehler am Volume
+treffen Datenbank und Dumps gleichzeitig. Darum eine Kopie auf ein anderes Gerät
+an einem anderen Ort einrichten (`FWHUB_BACKUP_KOPIE`, z. B. NAS oder anderer
+Rechner; ein Gerät im selben Raum schützt nicht vor Brand) und gelegentlich
+prüfen, dass dort tatsächlich aktuelle Dateien liegen. Die Dumps enthalten
+personenbezogene Daten und PIN-Hashes. Kopien nur auf Ziele mit
+eingeschränktem Zugriff legen, am besten verschlüsselt.
 
 ### Ausrollen Härtung core.kameraden/benutzer (Migrationen 0012/0013)
 Ergebnis vom 08.11.2026: 0012 und 0013 ausgerollt (14 Migrationen, 10 Policies
@@ -187,8 +261,8 @@ Was man wissen muss
   für Zeilen. Auf Produktion war es schon aktiv
 
 Schritte
-1. **Vorbereitung**: Lokal tsc, Build, test-haertung.mjs und test-ui-a.mjs
-   grün. Auf dem Server `git pull` in `~/fw/FW-Hub`. Test-Konten
+1. **Vorbereitung**: Lokal tsc, Build, `node scripts/test-haertung.mjs` und
+   `node scripts/test-login-deaktiviert.mjs` (Dev-Server nötig) grün. Auf dem Server `git pull` in `~/fw/FW-Hub`. Test-Konten
    für den Smoke-Test festlegen: ein Testkamerad mit Benutzer, klar benannt
    (z. B. "Test-Rollout"). Kameraden werden nie gelöscht, der Testkamerad
    bleibt danach inaktiv
@@ -196,8 +270,10 @@ Schritte
    und PSA-Pflege kurz nicht nutzen. Die Migration dauert Sekunden, der
    App-Neustart unter einer Minute
 3. **Backup** und Stand erfassen
-   - `docker exec fw_postgres pg_dump -U nocodb -Fc fwhub > fwhub-vor-haertung-<datum>.dump`
-   - Datei prüfen (`pg_restore --list <datei>`) und außerhalb des Servers ablegen
+   - `/root/fw/FW-Hub/scripts/server-backup.sh` als root (siehe "Produktion:
+     Backup"). Es prüft den Dump selbst. Das Skript endet mit Exit 0 und die
+     neue Datei steht in `/root/backups/fwhub/`
+   - Eine Kopie außerhalb des Servers ablegen
    - Als Owner im psql (`docker exec -it fw_postgres psql -U nocodb -d fwhub`)
      den Stand erfassen, Sollwerte vor dem Start:
      ```sql

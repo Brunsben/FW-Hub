@@ -7,16 +7,17 @@
 # Alle Argumente gehen unverändert an scripts/migrate.mjs.
 #
 # Was das Skript tut:
-#   1. Baut das Migrations-Image (Dockerfile-Stage "migrate"). Dadurch fehlt nach
-#      einem git pull nie eine neue Migration.
+#   1. Baut das Migrations-Image fwhub-migrate (Dockerfile-Stage "migrate").
+#      Dadurch fehlt nach einem git pull nie eine neue Migration.
 #   2. Liest POSTGRES_USER und POSTGRES_PASSWORD zur Laufzeit aus dem Container
-#      fw_postgres. Das Passwort steht in keiner Datei und nicht in der
+#      fw_postgres (docker exec ... printenv). Nichts davon wird auf Platte
+#      geschrieben oder ausgegeben, und das Passwort steht nicht in der
 #      Befehlszeile (nur als Umgebungsvariable dieses Skripts und des
 #      Migrations-Containers).
-#   3. Startet einen kurzlebigen Container im Netz fw-network, kodiert Benutzer
-#      und Passwort URL-konform und führt scripts/migrate.mjs gegen
-#      fw_postgres:5432/fwhub aus.
-#   4. Gibt danach die Zahl der Migrationen und der Policies im Schema core aus.
+#   3. Gibt die Zahl der Migrationen und der Policies im Schema core VORHER aus.
+#   4. Startet das Image im Netz fw-network, kodiert Benutzer und Passwort
+#      URL-konform und führt scripts/migrate.mjs gegen fw_postgres:5432/fwhub aus.
+#   5. Gibt dieselben Zahlen NACHHER aus und endet mit dem Exit-Code der Migration.
 #
 # Bewusst kein "docker compose run": Compose könnte sonst im falschen Projekt
 # einen zweiten Postgres auf dasselbe Volume starten.
@@ -37,15 +38,27 @@ DB_NAME="${FWHUB_DB_NAME:-fwhub}"
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-echo "== Migrations-Image bauen ($IMAGE)"
-docker build --target migrate -t "$IMAGE" .
-
 # Zugangsdaten nur als Umgebungsvariablen weiterreichen (-e NAME ohne Wert),
 # damit sie nicht in der Prozessliste des Hosts erscheinen.
 PGU="$(docker exec "$DB_CONTAINER" printenv POSTGRES_USER)"
 PGP="$(docker exec "$DB_CONTAINER" printenv POSTGRES_PASSWORD)"
 export PGU PGP
 export MIG_HOST="$DB_HOST" MIG_DB="$DB_NAME"
+
+# Zahl der Migrationen und der core-Policies. Ein Lesefehler bricht das Skript
+# nicht ab (vor der ersten Migration gibt es das Schema drizzle noch nicht).
+stand() {
+  docker exec "$DB_CONTAINER" psql -U "$PGU" -d "$DB_NAME" -At -F ': ' \
+    -c "select 'Migrationen', count(*) from drizzle.__drizzle_migrations" \
+    -c "select 'Policies in core', count(*) from pg_policies where schemaname = 'core'" \
+    2>&1 || echo "Stand konnte nicht gelesen werden"
+}
+
+echo "== Migrations-Image bauen ($IMAGE)"
+docker build --target migrate -t "$IMAGE" .
+
+echo "== Stand VORHER ($DB_NAME)"
+stand
 
 echo "== Migrationen anwenden (Argumente: ${*:-keine})"
 rc=0
@@ -57,11 +70,8 @@ docker run --rm --network "$NETZ" \
     export MIGRATE_DATABASE_URL="postgresql://$U:$P@$MIG_HOST:5432/$MIG_DB"
     exec node scripts/migrate.mjs "$@"' sh "$@" || rc=$?
 
-echo "== Stand der Datenbank $DB_NAME"
-docker exec "$DB_CONTAINER" psql -U "$PGU" -d "$DB_NAME" -At -F ': ' \
-  -c "select 'Migrationen', count(*) from drizzle.__drizzle_migrations" \
-  -c "select 'Policies in core', count(*) from pg_policies where schemaname = 'core'" \
-  || echo "Stand konnte nicht gelesen werden" >&2
+echo "== Stand NACHHER ($DB_NAME)"
+stand
 
 if [ "$rc" -ne 0 ]; then
   echo "FEHLER: Migration ist fehlgeschlagen (Exit-Code $rc)." >&2

@@ -1,8 +1,11 @@
 // Login-Meldung bei deaktiviertem Konto (Route /api/auth/login).
 //
 // Aufruf:  node scripts/test-login-deaktiviert.mjs
-// Voraussetzung: lokaler Dev-Server (npx next dev --webpack -p 3100; anderer Port
-// über TEST_BASE) und MIGRATE_DATABASE_URL in .env.local (Owner, nur lokal).
+// Env wie bei scripts/test-haertung.mjs (aus .env.local, falls vorhanden):
+//   MIGRATE_DATABASE_URL  Owner: nur Testdaten anlegen, kontrollieren, aufräumen
+//   TEST_BASE             optional, Standard http://localhost:3100
+// Voraussetzung: lokaler Dev-Server (npx next dev --webpack -p 3100), der auf
+// dieselbe Datenbank zeigt.
 //
 // Geprüft wird: 403 mit Hinweis nur bei richtiger PIN, sonst die allgemeine 401-
 // Meldung; deaktivierter Benutzer, deaktivierter Kamerad und beides zusammen;
@@ -11,11 +14,13 @@
 // ausschließlich über gemerkte IDs, exakte Namen und exakte IPs wieder auf.
 // Er bricht ab, wenn Datenbank oder Server nicht lokal sind. Secrets werden
 // nie ausgegeben.
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const P = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
-process.loadEnvFile(`${P}/.env.local`);
+const P = resolve(fileURLToPath(new URL("..", import.meta.url)));
+if (existsSync(`${P}/.env.local`)) process.loadEnvFile(`${P}/.env.local`);
 const req = createRequire(`${P}/package.json`);
 const imp = async (m) => import(pathToFileURL(req.resolve(m)).href);
 const postgres = (await imp("postgres")).default;
@@ -24,6 +29,7 @@ const BASE = process.env.TEST_BASE || "http://localhost:3100";
 
 // Schutz: Dieser Test legt Konten an. Nur gegen lokale Datenbank und lokalen Server.
 const lokal = (h) => ["localhost", "127.0.0.1", "[::1]", "::1"].includes(h);
+if (!process.env.MIGRATE_DATABASE_URL) { console.error("Abbruch: MIGRATE_DATABASE_URL ist nicht gesetzt."); process.exit(2); }
 if (!lokal(new URL(process.env.MIGRATE_DATABASE_URL).hostname) || !lokal(new URL(BASE).hostname)) {
   console.error("Abbruch: Datenbank und Server müssen lokal sein (localhost / 127.0.0.1).");
   process.exit(2);
