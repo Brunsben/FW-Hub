@@ -11,6 +11,18 @@ export function pgErrorCode(e: unknown): string | undefined {
   return undefined;
 }
 
+// Name der verletzten Constraint/des Index (Feld `constraint_name` von
+// postgres-js), um bei 23505 zu erkennen, welcher Eintrag doppelt ist.
+export function constraintName(e: unknown): string | undefined {
+  let cur: unknown = e;
+  for (let depth = 0; depth < 3 && cur && typeof cur === "object"; depth++) {
+    const name = (cur as { constraint_name?: unknown }).constraint_name;
+    if (typeof name === "string") return name;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
 export const PG_UNIQUE_VIOLATION = "23505";
 export const PG_INSUFFICIENT_PRIVILEGE = "42501";
 export const PG_NO_DATA_FOUND = "P0002";

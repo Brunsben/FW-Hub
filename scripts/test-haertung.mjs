@@ -285,6 +285,73 @@ try {
     check("5 food-Admin liest Kameraden", (await tx`select id from core.kameraden`).length > 4));
   await als({ "app.funk_rolle": "Gerätewart" }, async (tx) =>
     check("5 Funk-Gerätewart liest Kameraden", (await tx`select id from core.kameraden`).length > 4));
+
+  // ── 7. Änderungsprotokoll core.mitglieder_audit (Trigger auf kameraden und benutzer)
+  // Lesen im Test als globaler Admin: Zwischenschritt setzt app.app_rolle in derselben Transaktion.
+  const auditLesen = async (tx, kamerad) => {
+    await tx`select set_config('app.app_rolle','Admin',true)`;
+    return tx`select abschnitt, feld, alt, neu, akteur_kamerad_id, akteur_name from core.mitglieder_audit where kamerad_id = ${kamerad} order by id`;
+  };
+  await als(kwG, async (tx) => {
+    await tx`update core.kameraden set vorname = 'Geändert', dienstgrad = 'HFM', updated_at = now() where id = ${ZIEL}`;
+    const z = await auditLesen(tx, ZIEL);
+    const vn = z.find((x) => x.feld === "vorname"), dg = z.find((x) => x.feld === "dienstgrad");
+    check("7 Kleiderwart ändert Stammdaten → Protokoll mit altem/neuem Wert", vn?.alt === "Hrt" && vn?.neu === "Geändert" && dg?.neu === "HFM" && vn?.abschnitt === "stammdaten");
+    check("7 Protokoll nennt den Akteur (Kamerad-ID und Name)", vn?.akteur_kamerad_id === KW && vn?.akteur_name === `Hrt ${stamp}-kw`, `${vn?.akteur_kamerad_id} ${vn?.akteur_name}`);
+    check("7 unveränderte Felder erzeugen keinen Eintrag", !z.some((x) => x.feld === "name" || x.feld === "email"));
+  });
+  await als(kwG, async (tx) => {
+    await tx`update core.kameraden set aktiv = false where id = ${ZIEL}`;
+    const z = await auditLesen(tx, ZIEL);
+    check("7 Deaktivieren: Eintrag für den Kameraden UND für den Zugang (Trigger-Kette)",
+      z.some((x) => x.abschnitt === "stammdaten" && x.feld === "aktiv" && x.alt === "true" && x.neu === "false") &&
+      z.some((x) => x.abschnitt === "zugang" && x.feld === "aktiv" && x.alt === "true" && x.neu === "false"));
+  });
+  await als(admG, async (tx) => {
+    await tx`select core.set_kamerad_rollen(${ZIEL}::integer, '{"psa_rolle":"Kleiderwart","funk_rolle":"Admin"}'::jsonb)`;
+    const z = await auditLesen(tx, ZIEL);
+    const p1 = z.find((x) => x.feld === "psa_rolle");
+    check("7 Rollenänderung → Eintrag im Abschnitt rollen mit Akteur", p1?.abschnitt === "rollen" && p1?.alt === "User" && p1?.neu === "Kleiderwart" && p1?.akteur_kamerad_id === ADM);
+    check("7 jede geänderte Rolle ein Eintrag", z.filter((x) => x.abschnitt === "rollen").length === 2);
+    await tx`update core.benutzer set rolle = 'Admin' where id = ${zielB}`;
+    const z2 = await auditLesen(tx, ZIEL);
+    check("7 Rolle des Zugangs geändert → Eintrag im Abschnitt zugang", z2.some((x) => x.abschnitt === "zugang" && x.feld === "rolle" && x.alt === "User" && x.neu === "Admin"));
+    await tx`update core.benutzer set pin = 'geheimer-hash-wert' where id = ${zielB}`;
+    const z3 = await auditLesen(tx, ZIEL);
+    const pin = z3.find((x) => x.feld === "pin");
+    check("7 PIN-Änderung: Ereignis ohne Wert", pin?.alt === null && pin?.neu === "geändert");
+    check("7 PIN-Hash steht in keinem Protokoll-Wert", !z3.some((x) => [x.alt, x.neu].some((v) => v && v.includes("geheimer-hash-wert"))));
+    const ins = await tx`insert into core.benutzer (benutzername, pin, rolle, kamerad_id) values (${stamp + "-aud"}, 'x', 'User', ${FREI}) returning id`;
+    const z4 = await auditLesen(tx, FREI);
+    check("7 Login angelegt → Eintrag", ins.length === 1 && z4.some((x) => x.feld === "login angelegt" && x.neu === `${stamp}-aud (User)`));
+  });
+  await als({ "app.kamerad_id": USR, "app.psa_rolle": "User" }, async (tx) => {
+    await tx`select * from core.eigene_pin_setzen(${usrB}::integer, 'neuer-hash-xyz')`;
+    const z = await auditLesen(tx, USR);
+    check("7 eigene PIN-Änderung: Eintrag mit dem Benutzer selbst als Akteur", z.some((x) => x.feld === "pin" && x.akteur_kamerad_id === USR));
+    check("7 Hash der neuen PIN steht nicht im Protokoll", !z.some((x) => [x.alt, x.neu].some((v) => v && v.includes("neuer-hash-xyz"))));
+  });
+  await als({ "app.kamerad_id": USR, "app.food_rolle": "Admin" }, async (tx) => {
+    await tx`select core.set_karten_id(${ZIEL}::integer, ${"audit-" + stamp})`;
+    const z = await auditLesen(tx, ZIEL);
+    check("7 Karten-ID über set_karten_id → Eintrag mit Küchen-Admin als Akteur", z.some((x) => x.feld === "karten_id" && x.neu === "audit-" + stamp && x.akteur_kamerad_id === USR));
+  });
+  // Schutz des Protokolls selbst
+  await als(admG, async (tx) => {
+    let e = await fehler(tx, "42501", (sp) => sp`insert into core.mitglieder_audit (kamerad_id, abschnitt, feld) values (${ZIEL}, 'stammdaten', 'x')`);
+    check("7 fw_app kann das Protokoll nicht beschreiben (auch nicht als globaler Admin)", e.ok, e.got);
+    e = await fehler(tx, "42501", (sp) => sp`update core.mitglieder_audit set neu = 'x'`);
+    check("7 fw_app kann das Protokoll nicht ändern", e.ok, e.got);
+    e = await fehler(tx, "42501", (sp) => sp`delete from core.mitglieder_audit`);
+    check("7 fw_app kann das Protokoll nicht löschen", e.ok, e.got);
+    e = await fehler(tx, "42501", (sp) => sp`select core.audit_schreiben(${ZIEL}::integer, 'stammdaten', 'x', null, null)`);
+    check("7 audit_schreiben ist für fw_app nicht aufrufbar", e.ok, e.got);
+    const gesamt = (await tx`select count(*)::int n from core.mitglieder_audit`)[0].n;
+    check("7 globaler Admin darf das Protokoll lesen", gesamt >= 0);
+  });
+  await als(kwG, async (tx) => check("7 Kleiderwart sieht keine Protokolleinträge (RLS)", (await tx`select id from core.mitglieder_audit`).length === 0));
+  await als(usrG, async (tx) => check("7 User sieht keine Protokolleinträge (RLS)", (await tx`select id from core.mitglieder_audit`).length === 0));
+  await als({ "app.food_rolle": "Admin" }, async (tx) => check("7 Küchen-Admin sieht keine Protokolleinträge (RLS)", (await tx`select id from core.mitglieder_audit`).length === 0));
 } finally {
   // Aufräumen NUR über gemerkte IDs.
   try {
@@ -292,6 +359,7 @@ try {
     if (ids.typ.length) await owner`delete from psa.ausruestungstypen where id in ${owner(ids.typ)}`;
     if (ids.ben.length) await owner`delete from core.benutzer where id in ${owner(ids.ben)}`;
     // über neu angelegte Kameraden (Test 3/4) sind zurückgerollt; nur die gemerkten löschen
+    if (ids.kam.length) await owner`delete from core.mitglieder_audit where kamerad_id in ${owner(ids.kam)}`;
     if (ids.kam.length) await owner`delete from core.kameraden where id in ${owner(ids.kam)}`;
     const rest = await owner`select count(*)::int n from core.kameraden where name like ${stamp + "%"}`;
     console.log(`Aufräumen: ${ids.stueck.length} Stück, ${ids.typ.length} Typ, ${ids.ben.length} Benutzer, ${ids.kam.length} Kameraden gelöscht; Rest mit Lauf-Zeitstempel ${stamp}: ${rest[0].n}`);

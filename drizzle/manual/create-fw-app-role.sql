@@ -107,6 +107,16 @@ BEGIN
     REVOKE ALL ON SEQUENCE core.login_attempts_id_seq FROM fw_app;
   END IF;
 
+  -- Änderungsprotokoll core.mitglieder_audit (Migration 0014): fw_app darf nur
+  -- lesen. Schreiben tun ausschließlich die Trigger-Funktionen.
+  IF to_regclass('core.mitglieder_audit') IS NOT NULL THEN
+    REVOKE ALL ON core.mitglieder_audit FROM fw_app;
+    GRANT SELECT ON core.mitglieder_audit TO fw_app;
+  END IF;
+  IF to_regclass('core.mitglieder_audit_id_seq') IS NOT NULL THEN
+    REVOKE ALL ON SEQUENCE core.mitglieder_audit_id_seq FROM fw_app;
+  END IF;
+
   -- Spaltenrechte core.kameraden (Migration 0013): nur Stammdatenspalten.
   -- "0013 angewendet" erkennt man daran, dass kameraden_scope entfernt ist und
   -- kameraden_aendern (aus 0012) existiert. Ohne diese Bedingung würde ein

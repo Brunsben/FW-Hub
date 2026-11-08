@@ -138,6 +138,7 @@ try {
     if (namen.length) await owner`delete from core.login_attempts where benutzername in ${owner(namen.map((n) => n.toLowerCase()))}`;
     if (ips.length) await owner`delete from core.login_attempts where ip in ${owner(ips)}`;
     if (ids.ben.length) await owner`delete from core.benutzer where id in ${owner(ids.ben)}`;
+    if (ids.kam.length) await owner`delete from core.mitglieder_audit where kamerad_id in ${owner(ids.kam)}`;
     if (ids.kam.length) await owner`delete from core.kameraden where id in ${owner(ids.kam)}`;
     const [{ n }] = await owner`select count(*)::int n from core.kameraden where name like ${stamp + "-%"}`;
     console.log(`Aufräumen: ${ids.ben.length} Benutzer, ${ids.kam.length} Kameraden, ${ips.length} IPs; Rest mit Zeitstempel ${stamp}: ${n}`);

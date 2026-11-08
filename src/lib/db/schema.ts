@@ -110,6 +110,36 @@ export const loginAttempts = core.table(
   }),
 );
 
+// ============================================================================
+// MITGLIEDER_AUDIT — Änderungsprotokoll der Mitgliederverwaltung (Stammdaten,
+// Zugang, Rollen). Geschrieben ausschließlich von Triggern auf core.kameraden
+// und core.benutzer (Migration 0014), nie von der Anwendung. fw_app darf nur
+// lesen, und nur als globaler Admin (RLS). PINs und PIN-Hashes stehen nie darin.
+// Bewusst ohne Fremdschlüssel: Das Protokoll besteht unabhängig von den Daten.
+// ============================================================================
+export const mitgliederAudit = core.table(
+  "mitglieder_audit",
+  {
+    id: serial("id").primaryKey(),
+    zeitpunkt: timestamp("zeitpunkt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    akteurKameradId: integer("akteur_kamerad_id"), // null = System
+    akteurName: text("akteur_name"), // Momentaufnahme "Vorname Name"
+    kameradId: integer("kamerad_id").notNull(),
+    abschnitt: text("abschnitt").notNull(), // stammdaten | zugang | rollen
+    feld: text("feld").notNull(),
+    alt: text("alt"),
+    neu: text("neu"),
+  },
+  (t) => ({
+    kameradZeitIdx: index("idx_mitglieder_audit_kamerad_zeit").on(
+      t.kameradId,
+      t.zeitpunkt.desc(),
+    ),
+  }),
+);
+
 export const kameradenRelations = relations(kameraden, ({ many }) => ({
   benutzer: many(benutzer),
 }));

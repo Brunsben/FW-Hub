@@ -131,6 +131,14 @@ Scopes:
   core.eigene_sitzungen_beenden (nur die Zeile mit kamerad_id =
   app.kamerad_id; ein direktes UPDATE der eigenen Zeile würde auch rolle
   erlauben)
+- Änderungsprotokoll `core.mitglieder_audit` (Migration 0014): wer, wann, welcher
+  Kamerad, Abschnitt (stammdaten, zugang, rollen), Feld, alter und neuer Wert.
+  Geschrieben von Triggern auf core.kameraden und core.benutzer (jeder Pfad ist
+  abgedeckt, auch Funktionen und der Deaktivierungs-Trigger), nie von der App.
+  PIN und PIN-Hash stehen nie darin (nur das Ereignis "pin: geändert"). fw_app
+  darf nur lesen, und nur als globaler Admin (RLS). Kein Fremdschlüssel, damit das
+  Protokoll unabhängig von den Daten bleibt. Tests, die Kameraden löschen, löschen
+  vorher deren Protokolleinträge über die gemerkten IDs
 - Grenze: app.* sind von der App gesetzte GUCs. fw_app kann sie technisch frei
   setzen, die Policies und Funktionen schützen vor Fehlern in Routen, nicht
   vor kompromittiertem App-Code

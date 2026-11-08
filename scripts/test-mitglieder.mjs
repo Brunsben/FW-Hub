@@ -1,0 +1,226 @@
+// Mitgliederverwaltung per HTTP: API (/api/mitglieder*) je Rolle, Validierung,
+// Konflikte, Änderungsprotokoll.
+//
+// Aufruf:  node scripts/test-mitglieder.mjs
+// Env wie bei scripts/test-haertung.mjs (aus .env.local, falls vorhanden):
+//   MIGRATE_DATABASE_URL  Owner: Testkonten anlegen, kontrollieren, aufräumen
+//   TEST_BASE             optional, Standard http://localhost:3100
+// Voraussetzung: lokaler Dev-Server (npx next dev --webpack -p 3100) auf derselben
+// Datenbank. Jede Rolle bekommt ein eigenes Testkonto, angemeldet wird über die
+// echte Login-Route (Cookie). Aufgeräumt wird über gemerkte IDs und exakte Namen.
+// Bricht ab, wenn Datenbank oder Server nicht lokal sind. Secrets werden nie
+// ausgegeben.
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const P = resolve(fileURLToPath(new URL("..", import.meta.url)));
+if (existsSync(`${P}/.env.local`)) process.loadEnvFile(`${P}/.env.local`);
+const req = createRequire(`${P}/package.json`);
+const imp = async (m) => import(pathToFileURL(req.resolve(m)).href);
+const postgres = (await imp("postgres")).default;
+const bcrypt = (await imp("bcryptjs")).default;
+const BASE = process.env.TEST_BASE || "http://localhost:3100";
+
+const lokal = (h) => ["localhost", "127.0.0.1", "[::1]", "::1"].includes(h);
+if (!process.env.MIGRATE_DATABASE_URL) { console.error("Abbruch: MIGRATE_DATABASE_URL ist nicht gesetzt."); process.exit(2); }
+if (!lokal(new URL(process.env.MIGRATE_DATABASE_URL).hostname) || !lokal(new URL(BASE).hostname)) {
+  console.error("Abbruch: Datenbank und Server müssen lokal sein (localhost / 127.0.0.1).");
+  process.exit(2);
+}
+const owner = postgres(process.env.MIGRATE_DATABASE_URL, { max: 1, onnotice: () => {} });
+
+const stamp = `mg${Date.now().toString(36)}`;
+const PIN = "121212";
+let fail = 0;
+const check = (n, c, i = "") => { if (!c) fail++; console.log(`${c ? "OK  " : "FEHLER"} ${n}${i ? " — " + i : ""}`); };
+const ids = { kam: [], ben: [] }, namen = [];
+let ipZaehler = 0;
+const hash = await bcrypt.hash(PIN, 12);
+
+async function konto(suffix, { appRolle = "User", psa = null, food = null, funk = null, karte = null, login = true } = {}) {
+  const name = `${stamp}-${suffix}`; namen.push(name);
+  const [k] = await owner`insert into core.kameraden (name, vorname, aktiv, psa_rolle, food_rolle, funk_rolle, karten_id, personalnummer, dienstgrad)
+    values (${name}, 'Mg', true, ${psa}, ${food}, ${funk}, ${karte}, ${"P" + stamp + suffix}, 'HFM') returning id`;
+  ids.kam.push(k.id);
+  let benutzer = null;
+  if (login) {
+    const [b] = await owner`insert into core.benutzer (benutzername, pin, rolle, kamerad_id) values (${name}, ${hash}, ${appRolle}, ${k.id}) returning id`;
+    ids.ben.push(b.id); benutzer = b.id;
+  }
+  return { name, kamerad: k.id, benutzer, cookie: null };
+}
+async function anmelden(k) {
+  const r = await fetch(`${BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-real-ip": `203.0.113.${++ipZaehler + 100}` },
+    body: JSON.stringify({ benutzername: k.name, pin: PIN }),
+  });
+  if (r.status !== 200) throw new Error(`Anmeldung ${k.name} → ${r.status}`);
+  k.cookie = (r.headers.get("set-cookie") || "").split(";")[0];
+  return k;
+}
+async function api(method, pfad, cookie, body) {
+  const r = await fetch(`${BASE}${pfad}`, {
+    method, redirect: "manual",
+    headers: { ...(cookie ? { cookie } : {}), ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await r.text();
+  let json = null; try { json = JSON.parse(text); } catch { /* keine JSON-Antwort */ }
+  return { status: r.status, json, text };
+}
+const eintrag = (liste, id) => liste?.mitglieder?.find((m) => m.id === id);
+const audit = (kamerad) => owner`select abschnitt, feld, alt, neu, akteur_kamerad_id, akteur_name from core.mitglieder_audit where kamerad_id = ${kamerad} order by id`;
+
+try {
+  // Konten: eines je Rolle, dazu eine Zielperson mit Login und Karten-ID und eine ohne Login
+  const admin = await konto("admin", { appRolle: "Admin" });             // globaler Admin ohne Modulrollen
+  const kw = await konto("kw", { psa: "Kleiderwart" });
+  const psaUser = await konto("psau", { psa: "User" });
+  const kueche = await konto("kueche", { food: "Admin" });
+  const funkGw = await konto("funkgw", { funk: "Gerätewart" });
+  const funkMit = await konto("funkmit", { funk: "Mitglied" });
+  const ohne = await konto("ohne");
+  const ziel = await konto("ziel", { psa: "User", karte: `K-${stamp}` });
+  const ohneLogin = await konto("kein", { login: false });
+  for (const k of [admin, kw, psaUser, kueche, funkGw, funkMit, ohne]) await anmelden(k);
+
+  // ── Zugriff ────────────────────────────────────────────────────────────────
+  let r = await api("GET", "/api/mitglieder", null);
+  check("ohne Anmeldung: Liste → 401", r.status === 401);
+  r = await api("POST", "/api/mitglieder", null, { vorname: "A", name: "B" });
+  check("ohne Anmeldung: Anlegen → 401", r.status === 401);
+  for (const [n, k] of [["PSA-User", psaUser], ["Funk-Mitglied", funkMit], ["ohne Rolle", ohne]]) {
+    r = await api("GET", "/api/mitglieder", k.cookie);
+    check(`${n}: Liste → 403`, r.status === 403);
+    r = await api("GET", `/api/mitglieder/${ziel.kamerad}`, k.cookie);
+    check(`${n}: fremdes Mitglied → 403`, r.status === 403);
+    r = await api("GET", `/api/mitglieder/${k.kamerad}`, k.cookie);
+    check(`${n}: eigenes Mitglied → 200 ohne Zugang/Rollen/Karten-ID`, r.status === 200 && r.json.mitglied.id === k.kamerad && !("zugang" in r.json.mitglied) && !("rollen" in r.json.mitglied) && !("kartenId" in r.json.mitglied));
+  }
+
+  // ── Projektion je Rolle ────────────────────────────────────────────────────
+  const sicht = {};
+  for (const [n, k] of [["admin", admin], ["kw", kw], ["kueche", kueche], ["funkGw", funkGw]]) {
+    r = await api("GET", "/api/mitglieder", k.cookie);
+    sicht[n] = r;
+    check(`${n}: Liste → 200 mit der Zielperson`, r.status === 200 && !!eintrag(r.json, ziel.kamerad), String(r.status));
+  }
+  const grund = (m) => m.vorname === "Mg" && m.dienstgrad === "HFM" && m.personalnummer === `P${stamp}ziel` && m.aktiv === true;
+  for (const n of ["admin", "kw", "kueche", "funkGw"]) check(`${n}: Stammdaten vollständig`, grund(eintrag(sicht[n].json, ziel.kamerad)));
+  for (const n of ["kw", "kueche", "funkGw"]) {
+    const m = eintrag(sicht[n].json, ziel.kamerad);
+    check(`${n}: ohne Zugang und Rollen`, !("zugang" in m) && !("rollen" in m));
+  }
+  check("kw: ohne Karten-ID", !("kartenId" in eintrag(sicht.kw.json, ziel.kamerad)));
+  check("funkGw: ohne Karten-ID", !("kartenId" in eintrag(sicht.funkGw.json, ziel.kamerad)));
+  check("kueche: mit Karten-ID", eintrag(sicht.kueche.json, ziel.kamerad).kartenId === `K-${stamp}`);
+  const az = eintrag(sicht.admin.json, ziel.kamerad), ak = eintrag(sicht.admin.json, ohneLogin.kamerad);
+  check("admin: Zugang der Zielperson (Name, Rolle, aktiv)", az.zugang?.benutzername === ziel.name && az.zugang.rolle === "User" && az.zugang.aktiv === true);
+  check("admin: Person ohne Login hat zugang = null", ak.zugang === null);
+  check("admin: Rollen sichtbar", az.rollen?.psa === "User" && az.rollen.food === null);
+  check("admin ohne Küchenrolle: keine Karten-ID", !("kartenId" in az));
+  check("PIN oder Hash steht in keiner Antwort", !Object.values(sicht).some((s) => /"pin"|\$2[aby]\$/.test(s.text)));
+
+  // ── Filter und Suche ───────────────────────────────────────────────────────
+  r = await api("GET", `/api/mitglieder?status=ohne-login&suche=${stamp}`, admin.cookie);
+  check("Filter ohne-login: genau die Person ohne Login", r.status === 200 && r.json.mitglieder.length === 1 && r.json.mitglieder[0].id === ohneLogin.kamerad, `${r.json?.mitglieder?.length}`);
+  r = await api("GET", `/api/mitglieder?suche=${encodeURIComponent(`P${stamp}ziel`)}`, kw.cookie);
+  check("Suche nach Personalnummer", r.json?.mitglieder?.length === 1 && r.json.mitglieder[0].id === ziel.kamerad);
+  r = await api("GET", `/api/mitglieder?suche=${encodeURIComponent(ziel.name.toUpperCase())}`, kw.cookie);
+  check("Suche ohne Beachtung der Groß-/Kleinschreibung", r.json?.mitglieder?.some((m) => m.id === ziel.kamerad));
+  r = await api("GET", "/api/mitglieder?status=ohne-login", kw.cookie);
+  check("Filter ohne-login für Nicht-Admin → 400", r.status === 400);
+  r = await api("GET", "/api/mitglieder?status=quatsch", admin.cookie);
+  check("unbekannter Status → 400", r.status === 400);
+
+  // ── Anlegen ────────────────────────────────────────────────────────────────
+  const neu = { vorname: "Neu", name: `${stamp}-neu`, dienstgrad: "OFM", email: "neu@example.org", personalnummer: `PN${stamp}` };
+  for (const [n, k] of [["Kleiderwart", kw], ["Küchen-Admin", kueche], ["Funk-Gerätewart", funkGw]]) {
+    r = await api("POST", "/api/mitglieder", k.cookie, neu);
+    check(`${n}: Anlegen → 403`, r.status === 403);
+  }
+  r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "", name: "X" });
+  check("Anlegen ohne Vornamen → 400", r.status === 400);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { ...neu, email: "kaputt" });
+  check("Anlegen mit ungültiger E-Mail → 400", r.status === 400);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { ...neu, login: { benutzername: "x y", pin: "123456" } });
+  check("Anlegen mit ungültigem Benutzernamen → 400, nichts angelegt", r.status === 400);
+  r = await api("POST", "/api/mitglieder", admin.cookie, neu);
+  check("Admin legt Mitglied ohne Login an → 201", r.status === 201 && r.json.mitglied.name === neu.name && r.json.mitglied.zugang === null, String(r.status));
+  const neuId = r.json?.mitglied?.id; if (neuId) ids.kam.push(neuId);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { ...neu, name: `${stamp}-neu2` });
+  check("doppelte Personalnummer → 409", r.status === 409 && /Personalnummer/.test(r.json?.error ?? ""), `${r.status} ${r.json?.error}`);
+  const loginName = `${stamp}-lg`; namen.push(loginName);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "Mit", name: `${stamp}-mitlogin`, login: { benutzername: loginName, pin: "654321", rolle: "User" } });
+  check("Admin legt Mitglied MIT Login an → 201", r.status === 201 && r.json.mitglied.zugang?.benutzername === loginName && r.json.mitglied.zugang.aktiv === true, String(r.status));
+  const mlId = r.json?.mitglied?.id; if (mlId) ids.kam.push(mlId);
+  const bRow = mlId ? (await owner`select id from core.benutzer where kamerad_id = ${mlId}`)[0] : null; if (bRow) ids.ben.push(bRow.id);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "Zwei", name: `${stamp}-zwei`, login: { benutzername: loginName.toUpperCase(), pin: "654321" } });
+  check("doppelter Benutzername (Groß-/Kleinschreibung egal) → 409, kein Mitglied angelegt", r.status === 409 && (await owner`select id from core.kameraden where name = ${stamp + "-zwei"}`).length === 0, `${r.status} ${r.json?.error}`);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "Drei", name: `${stamp}-drei`, login: { benutzername: `${stamp}-l3`, pin: "123" } });
+  check("PIN zu kurz → 400, kein Mitglied angelegt", r.status === 400 && (await owner`select id from core.kameraden where name = ${stamp + "-drei"}`).length === 0);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "Rollen", name: `${stamp}-rollen`, psaRolle: "Admin", psa_rolle: "Admin", kartenId: "x", karten_id: "y" });
+  const rId = r.json?.mitglied?.id; if (rId) ids.kam.push(rId);
+  const rRow = rId ? (await owner`select psa_rolle, karten_id from core.kameraden where id = ${rId}`)[0] : null;
+  check("Rollen und Karten-ID im Body werden beim Anlegen ignoriert", r.status === 201 && rRow?.psa_rolle === null && rRow?.karten_id === null);
+
+  // ── Ändern, Deaktivieren, Reaktivieren ─────────────────────────────────────
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, kw.cookie, { dienstgrad: "X" });
+  check("Kleiderwart: Ändern → 403", r.status === 403);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, kueche.cookie, { dienstgrad: "X" });
+  check("Küchen-Admin: Ändern → 403", r.status === 403);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, {});
+  check("Ändern ohne Felder → 400", r.status === 400);
+  r = await api("PATCH", `/api/mitglieder/abc`, admin.cookie, { dienstgrad: "X" });
+  check("Ändern mit ungültiger id → 400", r.status === 400);
+  r = await api("PATCH", `/api/mitglieder/2147483000`, admin.cookie, { dienstgrad: "X" });
+  check("Ändern eines unbekannten Mitglieds → 404", r.status === 404);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { dienstgrad: "OBM", psaRolle: "Admin", kartenId: "geklaut", rolle: "Admin" });
+  const zRow = (await owner`select psa_rolle, karten_id, dienstgrad from core.kameraden where id = ${ziel.kamerad}`)[0];
+  check("Admin ändert den Dienstgrad → 200", r.status === 200 && r.json.mitglied.dienstgrad === "OBM" && zRow.dienstgrad === "OBM");
+  check("Rollen und Karten-ID im Body werden beim Ändern ignoriert", zRow.psa_rolle === "User" && zRow.karten_id === `K-${stamp}`);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { personalnummer: `P${stamp}kw` });
+  check("Personalnummer einer anderen Person → 409", r.status === 409, `${r.status} ${r.json?.error}`);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { aktiv: false });
+  const zugang = (await owner`select aktiv from core.benutzer where id = ${ziel.benutzer}`)[0];
+  check("Deaktivieren sperrt den Login der Person (Trigger)", r.status === 200 && r.json.mitglied.aktiv === false && r.json.mitglied.zugang.aktiv === false && zugang.aktiv === false);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { aktiv: true });
+  const zugang2 = (await owner`select aktiv from core.benutzer where id = ${ziel.benutzer}`)[0];
+  check("Reaktivieren öffnet den Login NICHT wieder", r.status === 200 && r.json.mitglied.aktiv === true && zugang2.aktiv === false);
+  r = await api("PATCH", `/api/mitglieder/${admin.kamerad}`, admin.cookie, { aktiv: false });
+  check("Den eigenen Kameraden deaktivieren → 409 mit Hinweis", r.status === 409 && /eigene/i.test(r.json?.error ?? ""), `${r.status} ${r.json?.error}`);
+  const aRow = (await owner`select aktiv from core.kameraden where id = ${admin.kamerad}`)[0];
+  check("Der eigene Kamerad bleibt aktiv", aRow.aktiv === true);
+
+  // ── Änderungsprotokoll ─────────────────────────────────────────────────────
+  const aud = await audit(ziel.kamerad);
+  const dg = aud.find((a) => a.feld === "dienstgrad");
+  check("Protokoll: Dienstgrad alt/neu mit Akteur (Admin)", dg?.alt === "HFM" && dg?.neu === "OBM" && dg.akteur_kamerad_id === admin.kamerad && dg.akteur_name === `Mg ${admin.name}`);
+  check("Protokoll: Deaktivieren und Reaktivieren des Kameraden", aud.filter((a) => a.feld === "aktiv" && a.abschnitt === "stammdaten").length === 2);
+  check("Protokoll: Zugang gesperrt durch die Deaktivierung", aud.some((a) => a.abschnitt === "zugang" && a.feld === "aktiv" && a.neu === "false"));
+  check("Protokoll: Rollen unverändert (kein Rollen-Eintrag)", !aud.some((a) => a.abschnitt === "rollen"));
+  if (neuId) {
+    const an = await audit(neuId);
+    check("Protokoll: neues Mitglied 'angelegt' mit Akteur", an.some((a) => a.feld === "angelegt" && a.neu === `Neu ${stamp}-neu` && a.akteur_kamerad_id === admin.kamerad));
+  }
+  if (mlId) {
+    const ml = await audit(mlId);
+    check("Protokoll: Login angelegt, ohne PIN", ml.some((a) => a.feld === "login angelegt" && a.neu === `${loginName} (User)`) && !JSON.stringify(ml).includes("654321") && !/\$2[aby]\$/.test(JSON.stringify(ml)));
+  }
+} finally {
+  // Aufräumen nur über gemerkte IDs und exakte Namen
+  try {
+    if (namen.length) await owner`delete from core.login_attempts where benutzername in ${owner(namen.map((n) => n.toLowerCase()))}`;
+    if (ids.kam.length) await owner`delete from core.mitglieder_audit where kamerad_id in ${owner(ids.kam)}`;
+    if (ids.kam.length) await owner`delete from core.benutzer where kamerad_id in ${owner(ids.kam)}`;
+    if (ids.kam.length) await owner`delete from core.kameraden where id in ${owner(ids.kam)}`;
+    const [{ n }] = await owner`select count(*)::int n from core.kameraden where name like ${stamp + "-%"}`;
+    console.log(`Aufräumen: ${ids.kam.length} Kameraden samt Zugängen und Protokoll; Rest mit Zeitstempel ${stamp}: ${n}`);
+  } catch (e) { console.log("AUFRÄUMEN FEHLGESCHLAGEN:", e.message, JSON.stringify({ ids, namen })); fail++; }
+  await owner.end({ timeout: 5 });
+}
+console.log(fail === 0 ? "\nALLE TESTS OK" : `\n${fail} TEST(S) FEHLGESCHLAGEN`);
+process.exit(fail ? 1 : 0);

@@ -99,6 +99,13 @@
       "when": 1794140989388,
       "tag": "0013_kameraden_benutzer_haertung_restriktiv",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794147225623,
+      "tag": "0014_mitglieder_audit",
+      "breakpoints": true
     }
   ]
 }
