@@ -59,6 +59,27 @@ export const kannStammdatenBearbeiten = (u: RechteUser): boolean => istGlobalAdm
 export const kannZugangSehenUndBearbeiten = (u: RechteUser): boolean => istGlobalAdmin(u);
 export const kannRollenSehenUndBearbeiten = (u: RechteUser): boolean => istGlobalAdmin(u);
 
+/**
+ * PSA-Abschnitt sehen: PSA Admin/Kleiderwart bei jeder Person, jede Person mit
+ * einer PSA-Rolle (auch "User") bei sich selbst. Die eigenen Daten liest die
+ * Datenbank ohnehin frei (kamerad_details_eigene_lesen, ausruestungstuecke_
+ * eigene_lesen). Bearbeiten nur die Verwaltung.
+ *
+ * Vorbereitung eigene Größen (noch nicht gebaut): Später dürfen Mitglieder ihre
+ * Größen selbst pflegen. Dafür braucht es eine enge Datenbankfunktion
+ * psa.eigene_groessen_setzen (SECURITY DEFINER, nur die eigene Zeile, nur die
+ * sieben Größenspalten) und eine API-Route. Auf dieser Seite ändert sich dann
+ * nur diese Regel (bearbeiten auch bei der eigenen Person). Ein direktes
+ * Schreibrecht auf psa.kamerad_details für User gibt es bewusst nicht.
+ */
+export const kannPsaAbschnittSehen = (u: RechteUser, mitgliedId: number): boolean =>
+  istPsaVerwaltung(u) || (u.kamerad_id === mitgliedId && !!u.psa_rolle);
+export const kannPsaAbschnittBearbeiten = (u: RechteUser): boolean => istPsaVerwaltung(u);
+
+/** Funk-Abschnitt sehen: Funk Admin/Gerätewart bei jeder Person, jede Person mit Funkrolle bei sich. Nur lesend. */
+export const kannFunkAbschnittSehen = (u: RechteUser, mitgliedId: number): boolean =>
+  istFunkVerwaltung(u) || (u.kamerad_id === mitgliedId && !!u.funk_rolle);
+
 /** Karten-ID (Küche) sehen und ändern: nur Küchen-Admin. */
 export const kannKartenIdSehen = (u: RechteUser): boolean => istKuechenAdmin(u);
 

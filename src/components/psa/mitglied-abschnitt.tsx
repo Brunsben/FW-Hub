@@ -16,12 +16,13 @@ import {
 } from "@/lib/db/schema";
 import { withScope } from "@/lib/db/scoped";
 import type { MitgliedAbschnitt } from "@/lib/mitglieder/abschnitte";
-import { istPsaVerwaltung } from "@/lib/mitglieder/rechte";
+import { kannPsaAbschnittBearbeiten, kannPsaAbschnittSehen } from "@/lib/mitglieder/rechte";
 import { GROESSEN_FELDER, type Groessen } from "@/lib/psa-groessen";
 import { datumKurz, today } from "@/lib/zeit";
 
 // PSA-Abschnitt der Mitgliederseite: Größen bearbeiten, ausgegebene Ausrüstung
-// lesen. Sehen und bearbeiten dürfen PSA-Admin und Kleiderwart. Geschrieben
+// lesen. Bearbeiten dürfen PSA-Admin und Kleiderwart; die eigenen Daten sieht jede
+// Person mit PSA-Rolle (im Profil, nur lesend). Geschrieben
 // wird über /api/psa/groessen/[kameradId], gelesen im PSA-Scope (RLS:
 // kamerad_details_priv und ausruestungstuecke_priv).
 export const psaAbschnitt: MitgliedAbschnitt = {
@@ -29,10 +30,11 @@ export const psaAbschnitt: MitgliedAbschnitt = {
   titel: "PSA",
   beschreibung: "Größen und ausgegebene Ausrüstung",
   reihenfolge: 100,
-  rechte: (user) => {
-    const darf = istPsaVerwaltung(user);
-    return { sehen: darf, bearbeiten: darf };
-  },
+  profil: true,
+  rechte: (user, id) => ({
+    sehen: kannPsaAbschnittSehen(user, id),
+    bearbeiten: kannPsaAbschnittBearbeiten(user),
+  }),
   async Komponente({ mitgliedId, bearbeiten, user }) {
     const { details, stuecke } = await withScope(
       { kameradId: user.kamerad_id, psaRolle: user.psa_rolle ?? "" },

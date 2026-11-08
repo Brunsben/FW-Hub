@@ -3,11 +3,18 @@ import { withScope } from "@/lib/db/scoped";
 import { benutzer, kameraden } from "@/lib/db/schema";
 import { requireSessionPage } from "@/lib/module-guard";
 import { ProfilForm } from "@/components/profil/profil-form";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { sichtbareAbschnitte } from "@/lib/mitglieder/abschnitte";
+import { ABSCHNITTE } from "@/lib/mitglieder/registry";
 
 // Profil für jeden eingeloggten Benutzer. Daten über withScope (eigene Zeile:
 // benutzer_select/kameraden_lesen erlauben kamerad_id = app.kamerad_id).
 // Kein PIN-Hash in der Projektion.
+//
+// "Meine Daten": die persönlichen Abschnitte der Mitgliederseite (Stammdaten,
+// PSA, Funk) aus der Registry, immer schreibgeschützt. Welche das sind, sagt das
+// Kennzeichen `profil` am Abschnitt, und was davon sichtbar ist, `rechte()` für
+// die eigene Person. Änderungen an den Stammdaten nimmt die Administration vor.
 export default async function ProfilPage() {
   const user = await requireSessionPage();
 
@@ -40,6 +47,12 @@ export default async function ProfilPage() {
     ["Funk", profil?.funkRolle],
   ] as const;
 
+  const meineDaten = sichtbareAbschnitte(
+    ABSCHNITTE.filter((a) => a.profil),
+    user,
+    user.kamerad_id,
+  );
+
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <div>
@@ -66,6 +79,30 @@ export default async function ProfilPage() {
           </dl>
         </CardContent>
       </Card>
+
+      {meineDaten.length > 0 && (
+        <section aria-labelledby="meine-daten" className="flex flex-col gap-6">
+          <div>
+            <h2 id="meine-daten" className="text-xl font-semibold tracking-tight">
+              Meine Daten
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Nur zum Lesen. Stimmt etwas nicht, wende dich an die Wehrführung.
+            </p>
+          </div>
+          {meineDaten.map(({ abschnitt }) => (
+            <Card key={abschnitt.key} data-abschnitt={abschnitt.key}>
+              <CardHeader>
+                <CardTitle>{abschnitt.titel}</CardTitle>
+                {abschnitt.beschreibung && <CardDescription>{abschnitt.beschreibung}</CardDescription>}
+              </CardHeader>
+              <CardContent>
+                <abschnitt.Komponente mitgliedId={user.kamerad_id} bearbeiten={false} user={user} />
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+      )}
 
       <ProfilForm />
     </main>

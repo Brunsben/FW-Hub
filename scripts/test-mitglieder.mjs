@@ -386,6 +386,26 @@ try {
   // Funk: Besitzer in der Geräteliste verlinkt
   s = await seite("/funk", funkGw.cookie);
   check("Funk: Besitzer in der Geräteliste verlinkt auf /mitglieder/[id]", s.status === 200 && hat(s.html, geraetSn) && hat(s.html, `href="/mitglieder/${ziel.kamerad}"`), String(s.status));
+
+  // ── Profil: "Meine Daten" (Paket 6) ────────────────────────────────────────
+  await anmelden(ziel);
+  const profil = async (k) => seite("/profil", k.cookie);
+  s = await profil(ziel);
+  check("Profil PSA-User: Meine Daten mit Stammdaten und PSA, sonst nichts", s.status === 200 && hat(s.html, "Meine Daten") && JSON.stringify(abschnitteIn(s.html)) === '["stammdaten","psa"]', `${s.status} ${abschnitteIn(s.html)}`);
+  check("Profil PSA-User: PSA schreibgeschützt (keine Eingabefelder, kein Speichern)", !hat(s.html, 'id="psa-jackeGroesse"') && !hat(s.html, "Größen speichern") && !hat(s.html, 'id="stamm-vorname"'));
+  check("Profil PSA-User: eigene Größe, eigenes Stück und fällige Prüfung sichtbar", hat(s.html, "XL") && hat(s.html, `${stamp}-sn`) && hat(s.html, "(fällig)"));
+  check("Profil PSA-User: ohne Zugang, Rollen, Verlauf, Küche und Funk", !hat(s.html, "Änderungsverlauf") && !hat(s.html, "reset-pin") && !hat(s.html, "QR-Link") && !hat(s.html, geraetSn));
+  check("Profil PSA-User: PIN-Änderung bleibt (Formular), kein PIN-Hash", hat(s.html, "PIN") && !hat(s.html, "$2a$") && !hat(s.html, "$2b$"));
+  s = await profil(funkMit);
+  check("Profil Funk-Mitglied: Stammdaten und Funk (eigene Geräte, hier keine)", JSON.stringify(abschnitteIn(s.html)) === '["stammdaten","funk"]' && hat(s.html, "Keine Funkgeräte zugeteilt"), `${abschnitteIn(s.html)}`);
+  s = await profil(ohne);
+  check("Profil ohne Rolle: nur Stammdaten", s.status === 200 && JSON.stringify(abschnitteIn(s.html)) === '["stammdaten"]', `${abschnitteIn(s.html)}`);
+  s = await profil(admin);
+  check("Profil globaler Admin: nur Stammdaten, ohne Bearbeiten, Zugang, Rollen und Verlauf", JSON.stringify(abschnitteIn(s.html)) === '["stammdaten"]' && !hat(s.html, 'id="stamm-vorname"') && !hat(s.html, "Änderungsverlauf") && !hat(s.html, "reset-pin"), `${abschnitteIn(s.html)}`);
+  s = await profil(kw);
+  check("Profil Kleiderwart: Stammdaten und PSA, im Profil trotzdem nur lesend", JSON.stringify(abschnitteIn(s.html)) === '["stammdaten","psa"]' && !hat(s.html, 'id="psa-jackeGroesse"') && !hat(s.html, "Größen speichern"), `${abschnitteIn(s.html)}`);
+  s = await profil(kueche);
+  check("Profil Küchen-Admin: nur Stammdaten (Karten-ID und QR-Link gehören nicht ins Profil)", JSON.stringify(abschnitteIn(s.html)) === '["stammdaten"]' && !hat(s.html, `K-${stamp}`) && !hat(s.html, "QR-Link"), `${abschnitteIn(s.html)}`);
 } finally {
   // Aufräumen nur über gemerkte IDs und exakte Namen
   try {

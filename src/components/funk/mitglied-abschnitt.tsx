@@ -19,7 +19,7 @@ import {
   type DeviceType,
 } from "@/lib/funk-labels";
 import type { MitgliedAbschnitt } from "@/lib/mitglieder/abschnitte";
-import { istFunkVerwaltung } from "@/lib/mitglieder/rechte";
+import { kannFunkAbschnittSehen } from "@/lib/mitglieder/rechte";
 import { datumKurz } from "@/lib/zeit";
 
 // Funk-Abschnitt der Mitgliederseite: zugeteilte Geräte, nur lesend. Sehen
@@ -31,7 +31,8 @@ export const funkAbschnitt: MitgliedAbschnitt = {
   titel: "Funk",
   beschreibung: "Zugeteilte Funkgeräte (nur lesend)",
   reihenfolge: 120,
-  rechte: (user) => ({ sehen: istFunkVerwaltung(user), bearbeiten: false }),
+  profil: true,
+  rechte: (user, id) => ({ sehen: kannFunkAbschnittSehen(user, id), bearbeiten: false }),
   async Komponente({ mitgliedId, user }) {
     const geraete = await withFunkScope(
       { kameradId: user.kamerad_id, funkRolle: user.funk_rolle ?? "" },

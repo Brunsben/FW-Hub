@@ -28,6 +28,12 @@ export interface MitgliedAbschnitt {
   beschreibung?: string;
   /** Aufsteigend sortiert. Bereiche zuerst (10er-Schritte), Module danach. */
   reihenfolge: number;
+  /**
+   * Erscheint der Abschnitt im Profil ("Meine Daten", immer schreibgeschützt)?
+   * Nur für persönliche Daten: Stammdaten, PSA, Funk. Zugang, Rollen, Küche
+   * (Karten-ID, QR-Link) und Verlauf sind Verwaltungssache.
+   */
+  profil?: boolean;
   /** Wer sieht und wer ändert den Abschnitt (für diese Person). */
   rechte(user: JwtPayload, mitgliedId: number): AbschnittRechte;
   Komponente: (props: MitgliedAbschnittProps) => ReactNode | Promise<ReactNode>;

@@ -10,6 +10,7 @@ export const stammdatenAbschnitt: MitgliedAbschnitt = {
   key: "stammdaten",
   titel: "Stammdaten",
   reihenfolge: 10,
+  profil: true,
   rechte: (user, id) => ({
     sehen: kannMitgliedSehen(user, id),
     bearbeiten: kannStammdatenBearbeiten(user),
