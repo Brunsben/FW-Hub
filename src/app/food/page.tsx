@@ -45,23 +45,28 @@ export default function FoodKioskPage() {
 
   const scannerRef = useRef<HTMLInputElement>(null);
 
-  const loadStat = useCallback(async () => {
+  const loadStat = useCallback(async (istAktuell: () => boolean = () => true) => {
     try {
       const res = await fetch("/api/food/stats?days=1");
       if (!res.ok) return;
       const data = await res.json();
       const todays =
         (data.stats as DayStat[]).find((s) => s.date === todayStr()) ?? null;
-      setStat(todays);
+      if (istAktuell()) setStat(todays);
     } catch {
       /* Kiosk bleibt bei Verbindungsfehler bestehen */
     }
   }, []);
 
   useEffect(() => {
-    loadStat();
-    const t = setInterval(loadStat, 10000);
-    return () => clearInterval(t);
+    let aktiv = true;
+    const laden = () => loadStat(() => aktiv);
+    laden();
+    const t = setInterval(laden, 10000);
+    return () => {
+      aktiv = false;
+      clearInterval(t);
+    };
   }, [loadStat]);
 
   // Hält den versteckten Scanner-Input fokussiert, ohne manuelle Eingabe oder

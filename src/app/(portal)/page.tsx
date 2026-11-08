@@ -28,7 +28,7 @@ export default async function Home({
 
   const { kein_zugriff } = await searchParams;
   const modul = isModulKey(kein_zugriff) ? kein_zugriff : null;
-  const module = sichtbareModule(user);
+  const sichtbar = sichtbareModule(user);
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -54,7 +54,7 @@ export default async function Home({
         </p>
       </div>
 
-      {module.length === 0 ? (
+      {sichtbar.length === 0 ? (
         <div
           data-keine-module
           className="flex flex-col items-center gap-3 rounded-2xl border border-dashed p-10 text-center"
@@ -66,7 +66,7 @@ export default async function Home({
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {module.map((m) => {
+          {sichtbar.map((m) => {
             const Icon = MODUL_ICONS[m.key];
             return (
               <Link

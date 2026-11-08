@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -42,25 +42,27 @@ function fmt(d: string) {
 
 export function StatsView() {
   const [days, setDays] = useState("7");
-  const [stats, setStats] = useState<DayStat[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async (d: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/food/stats?days=${d}`);
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data.stats ?? []);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [ergebnis, setErgebnis] = useState<{ days: string; stats: DayStat[] } | null>(null);
+  const stats = ergebnis?.stats ?? [];
+  // Lädt, solange das Ergebnis nicht zum gewählten Zeitraum gehört.
+  const loading = ergebnis?.days !== days;
 
   useEffect(() => {
-    load(days);
-  }, [days, load]);
+    let aktiv = true;
+    (async () => {
+      let neu: DayStat[] | null = null;
+      try {
+        const res = await fetch(`/api/food/stats?days=${days}`);
+        if (res.ok) neu = (await res.json()).stats ?? [];
+      } catch {
+        /* Anzeige bleibt bestehen */
+      }
+      if (aktiv) setErgebnis((alt) => ({ days, stats: neu ?? alt?.stats ?? [] }));
+    })();
+    return () => {
+      aktiv = false;
+    };
+  }, [days]);
 
   return (
     <Card>

@@ -11,6 +11,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+// Liest die Gästezahlen eines Tages; null bei Fehler (Anzeige bleibt bestehen).
+async function holeGaeste(d: string): Promise<{ menu1: number; menu2: number } | null> {
+  try {
+    const res = await fetch(`/api/food/admin/guests?date=${d}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return { menu1: data.guests?.menu1 ?? 0, menu2: data.guests?.menu2 ?? 0 };
+  } catch {
+    return null;
+  }
+}
+
 export function GuestsManager({ today }: { today: string }) {
   const [date, setDate] = useState(today);
   const [menu1, setMenu1] = useState(0);
@@ -19,21 +31,23 @@ export function GuestsManager({ today }: { today: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (d: string) => {
-    setError(null);
-    try {
-      const res = await fetch(`/api/food/admin/guests?date=${d}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setMenu1(data.guests?.menu1 ?? 0);
-      setMenu2(data.guests?.menu2 ?? 0);
-    } catch {
-      /* Anzeige bleibt bestehen */
-    }
+    const g = await holeGaeste(d);
+    if (!g) return;
+    setMenu1(g.menu1);
+    setMenu2(g.menu2);
   }, []);
 
   useEffect(() => {
-    load(date);
-  }, [date, load]);
+    let aktiv = true;
+    holeGaeste(date).then((g) => {
+      if (!aktiv || !g) return;
+      setMenu1(g.menu1);
+      setMenu2(g.menu2);
+    });
+    return () => {
+      aktiv = false;
+    };
+  }, [date]);
 
   async function save() {
     setSaving(true);
@@ -74,7 +88,10 @@ export function GuestsManager({ today }: { today: string }) {
               id="guests-date"
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                setError(null);
+                setDate(e.target.value);
+              }}
               className="w-44"
             />
           </div>

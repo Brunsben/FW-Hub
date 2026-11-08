@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -44,6 +44,19 @@ const DEFAULTS = {
   deadlineEnabled: true,
 };
 
+function formularFuer(date: string, menus: MenuRow[]) {
+  const existing = menus.find((m) => m.date === date);
+  if (!existing) return { ...DEFAULTS };
+  return {
+    description: existing.description,
+    zweiMenuesAktiv: existing.zweiMenuesAktiv,
+    menu1Name: existing.menu1Name ?? "",
+    menu2Name: existing.menu2Name ?? "",
+    registrationDeadline: existing.registrationDeadline,
+    deadlineEnabled: existing.deadlineEnabled,
+  };
+}
+
 export function MenuManager({
   menus,
   presets,
@@ -55,26 +68,18 @@ export function MenuManager({
 }) {
   const router = useRouter();
   const [date, setDate] = useState(today);
-  const [form, setForm] = useState({ ...DEFAULTS });
+  const [form, setForm] = useState(() => formularFuer(today, menus));
+  const [quelle, setQuelle] = useState({ date: today, menus });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Formular an das Menü des gewählten Datums angleichen (oder leeren).
-  useEffect(() => {
-    const existing = menus.find((m) => m.date === date);
-    if (existing) {
-      setForm({
-        description: existing.description,
-        zweiMenuesAktiv: existing.zweiMenuesAktiv,
-        menu1Name: existing.menu1Name ?? "",
-        menu2Name: existing.menu2Name ?? "",
-        registrationDeadline: existing.registrationDeadline,
-        deadlineEnabled: existing.deadlineEnabled,
-      });
-    } else {
-      setForm({ ...DEFAULTS });
-    }
-  }, [date, menus]);
+  // Formular an das Menü des gewählten Datums angleichen (oder leeren). Beim
+  // Wechsel von Datum oder Menüliste direkt im Render (statt im Effect), siehe
+  // react.dev "You might not need an effect".
+  if (quelle.date !== date || quelle.menus !== menus) {
+    setQuelle({ date, menus });
+    setForm(formularFuer(date, menus));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
