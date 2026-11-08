@@ -61,6 +61,7 @@ chmod 700 "$ZIEL"
 
 log() { printf '%s %s\n' "$(date +%Y-%m-%dT%H:%M:%S%z)" "$*" >> "$LOG"; }
 fehler() { log "FEHLER $*"; echo "FEHLER: $*" >&2; exit 1; }
+# shellcheck disable=SC2154  # rc wird im Trap-String selbst gesetzt
 trap 'rc=$?; log "FEHLER Skript abgebrochen (Zeile $LINENO, Exit-Code $rc)"; exit "$rc"' ERR
 
 # Nie zwei Läufe gleichzeitig (flock gibt es auf dem Server; fehlt es, wird übersprungen).
