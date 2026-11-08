@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { withScope } from "@/lib/db/scoped";
 import { expectRows } from "@/lib/db/rows";
-import { benutzer } from "@/lib/db/schema";
 import { clearAuthCookie, getAuthUser } from "@/lib/auth";
 
 // "Überall abmelden": erhöht die token_version des eigenen Benutzers. Damit
@@ -14,17 +13,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
-  // Eigene Zeile: benutzer_scope erlaubt kamerad_id = app.kamerad_id.
+  // Nur der globale Admin darf core.benutzer direkt schreiben. Die eigene
+  // token_version erhöht core.eigene_sitzungen_beenden (nur die Zeile mit
+  // kamerad_id = app.kamerad_id).
   await withScope({ kameradId: user.kamerad_id, psaRolle: "" }, async (tx) =>
     expectRows(
-      await tx
-        .update(benutzer)
-        .set({
-          tokenVersion: sql`${benutzer.tokenVersion} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(benutzer.id, user.benutzer_id))
-        .returning({ id: benutzer.id }),
+      (
+        await tx.execute<{ n: number }>(
+          sql`select core.eigene_sitzungen_beenden(${user.benutzer_id}::integer) as n`,
+        )
+      ).filter((r) => r.n === 1),
       "Überall abmelden",
     ),
   );

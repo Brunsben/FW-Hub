@@ -85,6 +85,20 @@
       "when": 1794065247078,
       "tag": "0011_psa_schaden_details_stuecke_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794140987430,
+      "tag": "0012_kameraden_benutzer_haertung_additiv",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794140989388,
+      "tag": "0013_kameraden_benutzer_haertung_restriktiv",
+      "breakpoints": true
     }
   ]
 }

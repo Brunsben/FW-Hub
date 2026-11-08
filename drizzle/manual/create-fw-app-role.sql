@@ -89,3 +89,41 @@ GRANT SELECT ON core.benutzer TO fw_auth;
 --   REVOKE ALL ON SEQUENCE core.<tabelle>_id_seq FROM fw_app;
 -- Für core.login_attempts erledigt das drizzle/0009_login_attempts_revoke_fw_app.sql.
 
+-- ─────────────────────────────────────────────────────────────
+--  Einschränkungen, die ein erneuter Lauf NICHT zurücksetzen darf.
+--  Die tabellenweiten GRANTs weiter oben (ON ALL TABLES) geben fw_app wieder
+--  alles. Dieser Block nimmt es zurück. Er steht bewusst am Ende der Datei und
+--  ist idempotent. Jede Einschränkung gilt nur, wenn die Tabelle existiert
+--  (das Skript darf vor den Migrationen laufen) und die zugehörige Migration
+--  angewendet ist (sonst bräche die laufende App).
+-- ─────────────────────────────────────────────────────────────
+DO $$
+BEGIN
+  -- core.login_attempts gehört nur fw_auth (Migration 0009).
+  IF to_regclass('core.login_attempts') IS NOT NULL THEN
+    REVOKE ALL ON core.login_attempts FROM fw_app;
+  END IF;
+  IF to_regclass('core.login_attempts_id_seq') IS NOT NULL THEN
+    REVOKE ALL ON SEQUENCE core.login_attempts_id_seq FROM fw_app;
+  END IF;
+
+  -- Spaltenrechte core.kameraden (Migration 0013): nur Stammdatenspalten.
+  -- "0013 angewendet" erkennt man daran, dass kameraden_scope entfernt ist und
+  -- kameraden_aendern (aus 0012) existiert. Ohne diese Bedingung würde ein
+  -- Lauf zwischen 0012 und 0013 die alte App brechen.
+  IF to_regclass('core.kameraden') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_policies
+                      WHERE schemaname = 'core' AND tablename = 'kameraden'
+                        AND policyname = 'kameraden_scope')
+     AND EXISTS (SELECT 1 FROM pg_policies
+                  WHERE schemaname = 'core' AND tablename = 'kameraden'
+                    AND policyname = 'kameraden_aendern') THEN
+    -- Das REVOKE auf Tabellenebene entzieht auch alle Spaltenrechte.
+    REVOKE INSERT, UPDATE, DELETE ON core.kameraden FROM fw_app;
+    GRANT INSERT (name, vorname, dienstgrad, email, personalnummer, aktiv)
+      ON core.kameraden TO fw_app;
+    GRANT UPDATE (name, vorname, dienstgrad, email, personalnummer, aktiv, updated_at)
+      ON core.kameraden TO fw_app;
+  END IF;
+END
+$$;

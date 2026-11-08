@@ -146,7 +146,6 @@ export function KameradenManager({ kameraden }: { kameraden: KameradRow[] }) {
         dienstgrad: orNull(form.dienstgrad),
         email: orNull(form.email),
         personalnummer: orNull(form.personalnummer),
-        kartenId: orNull(form.kartenId),
         aktiv: form.aktiv,
         jackeGroesse: orNull(form.jackeGroesse),
         hoseGroesse: orNull(form.hoseGroesse),
@@ -277,10 +276,16 @@ export function KameradenManager({ kameraden }: { kameraden: KameradRow[] }) {
                 <Input
                   id="f-kartenId"
                   value={form.kartenId}
-                  onChange={(e) =>
-                    setForm({ ...form, kartenId: e.target.value })
-                  }
+                  readOnly
+                  disabled
+                  aria-describedby="f-kartenId-hinweis"
                 />
+                <p
+                  id="f-kartenId-hinweis"
+                  className="text-xs text-muted-foreground"
+                >
+                  Wird in der Küchen-Verwaltung gepflegt.
+                </p>
               </div>
             </div>
 

@@ -76,28 +76,31 @@ export async function POST(req: NextRequest) {
   }
 
   const pinHash = await hash(neuePin, 12);
-  // Eigene Zeile: benutzer_scope erlaubt kamerad_id = app.kamerad_id.
+  // Nur der globale Admin darf core.benutzer direkt schreiben (benutzer_update).
+  // Die eigene PIN ändert core.eigene_pin_setzen: Die Funktion berührt nur
+  // pin/token_version der Zeile mit kamerad_id = app.kamerad_id.
   const { updated, kamerad } = await withScope(
     { kameradId: user.kamerad_id, psaRolle: "" },
     async (tx) => {
-      const [updated] = expectRows(
-        await tx
-          .update(benutzer)
-          .set({
-            pin: pinHash,
-            tokenVersion: sql`${benutzer.tokenVersion} + 1`,
-            updatedAt: new Date(),
-          })
-          .where(eq(benutzer.id, user.benutzer_id))
-          .returning({
-            id: benutzer.id,
-            benutzername: benutzer.benutzername,
-            rolle: benutzer.rolle,
-            kameradId: benutzer.kameradId,
-            tokenVersion: benutzer.tokenVersion,
-          }),
+      const [neu] = expectRows(
+        await tx.execute<{
+          id: number;
+          benutzername: string;
+          rolle: string;
+          kamerad_id: number;
+          token_version: number;
+        }>(
+          sql`select * from core.eigene_pin_setzen(${user.benutzer_id}::integer, ${pinHash}::text)`,
+        ),
         "PIN-Änderung",
       );
+      const updated = {
+        id: neu.id,
+        benutzername: neu.benutzername,
+        rolle: neu.rolle,
+        kameradId: neu.kamerad_id,
+        tokenVersion: neu.token_version,
+      };
       const [kamerad] = await tx
         .select()
         .from(kameraden)

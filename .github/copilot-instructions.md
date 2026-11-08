@@ -32,8 +32,11 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
   Sperre (core.login_attempts) und den Session-Check in getAuthUser(). Darf
   core.benutzer nur LESEN.
 - MIGRATE_DATABASE_URL → Owner-Rolle. NUR für Migrationen über
-  `node scripts/migrate.mjs` (npm run db:migrate). Nie mit fw_app migrieren,
-  nie `drizzle-kit migrate` (verschluckt Fehler).
+  `node scripts/migrate.mjs` (npm run db:migrate). Wendet alle ausstehenden
+  Migrationen in einer Transaktion an; `--bis 0012` begrenzt den Lauf auf eine
+  Nummer. Auf dem Server: `docker compose run --rm migrate [--bis 0012]`
+  (Service "migrate", Profil "migrate", läuft nicht bei `docker compose up`).
+  Nie mit fw_app migrieren, nie `drizzle-kit migrate` (verschluckt Fehler).
 - Startschutz (src/instrumentation.ts → lib/db/startup-check.ts): In
   Produktion bricht der Start ab, wenn AUTH_DATABASE_URL fehlt, die
   Hauptverbindung Superuser/BYPASSRLS hat oder die Auth-Verbindung Superuser
@@ -77,10 +80,13 @@ Scopes:
   lesen/schreiben. Nicht für weitere Pfade verwenden
 - withFunkScope({ kameradId, funkRolle }): Funk-Admin/Gerätewart lesen
   core.kameraden
-- withGlobalAdminScope(user): setzt app.psa_rolle und app.app_rolle auf
-  'Admin'. **Nur nach requireGlobalAdmin() (API) bzw.
+- withGlobalAdminScope(user): setzt NUR app.app_rolle auf 'Admin' (kein
+  psa_rolle mehr). Darauf stützen sich die Policies auf core.kameraden und
+  core.benutzer. **Nur nach requireGlobalAdmin() (API) bzw.
   requireGlobalAdminPage() (Seiten) und im Erst-Setup verwenden**, nie mit
   einem ungeprüften Benutzer
+- withGlobalAdminPsaScope(user): wie oben plus app.psa_rolle='Admin'. Nur für
+  globale Admin-Aktionen auf PSA-Tabellen (Stück-Löschen)
 - Schreibende Transaktionen auf RLS-Tabellen prüfen die Zahl der
   betroffenen Zeilen (expectRows). 0 Zeilen bedeutet Abbruch, kein stiller
   Erfolg
@@ -95,13 +101,143 @@ Scopes:
   Admin-Reset), Rollenänderung (App-Rolle oder Modulrollen) und "überall
   abmelden". Alte Tokens sind damit beim nächsten Request ungültig
 - Modulrollen-Spalten in core.kameraden schreibt NUR
-  /api/admin/rollen/[kameradId] (globaler Admin). Alle anderen Routen
-  ignorieren sie
+  /api/admin/rollen/[kameradId] (globaler Admin) über die SECURITY-DEFINER-
+  Funktion core.set_kamerad_rollen (prüft app.app_rolle='Admin', erhöht
+  token_version der Benutzer). fw_app hat auf diese Spalten kein INSERT/UPDATE
+  (Spaltenrechte, Migration 0013). Alle anderen Routen ignorieren sie
 - KRITISCH: Das postgres_data-Volume in docker-compose.yml ist external
   (name: setup_postgres_data) — verweist auf dasselbe physische Volume,
   das der psa-verwaltung-Setup-Stack nutzt. NIEMALS zwei Postgres-
   Container gleichzeitig auf dieses Volume zugreifen lassen. NIEMALS
   docker compose down mit -v/--volumes in diesem Zusammenhang ausführen
+
+### core.kameraden / core.benutzer: Rechte (Migrationen 0012/0013)
+- Spaltenrechte fw_app auf core.kameraden: INSERT/UPDATE nur auf name, vorname,
+  dienstgrad, email, personalnummer, aktiv (UPDATE zusätzlich updated_at).
+  Kein DELETE. karten_id nur über core.set_karten_id (Food-Admin), Rollen nur
+  über core.set_kamerad_rollen (globaler Admin). SELECT bleibt tabellenweit,
+  begrenzt durch RLS
+- Anlegen von Kameraden: Drizzle-INSERT nennt ALLE Spalten der Tabellendefinition.
+  Darum nur über `kameradenStammdaten` (src/lib/db/kameraden-stamm.ts), nicht
+  über `kameraden`. Diese Teilsicht gehört bewusst nicht in schema.ts
+- Policies core.kameraden: kameraden_lesen (eigene Zeile, psa_rolle
+  Admin/Kleiderwart, app_rolle Admin), kameraden_anlegen und kameraden_aendern
+  (psa_rolle Admin/Kleiderwart, app_rolle Admin), dazu die Lese-Policies für
+  Food und Funk. Es gibt keine DELETE-Policy
+- Policies core.benutzer: benutzer_select (globaler Admin alles, sonst die
+  eigene Zeile), benutzer_insert/update/delete nur app_rolle Admin. Auch PSA-
+  Admin/Kleiderwart schreiben core.benutzer nicht direkt
+- Eigene PIN und "überall abmelden" laufen über core.eigene_pin_setzen und
+  core.eigene_sitzungen_beenden (nur die Zeile mit kamerad_id =
+  app.kamerad_id; ein direktes UPDATE der eigenen Zeile würde auch rolle
+  erlauben)
+- Grenze: app.* sind von der App gesetzte GUCs. fw_app kann sie technisch frei
+  setzen, die Policies und Funktionen schützen vor Fehlern in Routen, nicht
+  vor kompromittiertem App-Code
+
+### Produktion: Ausroll-Checkliste Härtung (Migrationen 0012/0013)
+Befehle gegen den Server führt der Mensch aus, nicht Claude Code. Migrationen
+laufen auf Produktion über den Compose-Service `migrate` (Dockerfile-Stage
+`migrate`: scripts/migrate.mjs, drizzle/-SQL und Journal). Das App-Image enthält
+sie nicht, der Container startet nur `node server.js`, und CI baut nur
+(type-check, build). Der Service hängt im Netz fw-network, verbindet als
+POSTGRES_USER mit POSTGRES_PASSWORD (nicht als fw_app) und startet nicht bei
+`docker compose up`.
+
+Was man wissen muss
+- `docker compose run --rm migrate` ohne Argument wendet ALLE ausstehenden
+  Migrationen in EINER Transaktion an. 0012 und 0013 liefen dann zusammen
+  (atomar, aber ohne App-Ausrollen dazwischen). Für die getrennte Reihenfolge:
+  `docker compose run --rm migrate --bis 0012`, später derselbe Aufruf ohne
+  Argument
+- Nach jedem `git pull` das Image neu bauen (`docker compose build migrate`),
+  sonst fehlen neue Migrationen im Dienst
+- `docker compose run` startet bei Bedarf den Service postgres (depends_on).
+  Das ist der normale Server-Postgres, kein zweiter Container auf dem Volume
+- 0012 ist additiv (alte App läuft weiter), 0013 entzieht Rechte (alte App
+  bricht). Reihenfolge deshalb: 0012, dann App, dann 0013
+- 0012 setzt ENABLE und FORCE ROW LEVEL SECURITY auf core.kameraden und
+  core.benutzer selbst (idempotent). Ohne RLS wären die Policies wirkungslos
+  für Zeilen. Auf Produktion ist es schon aktiv, dort ändert es nichts
+
+Schritte
+1. **Vorbereitung**: Lokal tsc, Build, test-haertung.mjs und test-ui-a.mjs
+   grün. Auf dem Server den Stand holen und das Migrations-Image bauen:
+   `docker compose build migrate`. Test-Konten für den Smoke-Test festlegen: ein
+   Testkamerad mit Benutzer, klar benannt (z. B. "Test-Rollout"). Kameraden
+   werden nie gelöscht, der Testkamerad bleibt danach inaktiv
+2. **Wartungsfenster** ankündigen (30 Minuten reichen): Kiosk-Anmeldung /food
+   und PSA-Pflege kurz nicht nutzen. Die Migration dauert Sekunden, der
+   App-Neustart unter einer Minute
+3. **Backup** und Stand erfassen
+   - `docker exec fw_postgres pg_dump -U <POSTGRES_USER> -Fc <POSTGRES_DB> > fwhub-vor-haertung-<datum>.dump`
+   - Datei prüfen (`pg_restore --list <datei>`) und außerhalb des Servers
+     ablegen. Nie `docker compose down -v` (das Volume setup_postgres_data ist
+     external)
+   - Als Owner im psql erfassen, Sollwerte vor dem Start:
+     ```sql
+     select count(*) from drizzle.__drizzle_migrations;            -- 12
+     select count(*) from pg_policies where schemaname = 'core';   -- 5
+     select relname, relrowsecurity, relforcerowsecurity
+       from pg_class
+      where oid in ('core.kameraden'::regclass, 'core.benutzer'::regclass); -- beide t/t
+     select count(*) from core.benutzer where rolle = 'Admin' and aktiv;   -- mindestens 1
+     select distinct tableowner from pg_tables where schemaname = 'core';  -- = POSTGRES_USER
+     ```
+4. **Migrationsrolle prüfen**: Der Service migriert als POSTGRES_USER. Die
+   letzte Abfrage oben muss genau diese Rolle zeigen, sonst fehlen ihr Rechte an
+   den Tabellen. Die frühere Pflicht, den Eigentümer von set_karten_id auf eine
+   Rolle mit RLS-Bypass zu stellen, entfällt ab 0012 (die Funktion arbeitet
+   jetzt ohne Bypass)
+5. **Migration 0012**: `docker compose run --rm migrate --bis 0012`, erwartet
+   "12 -> 13" in der Ausgabe. Prüfen:
+   `select count(*) from pg_policies where schemaname = 'core'` ergibt 12 (alte
+   und neue Policies), `relrowsecurity` und `relforcerowsecurity` sind für
+   kameraden und benutzer `t`, Trigger `kameraden_deaktiviert_benutzer` auf
+   core.kameraden vorhanden, Funktionen eigene_pin_setzen,
+   eigene_sitzungen_beenden, kamerad_deaktiviert, set_kamerad_rollen und
+   set_karten_id in core. Die alte App läuft weiter: Login und /psa öffnen
+6. **App ausrollen** (neues Image bauen, Container neu starten, nie mit `-v`).
+   Prüfen: /api/health ist ok, der Start-Schutz meldet im Log keinen Fehler.
+   Kurzer Smoke gegen den additiven Stand: Login, /admin/benutzer, /psa
+7. **Migration 0013**: `docker compose run --rm migrate`, erwartet "13 -> 14".
+   Prüfen: Policies in core = 10, kameraden_scope und benutzer_scope sind weg.
+   Dann die Rechte:
+   ```sql
+   select has_table_privilege('fw_app', 'core.kameraden', 'INSERT'),            -- f
+          has_table_privilege('fw_app', 'core.kameraden', 'DELETE'),            -- f
+          has_column_privilege('fw_app', 'core.kameraden', 'karten_id', 'UPDATE'),  -- f
+          has_column_privilege('fw_app', 'core.kameraden', 'psa_rolle', 'UPDATE'),  -- f
+          has_column_privilege('fw_app', 'core.kameraden', 'name', 'UPDATE');       -- t
+   ```
+8. **Smoke-Test** mit den Test-Konten, nicht mit echten Mitgliedern:
+   | Test | Erwartung |
+   |---|---|
+   | Login als Admin, Kleiderwart und User | Anmeldung klappt, Kacheln passend zur Rolle |
+   | PIN ändern (Test-User unter /profil) | Erfolg. Eine zweite offene Sitzung dieses Benutzers landet nach Reload auf /login. Login mit neuer PIN klappt |
+   | Kamerad deaktivieren (Kleiderwart in /psa, Testkamerad mit Konto) | Kamerad inaktiv, Konto in /admin/benutzer inaktiv, Login des Kontos scheitert. Den eigenen Kameraden deaktivieren → 409 mit Meldung |
+   | Karten-ID setzen (Küche-Verwaltung, Testkamerad) | Gespeichert. Dieselbe ID bei einem anderen Kameraden → 409. Im PSA-Formular ist das Feld schreibgeschützt. Anmeldung mit der Testkarte am Kiosk /food klappt |
+   | Rollen ändern (Admin in /admin/benutzer, Testkamerad) | Rolle setzen und entfernen klappt. Das Konto des Testkameraden muss sich neu anmelden. Ein Kleiderwart kann keine Rollen ändern |
+   | Kamerad anlegen (Kleiderwart in /psa) | Stammdaten werden gespeichert |
+   | /food (Kiosk) und /funk als Funk-Admin | Seiten laden, Kameradenlisten erscheinen |
+9. **Abschluss**: Testkamerad bleibt inaktiv. Backup-Datei bis zum nächsten
+   Tag aufbewahren. Uptime Kuma grün. drizzle/manual/create-fw-app-role.sql darf
+   danach wieder laufen (die Einschränkungen sind eingebaut). Die
+   Passwort-Platzhalter vorher durch die echten Passwörter ersetzen, sonst
+   setzt das Skript die Passwörter von fw_app und fw_auth zurück
+
+Rückweg
+- 0012 schlägt fehl: Es ist eine Transaktion, nichts wurde angewendet. Ursache
+  lesen, nichts nacharbeiten
+- Probleme nach dem App-Ausrollen, vor 0013: Vorheriges Image starten. 0012 ist
+  mit der alten App verträglich
+- Probleme nach 0013: Vorheriges Image starten UND das Rücknahme-SQL aus dem
+  Kopf von drizzle/0013_kameraden_benutzer_haertung_restriktiv.sql als Owner
+  ausführen. Funktionen und Trigger aus 0012 dürfen bleiben. Der Eintrag für 0013
+  bleibt in drizzle.__drizzle_migrations, ein späteres erneutes Anwenden
+  braucht bewusst das Löschen der Zeile mit dem höchsten created_at
+- Letzter Ausweg: Restore aus dem Backup (Änderungen seit dem Backup gehen
+  verloren)
 
 ## Oberfläche
 - Farben nur über Theme-Tokens aus src/app/globals.css (bg-background,
@@ -156,7 +292,7 @@ Frontend-Formulare) — siehe invariant-checker.agent.md für das Vorgehen.
 | exp-Claim ist bei JEDER Verifizierung Pflicht | requiredClaims: ["exp"] in verifyJwt (einziger jwtVerify-Aufruf) | Umgesetzt |
 | pv_monitoring-Schema unangetastet | Konvention, keine technische Sperre | Einzuhalten |
 | core.kameraden wird nie hart gelöscht, nur über aktiv=false (Soft-Delete) | Durchsetzung in jeder DELETE-Route, die Kameraden anfasst | Ab PSA-Migration eingeführt, für alle künftigen Module verbindlich |
-| Kamerad deaktiviert → verknüpfte Benutzer in DERSELBEN Transaktion deaktiviert, token_version + 1 | deaktiviereBenutzerVonKamerad (lib/benutzer-admin.ts) in api/psa/kameraden PATCH (aktiv=false) und DELETE. Reaktivieren eines Benutzers mit inaktivem Kameraden → 409 | Umgesetzt. Jede neue Stelle, die kameraden.aktiv schreibt, muss das aufrufen |
+| Kamerad deaktiviert → verknüpfte Benutzer in DERSELBEN Transaktion deaktiviert, token_version + 1 | Trigger kameraden_deaktiviert_benutzer (core.kamerad_deaktiviert, Migration 0012): AFTER UPDATE OF aktiv true→false, egal wer das UPDATE auslöst. Gleiche Schutzregeln wie vorher (eigener Kamerad, letzter Admin → SQLSTATE FW001 → 409). Reaktivieren eines Benutzers mit inaktivem Kameraden → 409 in /api/admin/benutzer/[id] | Umgesetzt. Keine App-Pflicht mehr, jede neue Stelle ist automatisch abgedeckt |
 | Es bleibt immer mindestens ein aktiver globaler Admin. Kein Admin deaktiviert oder degradiert sich selbst | assertAdminsRemain (FOR UPDATE) in /api/admin/benutzer/[id] und in der Kamerad-Deaktivierung + Selbstschutz in denselben Routen | Umgesetzt |
 | psa.ausruestungstuecke mit Historie (Ausgabe, Prüfung, Wäsche, Schaden) wird nie gelöscht, sondern auf Status "Ausgesondert" gesetzt | DELETE /api/psa/ausruestungstuecke: nur globaler Admin, nur ohne Historie, sonst 409 mit Verweis auf "Ausgesondert" (Zeile FOR UPDATE gesperrt). Die FKs sind ON DELETE CASCADE, ein Löschen würde die Historie mitreißen | Umgesetzt. Gilt auch für künftige Routen und Skripte |
 | Benutzernamen case-insensitiv eindeutig | Unique-Index idx_benutzer_benutzername_lower + Prüfung in /api/admin/benutzer | Umgesetzt |

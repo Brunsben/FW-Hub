@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, asc, eq } from "drizzle-orm";
 import { kameraden, psaKameradDetails } from "@/lib/db/schema";
+import { kameradenStammdaten } from "@/lib/db/kameraden-stamm";
 import { withScope } from "@/lib/db/scoped";
-import {
-  deaktiviereBenutzerVonKamerad,
-  konfliktResponse,
-} from "@/lib/benutzer-admin";
+import { konfliktResponse } from "@/lib/benutzer-admin";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { logChange } from "@/lib/psa-changelog";
 
@@ -99,8 +97,13 @@ export async function POST(req: NextRequest) {
   const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
 
   const kamerad = await withScope(scope, async (tx) => {
-    const [k] = await tx
-      .insert(kameraden)
+    // Nur Stammdatenspalten (Spaltenrechte, Migration 0013). Nicht aus dem Body
+    // übernommen und für fw_app nicht schreibbar: karten_id (nur
+    // core.set_karten_id, Food-Admin) und die Rollenspalten psa_rolle,
+    // food_rolle, fk_rolle, funk_rolle (nur core.set_kamerad_rollen über
+    // /api/admin/rollen/[kameradId], globaler Admin).
+    const [angelegt] = await tx
+      .insert(kameradenStammdaten)
       .values({
         name: String(body.name),
         vorname: String(body.vorname),
@@ -109,13 +112,13 @@ export async function POST(req: NextRequest) {
         personalnummer: body.personalnummer
           ? String(body.personalnummer)
           : null,
-        kartenId: body.kartenId ? String(body.kartenId) : null,
         aktiv: body.aktiv === undefined ? true : Boolean(body.aktiv),
-        // Rollenspalten (psa_rolle, food_rolle, fk_rolle, funk_rolle) werden
-        // hier bewusst NICHT aus dem Body übernommen. Sie dürfen nur über
-        // /api/admin/rollen/[kameradId] (globaler Admin) geschrieben werden.
       })
-      .returning();
+      .returning({ id: kameraden.id });
+    const [k] = await tx
+      .select()
+      .from(kameraden)
+      .where(eq(kameraden.id, angelegt.id));
 
     if (present) {
       await tx
@@ -157,10 +160,8 @@ export async function PATCH(req: NextRequest) {
     coreUpdate.personalnummer = body.personalnummer
       ? String(body.personalnummer)
       : null;
-  if ("kartenId" in body)
-    coreUpdate.kartenId = body.kartenId ? String(body.kartenId) : null;
   if ("aktiv" in body) coreUpdate.aktiv = Boolean(body.aktiv);
-  // Rollenspalten werden ignoriert, siehe POST (nur /api/admin/rollen/[kameradId]).
+  // karten_id und Rollenspalten werden ignoriert, siehe POST.
 
   const { sizes, present } = extractSizes(body);
   const scope = { kameradId: session.kameradId, psaRolle: session.psaRole };
@@ -168,11 +169,9 @@ export async function PATCH(req: NextRequest) {
   let kamerad;
   try {
     kamerad = await withScope(scope, async (tx) => {
-      // Invariante: Deaktivierung des Kameraden deaktiviert die verknüpften
-      // Benutzer in derselben Transaktion (inkl. token_version + 1).
-      if (coreUpdate.aktiv === false) {
-        await deaktiviereBenutzerVonKamerad(tx, id, session.kameradId);
-      }
+      // Invariante "Kamerad deaktiviert -> Benutzer deaktiviert, token_version
+      // + 1" erzwingt der Trigger core.kamerad_deaktiviert in derselben
+      // Transaktion (Konflikte kommen als SQLSTATE FW001 -> 409).
       let updated;
       if (Object.keys(coreUpdate).length > 0) {
         coreUpdate.updatedAt = new Date();
@@ -239,8 +238,7 @@ export async function DELETE(req: NextRequest) {
   let rows;
   try {
     rows = await withScope(scope, async (tx) => {
-      // Invariante: verknüpfte Benutzer in derselben Transaktion deaktivieren.
-      await deaktiviereBenutzerVonKamerad(tx, id, session.kameradId);
+      // Verknüpfte Benutzer deaktiviert der Trigger core.kamerad_deaktiviert.
       return tx
         .update(kameraden)
         .set({ aktiv: false, updatedAt: new Date() })

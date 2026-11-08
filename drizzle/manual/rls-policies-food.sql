@@ -69,8 +69,9 @@ CREATE POLICY kameraden_food_public_read ON core.kameraden
   USING (current_setting('app.food_public', true) = 'true');
 
 -- Food-Admins (stats/export etc.) dürfen core.kameraden NUR lesen. Eigene
--- permissive SELECT-Policy — die bestehende kameraden_scope-Policy bleibt für
--- INSERT/UPDATE/DELETE allein maßgeblich (kein Schreibzugriff über food_rolle).
+-- permissive SELECT-Policy. Schreiben darf food_rolle nicht (die INSERT/UPDATE-
+-- Policies kameraden_anlegen/kameraden_aendern aus Migration 0012 kennen sie
+-- nicht); karten_id schreibt nur core.set_karten_id.
 DROP POLICY IF EXISTS kameraden_food_admin_read ON core.kameraden;
 CREATE POLICY kameraden_food_admin_read ON core.kameraden
   FOR SELECT

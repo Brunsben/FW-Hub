@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
-import { withGlobalAdminScope, withScope } from "@/lib/db/scoped";
+import { withGlobalAdminPsaScope, withScope } from "@/lib/db/scoped";
 import { psaAusruestungstuecke } from "@/lib/db/schema";
 import { requirePsaSession } from "@/lib/psa-auth";
 import { requireGlobalAdmin } from "@/lib/benutzer-admin";
@@ -169,7 +169,7 @@ export async function PATCH(req: NextRequest) {
 // würden sonst mitgelöscht. Stücke mit Historie werden über den Status
 // "Ausgesondert" stillgelegt (PATCH), nicht gelöscht.
 //
-// Scope: withGlobalAdminScope (nach requireGlobalAdmin). Mit dem PSA-Scope der
+// Scope: withGlobalAdminPsaScope (nach requireGlobalAdmin). Mit dem PSA-Scope der
 // Session sähe ein globaler Admin mit psa_rolle "User" unter RLS nur eigene
 // Historienzeilen; die Prüfung hielte ein eigenes Stück mit fremder Historie
 // für historienlos, und die Kaskade (läuft ohne RLS) löschte fremde Historie.
@@ -183,7 +183,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "id erforderlich" }, { status: 400 });
   }
 
-  const outcome = await withGlobalAdminScope(admin, async (tx) => {
+  const outcome = await withGlobalAdminPsaScope(admin, async (tx) => {
     // Zeile sperren: Neue Historie (FK → FOR KEY SHARE am Stück) wartet, bis
     // diese Transaktion fertig ist. Damit kann zwischen Prüfung und DELETE
     // keine Historie entstehen.

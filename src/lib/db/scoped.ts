@@ -28,14 +28,14 @@ export async function withScope<T>(
   });
 }
 
-// Scope für die Admin-Routen (/api/admin/*). Die bestehenden Policies auf
-// core.benutzer/core.kameraden erlauben fremde Zeilen nur mit
-// app.psa_rolle IN ('Admin','Kleiderwart'). Ein globaler Admin (app_role Admin)
-// hat nicht zwingend eine psa_rolle — mit seinem eigenen Scope sähe er nur die
-// eigene Zeile. Daher setzt dieser Scope für VERIFIZIERTE globale Admins
-// app.psa_rolle = 'Admin'. Zusätzlich app.app_rolle = 'Admin' als Vorbereitung
-// für die Policy-Verschärfung (drizzle/manual/benutzer-scope-verschaerfung.sql).
-// Nur in Admin-Routen nach requireGlobalAdmin() verwenden.
+// Scope für die Admin-Routen (/api/admin/*). Setzt für VERIFIZIERTE globale
+// Admins nur app.app_rolle = 'Admin'. Darauf stützen sich die Policies auf
+// core.kameraden (kameraden_lesen/anlegen/aendern) und core.benutzer
+// (benutzer_select/insert/update/delete) sowie core.set_kamerad_rollen. Es
+// setzt KEIN app.psa_rolle: Ein globaler Admin erhält dadurch keinen Zugriff
+// auf PSA-Tabellen. Wer PSA-Daten braucht, nimmt withGlobalAdminPsaScope.
+// Nur in Admin-Routen nach requireGlobalAdmin() bzw. requireGlobalAdminPage()
+// und im Erst-Setup verwenden.
 export async function withGlobalAdminScope<T>(
   admin: { kamerad_id: number; app_role: string },
   fn: (tx: ScopedTx) => Promise<T>,
@@ -47,8 +47,21 @@ export async function withGlobalAdminScope<T>(
     await tx.execute(
       sql`select set_config('app.kamerad_id', ${String(admin.kamerad_id)}, true)`,
     );
-    await tx.execute(sql`select set_config('app.psa_rolle', 'Admin', true)`);
     await tx.execute(sql`select set_config('app.app_rolle', 'Admin', true)`);
+    return fn(tx);
+  });
+}
+
+// Wie withGlobalAdminScope, zusätzlich app.psa_rolle = 'Admin'. Einziger Zweck:
+// globale Admin-Aktionen auf PSA-Tabellen, die unabhängig von der eigenen
+// psa_rolle laufen müssen (Stück-Löschen prüft die Historie über alle
+// Benutzer). Gleiche Vorbedingung: vorher requireGlobalAdmin().
+export async function withGlobalAdminPsaScope<T>(
+  admin: { kamerad_id: number; app_role: string },
+  fn: (tx: ScopedTx) => Promise<T>,
+): Promise<T> {
+  return withGlobalAdminScope(admin, async (tx) => {
+    await tx.execute(sql`select set_config('app.psa_rolle', 'Admin', true)`);
     return fn(tx);
   });
 }
@@ -82,7 +95,7 @@ export interface FunkScope {
 
 // Funk-Scope: setzt app.funk_rolle (+ kamerad_id). Admin/Gerätewart dürfen
 // über die Policy kameraden_funk_read alle core.kameraden lesen, andere Rollen
-// nur die eigene Zeile (kameraden_scope).
+// nur die eigene Zeile (kameraden_lesen).
 export async function withFunkScope<T>(
   scope: FunkScope,
   fn: (tx: ScopedTx) => Promise<T>,

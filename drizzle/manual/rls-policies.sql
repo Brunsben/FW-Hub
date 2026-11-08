@@ -39,33 +39,18 @@ BEGIN;
 ALTER TABLE core.kameraden ENABLE ROW LEVEL SECURITY;
 ALTER TABLE core.kameraden FORCE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS kameraden_scope ON core.kameraden;
-CREATE POLICY kameraden_scope ON core.kameraden
-  FOR ALL
-  USING (
-    current_setting('app.psa_rolle', true) IN ('Admin', 'Kleiderwart')
-    OR id = NULLIF(current_setting('app.kamerad_id', true), '')::int
-  )
-  WITH CHECK (
-    current_setting('app.psa_rolle', true) IN ('Admin', 'Kleiderwart')
-    OR id = NULLIF(current_setting('app.kamerad_id', true), '')::int
-  );
+-- Die Policies auf core.kameraden und core.benutzer liegen NICHT mehr hier.
+-- Die frühere kameraden_scope / benutzer_scope (FOR ALL, inkl. Schreibrechten
+-- für die eigene Zeile und für Kleiderwart) sind durch die Migrationen
+-- drizzle/0012_kameraden_benutzer_haertung_additiv.sql und
+-- drizzle/0013_kameraden_benutzer_haertung_restriktiv.sql ersetzt. Diese Datei
+-- legt sie bewusst NICHT mehr an – sonst würde ein erneutes Ausführen die
+-- Härtung rückgängig machen.
 
 -- ── core.benutzer ─────────────────────────────────────────────
 ALTER TABLE core.benutzer ENABLE ROW LEVEL SECURITY;
 ALTER TABLE core.benutzer FORCE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS benutzer_scope ON core.benutzer;
-CREATE POLICY benutzer_scope ON core.benutzer
-  FOR ALL
-  USING (
-    current_setting('app.psa_rolle', true) IN ('Admin', 'Kleiderwart')
-    OR kamerad_id = NULLIF(current_setting('app.kamerad_id', true), '')::int
-  )
-  WITH CHECK (
-    current_setting('app.psa_rolle', true) IN ('Admin', 'Kleiderwart')
-    OR kamerad_id = NULLIF(current_setting('app.kamerad_id', true), '')::int
-  );
 
 -- ── psa.ausruestungstuecke ────────────────────────────────────
 -- RLS bleibt hier aktiviert (idempotent). Die frühere Policy

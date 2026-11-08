@@ -8,12 +8,15 @@ Zusätzliche Regeln für Claude Code:
 - Die App läuft lokal als fw_app (NOBYPASSRLS). Tests als Postgres-Superuser sind für RLS wertlos.
 - Migrationen: drizzle-kit generate lokal. Anwenden nur über ein migrate.mjs-Skript mit MIGRATE_DATABASE_URL (Owner-Rolle), nie mit fw_app. drizzle-kit migrate verschluckt hier Fehler.
 - Dev-Server: npx next dev --webpack.
+- Dev-Server: Nach Tests selbst beenden. Falls das nicht möglich ist, im Bericht den Port nennen (nicht nur PIDs), damit der Nutzer per Port beenden kann:
+  `Get-NetTCPConnection -LocalPort <port> -State Listen | % { taskkill /PID $_.OwningProcess /T /F }`
+  Hinweis: next dev startet einen Kindprozess (start-server.js); immer den Elternprozess mit /T beenden.
 - Shell ist PowerShell: keine Bash-Heredocs, kein < für Eingabeumleitung.
 - Nach jeder Dateioperation durch erneutes Lesen prüfen. Erfolg erst melden, wenn tsc, Build oder ein Test es belegt.
 - Kein git commit/push ohne ausdrückliche Anweisung.
 - Secrets nie in Ausgaben wiederholen.
 - Oberfläche: nur Theme-Tokens, keine festen Farbklassen. Portalseiten gehören nach src/app/(portal)/ (die Kopfzeile kommt vom Layout), Kiosk /food und /food/m/[token] bleiben außerhalb. Details in copilot-instructions.md, Abschnitt "Oberfläche".
-- withGlobalAdminScope (setzt app.psa_rolle/app.app_rolle = 'Admin') nur nach requireGlobalAdmin() (API-Routen) bzw. requireGlobalAdminPage() (Seiten) und im Erst-Setup verwenden. Nie mit einem nicht geprüften Benutzer aufrufen.
+- withGlobalAdminScope (setzt nur app.app_rolle = 'Admin', kein psa_rolle; für PSA-Tabellen withGlobalAdminPsaScope) nur nach requireGlobalAdmin() (API-Routen) bzw. requireGlobalAdminPage() (Seiten) und im Erst-Setup verwenden. Nie mit einem nicht geprüften Benutzer aufrufen.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

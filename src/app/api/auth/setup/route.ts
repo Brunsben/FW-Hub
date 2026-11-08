@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { authDb } from "@/lib/db/auth-client";
-import { withScope } from "@/lib/db/scoped";
+import { withGlobalAdminScope } from "@/lib/db/scoped";
 import { kameraden, benutzer } from "@/lib/db/schema";
+import { kameradenStammdaten } from "@/lib/db/kameraden-stamm";
 import { signJwt, setAuthCookie } from "@/lib/auth";
 import { buildJwtPayload } from "@/lib/session-token";
 
@@ -46,23 +47,33 @@ export async function POST(req: NextRequest) {
 
     const pinHash = await hash(password, 12);
 
-    // Erst-Setup-Scope: der Admin-Zweig der WITH-CHECK-Policies erlaubt beide
-    // INSERTs, obwohl die kamerad_id noch nicht bekannt ist (im Admin-Zweig
-    // irrelevant). Sicher, weil dieser Pfad durch count===0 geschützt ist.
-    const created = await withScope(
-      { kameradId: 0, psaRolle: "Admin" },
+    // Erst-Setup-Scope: withGlobalAdminScope (app.app_rolle='Admin') erlaubt
+    // beide INSERTs, obwohl die kamerad_id noch nicht bekannt ist. Sicher, weil
+    // dieser Pfad durch count===0 geschützt ist. Die Rollen schreibt wie überall
+    // core.set_kamerad_rollen (keine Spaltenrechte auf den Rollenspalten).
+    const created = await withGlobalAdminScope(
+      { kamerad_id: 0, app_role: "Admin" },
       async (tx) => {
+        const [angelegt] = await tx
+          .insert(kameradenStammdaten)
+          .values({ vorname, name })
+          .returning({ id: kameraden.id });
+
+        await tx.execute(
+          sql`select core.set_kamerad_rollen(${angelegt.id}::integer, ${JSON.stringify(
+            {
+              psa_rolle: "Admin",
+              food_rolle: "Admin",
+              fk_rolle: "Admin",
+              funk_rolle: "Admin",
+            },
+          )}::jsonb)`,
+        );
+
         const [kamerad] = await tx
-          .insert(kameraden)
-          .values({
-            vorname,
-            name,
-            psaRolle: "Admin",
-            foodRolle: "Admin",
-            fkRolle: "Admin",
-            funkRolle: "Admin",
-          })
-          .returning();
+          .select()
+          .from(kameraden)
+          .where(eq(kameraden.id, angelegt.id));
 
         const [user] = await tx
           .insert(benutzer)

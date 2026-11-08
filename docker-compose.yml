@@ -68,6 +68,29 @@ services:
       - fw-network
     restart: unless-stopped
 
+  # ── Datenbank-Migrationen (nur auf Anforderung) ──────────────────────────
+  # Profil "migrate": Wird von "docker compose up" NICHT gestartet und beim
+  # "docker compose build" nicht mitgebaut. Aufruf:
+  #   docker compose build migrate
+  #   docker compose run --rm migrate               # alle ausstehenden Migrationen
+  #   docker compose run --rm migrate --bis 0012    # nur bis einschließlich 0012
+  # Verbindet als POSTGRES_USER (Eigentümer der Tabellen), nicht als fw_app.
+  # Passwort mit Sonderzeichen in der URL kodiert eintragen (wie bei fw_app).
+  migrate:
+    profiles: ["migrate"]
+    build:
+      context: .
+      target: migrate
+    logging: *default-logging
+    environment:
+      MIGRATE_DATABASE_URL: "postgresql://${POSTGRES_USER:-nocodb}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nocodb}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - fw-network
+    restart: "no"
+
   # ── PostgreSQL (gemeinsame Datenbank) ─────────────────────────────────────
   postgres:
     image: postgres:17-alpine@sha256:6f30057d31f5861b66f3545d4821f987aacf1dd920765f0acadea0c58ff975b1

@@ -16,7 +16,24 @@ COPY . .
 # npm führt "postbuild" nach "build" automatisch aus
 RUN npm run build
 
-# ── Stage 3: Produktion ─────────────────────────────────
+# ── Stage 3: Migrationsdienst ───────────────────────────
+# Eigenes kleines Image für `docker compose run --rm migrate [--bis 0012]`.
+# Enthält nur scripts/migrate.mjs, drizzle/ (SQL + Journal) und die zwei Pakete,
+# die das Skript braucht, in den Versionen aus package-lock.json. Steht VOR der
+# Produktions-Stage: Ohne --target baut Docker die LETZTE Stage (runner), der
+# Portal-Build bleibt davon unberührt.
+FROM node:22-alpine AS migrate
+WORKDIR /app
+COPY package-lock.json ./
+RUN npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund     $(node -p "['postgres','drizzle-orm'].map(n => n + '@' + require('./package-lock.json').packages['node_modules/' + n].version).join(' ')")     && rm package-lock.json
+COPY scripts/migrate.mjs ./scripts/migrate.mjs
+# Nur SQL-Migrationen und Journal, nicht drizzle/manual.
+COPY drizzle/*.sql ./drizzle/
+COPY drizzle/meta/_journal.json ./drizzle/meta/_journal.json
+USER node
+ENTRYPOINT ["node", "scripts/migrate.mjs"]
+
+# ── Stage 4: Produktion ─────────────────────────────────
 FROM node:22-alpine AS runner
 WORKDIR /app
 

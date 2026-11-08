@@ -1,5 +1,12 @@
 # core.set_karten_id – Eigentümer-Anforderung (Server)
 
+> **Stand ab Migration 0012:** Die Anforderung unten gilt nur noch für Datenbanken
+> mit der Funktion aus 0005 (vor 0012). 0012 ersetzt `set_karten_id`: Die Funktion
+> setzt `app.app_rolle='Admin'` innerhalb ihres Rumpfs und funktioniert damit auch
+> dann, wenn der Eigentümer RLS nicht umgeht. Getestet gegen einen Eigentümer ohne
+> BYPASSRLS (Test 3b in test-haertung). Eine Eigentümer-Übertragung ist nicht mehr
+> nötig. Der Rest dieser Datei beschreibt den alten Stand.
+
 Die Funktion `core.set_karten_id(integer, text)` (Migration
 `drizzle/0005_food_set_karten_id.sql`) ist `SECURITY DEFINER`. Sie läuft also mit
 den Rechten ihres **Eigentümers**, nicht mit denen von `fw_app`.
@@ -41,6 +48,16 @@ Erwartet: `rolsuper = t` oder `rolbypassrls = t`, `security_definer = t`,
 
 Rechte prüfen: `\df+ core.set_karten_id` zeigt nur EXECUTE für `fw_app` und
 den Eigentümer, nicht PUBLIC.
+
+## Funktionen aus 0012 (Härtung core.kameraden / core.benutzer)
+
+`core.kamerad_deaktiviert` (Trigger), `core.eigene_pin_setzen`,
+`core.eigene_sitzungen_beenden` und (ab 0012) `core.set_karten_id` schreiben
+an den Policies vorbei. Sie setzen `app.app_rolle = 'Admin'` nur innerhalb ihres
+Rumpfs und stellen den Wert danach wieder her. Dadurch greifen die Policies auch
+dann, wenn der Eigentümer RLS NICHT umgeht. `core.set_kamerad_rollen` läuft im
+Scope eines globalen Admins. Für keine dieser Funktionen ist eine
+Eigentümer-Übertragung nötig.
 
 ## Sicherheitsrahmen
 

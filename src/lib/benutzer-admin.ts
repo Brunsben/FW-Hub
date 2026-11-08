@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { getAuthUser, isGlobalAdmin, type JwtPayload } from "@/lib/auth";
 import type { ScopedTx } from "@/lib/db/scoped";
 import { benutzer } from "@/lib/db/schema";
@@ -33,9 +33,32 @@ export class BenutzerKonflikt extends Error {
   }
 }
 
+// SQLSTATE, mit dem die Datenbank fachliche Konflikte meldet (Trigger
+// core.kamerad_deaktiviert: letzter Admin, eigener Kamerad). Die Meldung steht
+// im Fehler der postgres-js-Ebene, drizzle verpackt sie in `cause`.
+const PG_FACHKONFLIKT = "FW001";
+
+function datenbankKonflikt(e: unknown): string | null {
+  let cur: unknown = e;
+  for (let depth = 0; depth < 3 && cur && typeof cur === "object"; depth++) {
+    const { code, message, cause } = cur as {
+      code?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (code === PG_FACHKONFLIKT && typeof message === "string") return message;
+    cur = cause;
+  }
+  return null;
+}
+
 export function konfliktResponse(e: unknown): NextResponse | null {
   if (e instanceof BenutzerKonflikt) {
     return NextResponse.json({ error: e.message }, { status: 409 });
+  }
+  const meldung = datenbankKonflikt(e);
+  if (meldung) {
+    return NextResponse.json({ error: meldung }, { status: 409 });
   }
   return null;
 }
@@ -61,52 +84,6 @@ export async function assertAdminsRemain(
       "Der letzte aktive Admin kann nicht deaktiviert oder herabgestuft werden.",
     );
   }
-}
-
-// Invariante: Wird core.kameraden.aktiv auf false gesetzt, werden die
-// verknüpften Benutzer in DERSELBEN Transaktion deaktiviert und ihre
-// token_version erhöht. Aufruf vor/nach dem UPDATE auf core.kameraden in der
-// gescopten Transaktion des Aufrufers (PSA: Admin/Kleiderwart dürfen laut
-// benutzer_scope core.benutzer schreiben).
-export async function deaktiviereBenutzerVonKamerad(
-  tx: ScopedTx,
-  kameradId: number,
-  ausfuehrenderKameradId: number,
-): Promise<number> {
-  const verknuepft = await tx
-    .select({ id: benutzer.id, rolle: benutzer.rolle })
-    .from(benutzer)
-    .where(and(eq(benutzer.kameradId, kameradId), eq(benutzer.aktiv, true)))
-    .for("update");
-  if (verknuepft.length === 0) return 0;
-
-  if (kameradId === ausfuehrenderKameradId) {
-    throw new BenutzerKonflikt(
-      "Der eigene Kamerad kann nicht deaktiviert werden (eigener Benutzer wäre gesperrt).",
-    );
-  }
-  if (verknuepft.some((b) => b.rolle === "Admin")) {
-    await assertAdminsRemain(
-      tx,
-      verknuepft.map((b) => b.id),
-    );
-  }
-
-  const ids = verknuepft.map((b) => b.id);
-  const updated = await tx
-    .update(benutzer)
-    .set({
-      aktiv: false,
-      tokenVersion: sql`${benutzer.tokenVersion} + 1`,
-      updatedAt: new Date(),
-    })
-    .where(inArray(benutzer.id, ids))
-    .returning({ id: benutzer.id });
-  if (updated.length !== ids.length) {
-    // RLS hat Zeilen verborgen → nicht still weiterarbeiten.
-    throw new Error("Benutzer-Deaktivierung unvollständig (RLS)");
-  }
-  return updated.length;
 }
 
 // Sichere Projektion für API-Antworten — niemals den PIN-Hash.

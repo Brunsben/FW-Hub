@@ -6,7 +6,7 @@ import { ProfilForm } from "@/components/profil/profil-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Profil für jeden eingeloggten Benutzer. Daten über withScope (eigene Zeile:
-// benutzer_scope/kameraden_scope erlauben kamerad_id = app.kamerad_id).
+// benutzer_select/kameraden_lesen erlauben kamerad_id = app.kamerad_id).
 // Kein PIN-Hash in der Projektion.
 export default async function ProfilPage() {
   const user = await requireSessionPage();

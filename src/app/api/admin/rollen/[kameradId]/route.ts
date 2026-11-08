@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { withGlobalAdminScope } from "@/lib/db/scoped";
-import { benutzer, kameraden } from "@/lib/db/schema";
+import { kameraden } from "@/lib/db/schema";
+import { PG_NO_DATA_FOUND, pgErrorCode } from "@/lib/db/pg-error";
 import { requireGlobalAdmin } from "@/lib/benutzer-admin";
 import { MODUL_ROLLEN, ROLLEN_SPALTEN, type RollenSpalte } from "@/lib/rollen";
+
+// Spaltennamen in der Datenbank (Schlüssel des JSON für set_kamerad_rollen).
+const SPALTE_ZU_DB: Record<RollenSpalte, string> = {
+  psaRolle: "psa_rolle",
+  foodRolle: "food_rolle",
+  fkRolle: "fk_rolle",
+  funkRolle: "funk_rolle",
+};
 
 // EINZIGE Route, die die Rollenspalten von core.kameraden schreibt
 // (psa_rolle, food_rolle, fk_rolle, funk_rolle). Alle anderen Routen ignorieren
@@ -53,33 +62,36 @@ export async function PATCH(
     );
   }
 
-  const result = await withGlobalAdminScope(guard.user, async (tx) => {
-    const [k] = await tx
-      .update(kameraden)
-      .set({ ...set, updatedAt: new Date() })
-      .where(eq(kameraden.id, kameradId))
-      .returning({
-        id: kameraden.id,
-        psaRolle: kameraden.psaRolle,
-        foodRolle: kameraden.foodRolle,
-        fkRolle: kameraden.fkRolle,
-        funkRolle: kameraden.funkRolle,
-      });
-    if (!k) return null;
-
-    const betroffen = await tx
-      .update(benutzer)
-      .set({
-        tokenVersion: sql`${benutzer.tokenVersion} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(benutzer.kameradId, kameradId))
-      .returning({ id: benutzer.id });
-    return { kamerad: k, abgemeldeteBenutzer: betroffen.length };
-  });
-
-  if (!result) {
-    return NextResponse.json({ error: "Kamerad nicht gefunden" }, { status: 404 });
+  // Die Spalten schreibt ausschließlich core.set_kamerad_rollen (Spaltenrechte,
+  // Migration 0013). Die Funktion verlangt app.app_rolle = 'Admin' und erhöht
+  // token_version aller verknüpften Benutzer.
+  const rollenJson: Record<string, string | null> = {};
+  for (const spalte of ROLLEN_SPALTEN) {
+    if (spalte in set) rollenJson[SPALTE_ZU_DB[spalte]] = set[spalte] ?? null;
   }
-  return NextResponse.json(result);
+
+  try {
+    const result = await withGlobalAdminScope(guard.user, async (tx) => {
+      const [{ n }] = await tx.execute<{ n: number }>(
+        sql`select core.set_kamerad_rollen(${kameradId}::integer, ${JSON.stringify(rollenJson)}::jsonb) as n`,
+      );
+      const [k] = await tx
+        .select({
+          id: kameraden.id,
+          psaRolle: kameraden.psaRolle,
+          foodRolle: kameraden.foodRolle,
+          fkRolle: kameraden.fkRolle,
+          funkRolle: kameraden.funkRolle,
+        })
+        .from(kameraden)
+        .where(eq(kameraden.id, kameradId));
+      return { kamerad: k, abgemeldeteBenutzer: n };
+    });
+    return NextResponse.json(result);
+  } catch (e) {
+    if (pgErrorCode(e) === PG_NO_DATA_FOUND) {
+      return NextResponse.json({ error: "Kamerad nicht gefunden" }, { status: 404 });
+    }
+    throw e;
+  }
 }

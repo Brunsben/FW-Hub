@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     // core.kameraden liegt hinter RLS. fw_auth darf es NICHT lesen; daher mit
     // dem jetzt bekannten Scope des Benutzers über den regulären Client lesen.
-    // Die eigene Zeile ist über kameraden_scope (id = app.kamerad_id) sichtbar;
+    // Die eigene Zeile ist über kameraden_lesen (id = app.kamerad_id) sichtbar;
     // die App-Rolle wird bewusst NICHT als psa_rolle in den Scope gesetzt.
     const [kamerad] = await withScope(
       { kameradId: user.kameradId, psaRolle: "" },
