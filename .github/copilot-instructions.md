@@ -467,6 +467,32 @@ Frontend-Formulare) — siehe invariant-checker.agent.md für das Vorgehen.
 | Führerscheinkontrolle | /fk | FK-App | Struktur bereits übernommen, Business-Logik-Migration ausstehend |
 | Funktechnik | /funk | Neu, siehe FUNK_APP_SPEC.md | Datenmodell spezifiziert, Implementierung ausstehend. Referenz für Auth-Pattern: Funk-App/lib/funk-auth.ts (dort korrekt gegen Kameraden.id gebaut) — Funk-App selbst NICHT weiterverwenden, nur als Vorlage lesen |
 
+## Mitgliederverwaltung (/mitglieder)
+Zentrale Verwaltung aller Personendaten. Module zeigen Personen nur an und
+verlinken auf /mitglieder/[id] (`MitgliedLink`, Ziel aus `mitgliedLinkZiel`).
+- **Seiten:** `/mitglieder` (Liste mit Suche, Filter aktiv/inaktiv/ohne Login,
+  ⋯-Menü je Zeile), `/mitglieder/[id]` (Abschnitte). `/admin/benutzer` leitet
+  auf `/mitglieder` weiter. API: `/api/mitglieder` und `/api/mitglieder/[id]`
+  (Stammdaten), Zugang und Rollen weiter über `/api/admin/benutzer*` und
+  `/api/admin/rollen/*`
+- **Rechte:** Sehen darf jede Verwaltungsrolle (globaler Admin, PSA
+  Admin/Kleiderwart, Küchen-Admin, Funk Admin/Gerätewart) und jede Person sich
+  selbst. Ändern (Stammdaten, Kameraden anlegen und deaktivieren, Zugang,
+  Rollen) nur der globale Admin. Die Regeln stehen in
+  `src/lib/mitglieder/rechte.ts`. Die Oberfläche zeigt nur an, durchgesetzt
+  wird in der Datenbank (RLS, Spaltenrechte, Funktionen). Welche Felder eine
+  Rolle bekommt, bestimmt die Projektion in `lib/mitglieder/lesen.ts`, denn
+  Lesen lässt sich in der Datenbank nicht pro Spalte trennen
+- **Abschnitte über eine Registry:** `src/lib/mitglieder/registry.ts` ist die
+  einzige Stelle, an der Abschnitte bekannt sind. Jeder Abschnitt
+  (`MitgliedAbschnitt`) bringt Titel, Reihenfolge, `rechte(user, id)` und eine
+  Server-Komponente mit. Ein neues Modul legt eine Datei an und trägt eine Zeile
+  in die Registry ein. Reihenfolge: Bereiche 10/20/30, Module ab 100, Verlauf 900
+- **Änderungsprotokoll:** Abschnitt "Änderungsverlauf" (nur globale Admins) aus
+  `core.mitglieder_audit`
+- **Tests:** `scripts/test-mitglieder-rechte.mjs` und `test-mitglieder-lib.mjs`
+  (ohne Server), `scripts/test-mitglieder.mjs` (API und Seiten, mit Dev-Server)
+
 ## Grundregel für ALLE Agents: Erst verifizieren, dann berichten
 Nach JEDER Datei-Operation (Schreiben, Kopieren, Umbenennen, Löschen) den
 tatsächlichen Zustand unabhängig gegenprüfen (Datei erneut lesen, Ordner

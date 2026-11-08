@@ -16,6 +16,19 @@ export function nowHHMM(): string {
   }).format(new Date());
 }
 
+// Zeitpunkt als "08.11.2026, 14:35" in Berlin (für Protokolle und Listen).
+export function datumZeit(zeitpunkt: Date | string): string {
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: BERLIN,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(zeitpunkt));
+}
+
 // Tage auf ein Datum YYYY-MM-DD addieren (negativ = zurück), ohne Zeitzoneneffekt.
 export function addDays(datum: string, tage: number): string {
   const [j, m, t] = datum.split("-").map(Number);

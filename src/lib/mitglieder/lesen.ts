@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { asc, desc, eq } from "drizzle-orm";
 import type { JwtPayload } from "@/lib/auth";
 import { benutzer, kameraden, mitgliederAudit } from "@/lib/db/schema";
@@ -140,6 +141,13 @@ export async function ladeMitglied(user: JwtPayload, id: number): Promise<Mitgli
   );
   return zeilen[0] ? projiziere(user, zeilen[0]) : null;
 }
+
+/**
+ * Wie ladeMitglied, aber innerhalb EINER Seitenanfrage nur einmal: Die Abschnitte
+ * einer Seite bekommen dasselbe `user`-Objekt und dieselbe id und teilen sich so
+ * die Abfrage (React cache). Außerhalb des Renderns verhält es sich wie ladeMitglied.
+ */
+export const ladeMitgliedGecacht = cache(ladeMitglied);
 
 export interface VerlaufEintrag {
   id: number;

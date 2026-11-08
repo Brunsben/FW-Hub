@@ -6,6 +6,7 @@ import { HeaderMobileMenu } from "@/components/header-mobile-menu";
 import { LogoutButton } from "@/components/logout-button";
 import type { PortalModulKey } from "@/components/modul-icons";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { kannMitgliederSehen } from "@/lib/mitglieder/rechte";
 
 export interface ModulLink {
   key: PortalModulKey;
@@ -20,20 +21,27 @@ export interface ModulLink {
 // food_rolle Admin (Mitglieder würden zum Kiosk /food umgeleitet).
 // FK hat noch keine Seite und erscheint daher nicht.
 export function sichtbareModule(user: JwtPayload): ModulLink[] {
-  const module: ModulLink[] = [];
+  const eintraege: ModulLink[] = [];
   if (user.psa_rolle) {
-    module.push({ key: "psa", href: "/psa", label: "PSA", beschreibung: "Persönliche Schutzausrüstung" });
+    eintraege.push({ key: "psa", href: "/psa", label: "PSA", beschreibung: "Persönliche Schutzausrüstung" });
   }
   if (user.food_rolle === "Admin") {
-    module.push({ key: "food", href: "/food/admin", label: "Küche-Verwaltung", beschreibung: "Menüs, Gäste, Karten, Statistik" });
+    eintraege.push({ key: "food", href: "/food/admin", label: "Küche-Verwaltung", beschreibung: "Menüs, Gäste, Karten, Statistik" });
   }
   if (user.funk_rolle) {
-    module.push({ key: "funk", href: "/funk", label: "Funktechnik", beschreibung: "Funkgeräte und Zuweisungen" });
+    eintraege.push({ key: "funk", href: "/funk", label: "Funktechnik", beschreibung: "Funkgeräte und Zuweisungen" });
   }
-  if (isGlobalAdmin(user)) {
-    module.push({ key: "admin", href: "/admin/benutzer", label: "Benutzerverwaltung", beschreibung: "Accounts, PINs und Rollen" });
+  if (kannMitgliederSehen(user)) {
+    eintraege.push({
+      key: "mitglieder",
+      href: "/mitglieder",
+      label: "Mitglieder",
+      beschreibung: isGlobalAdmin(user)
+        ? "Personen, Zugänge und Rollen"
+        : "Personen und ihre Stammdaten",
+    });
   }
-  return module;
+  return eintraege;
 }
 
 // Gemeinsame Kopfzeile. Ab md: Modulnavigation, Name, Profil, Farbschema,
@@ -45,7 +53,7 @@ export async function AppHeader() {
   const user = await getAuthUser();
   if (!user) return null; // Seiten sind selbst geschützt
 
-  const module = sichtbareModule(user);
+  const eintraege = sichtbareModule(user);
 
   return (
     <header
@@ -68,7 +76,7 @@ export async function AppHeader() {
           <HeaderLink href="/" exakt>
             Start
           </HeaderLink>
-          {module.map((m) => (
+          {eintraege.map((m) => (
             <HeaderLink key={m.key} href={m.href}>
               {m.label}
             </HeaderLink>
@@ -86,7 +94,7 @@ export async function AppHeader() {
 
         <div className="ml-auto md:hidden">
           <HeaderMobileMenu
-            module={module.map(({ key, href, label }) => ({ key, href, label }))}
+            module={eintraege.map(({ key, href, label }) => ({ key, href, label }))}
             name={user.kamerad_name}
           />
         </div>

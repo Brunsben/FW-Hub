@@ -210,6 +210,69 @@ try {
     const ml = await audit(mlId);
     check("Protokoll: Login angelegt, ohne PIN", ml.some((a) => a.feld === "login angelegt" && a.neu === `${loginName} (User)`) && !JSON.stringify(ml).includes("654321") && !/\$2[aby]\$/.test(JSON.stringify(ml)));
   }
+
+  // ── Seiten ─────────────────────────────────────────────────────────────────
+  const seite = async (pfad, cookie) => {
+    const res = await fetch(`${BASE}${pfad}`, { redirect: "manual", headers: cookie ? { cookie } : {} });
+    return { status: res.status, loc: res.headers.get("location") || "", html: await res.text() };
+  };
+  const hat = (html, text) => html.includes(text);
+  const abschnitteIn = (html) => [...html.matchAll(/data-abschnitt="([a-z]+)"/g)].map((m) => m[1]);
+  // Dieselbe Person wie oben, aber als sauber angelegte Seite: aktiv, mit Login
+  await owner`update core.kameraden set aktiv = true where id = ${ziel.kamerad}`;
+  await owner`update core.benutzer set aktiv = true where id = ${ziel.benutzer}`;
+
+  for (const pfad of ["/mitglieder", `/mitglieder/${ziel.kamerad}`, "/admin/benutzer"]) {
+    const s = await seite(pfad, null);
+    check(`ohne Anmeldung: ${pfad} → /login`, s.status === 307 && s.loc.endsWith("/login"), `${s.status} ${s.loc}`);
+  }
+  let s = await seite("/mitglieder", ohne.cookie);
+  check("ohne Rolle: /mitglieder → Startseite mit Hinweis", s.status === 307 && s.loc.endsWith("/?kein_zugriff=mitglieder"), `${s.status} ${s.loc}`);
+  s = await seite(`/mitglieder/${ziel.kamerad}`, psaUser.cookie);
+  check("PSA-User: fremde Person → Startseite mit Hinweis", s.status === 307 && s.loc.endsWith("/?kein_zugriff=mitglieder"), `${s.status} ${s.loc}`);
+  s = await seite(`/mitglieder/${ohne.kamerad}`, ohne.cookie);
+  check("ohne Rolle: die eigene Person → /profil", s.status === 307 && s.loc.endsWith("/profil"), `${s.status} ${s.loc}`);
+  s = await seite("/admin/benutzer", ohne.cookie);
+  check("alte Adresse /admin/benutzer (angemeldet) → /mitglieder", s.status === 307 && s.loc.endsWith("/mitglieder"), `${s.status} ${s.loc}`);
+  s = await seite("/?kein_zugriff=mitglieder", ohne.cookie);
+  check("Startseite zeigt den Hinweis für das Modul Mitglieder", s.status === 200 && hat(s.html, "Kein Zugriff auf das Modul") && hat(s.html, "Mitglieder"));
+  check("ohne Rolle: keine Kachel und kein Menüpunkt Mitglieder", !hat(s.html, 'data-kachel="mitglieder"') && !hat(s.html, 'href="/mitglieder"'));
+
+  // Liste je Rolle
+  for (const [n, k] of [["Kleiderwart", kw], ["Küchen-Admin", kueche], ["Funk-Gerätewart", funkGw]]) {
+    s = await seite("/mitglieder", k.cookie);
+    check(`${n}: /mitglieder → 200 mit Liste und Menüpunkt`, s.status === 200 && hat(s.html, "mitglieder-suche") && hat(s.html, 'href="/mitglieder"'), String(s.status));
+    check(`${n}: ohne "Neues Mitglied", ohne Aktionen, ohne Login-Spalte`, !hat(s.html, "Neues Mitglied") && !hat(s.html, "Aktionen für") && !hat(s.html, "kein Login"));
+    check(`${n}: Kopfzeile ohne "Benutzerverwaltung"`, !hat(s.html, "Benutzerverwaltung"));
+    s = await seite("/", k.cookie);
+    check(`${n}: Startseite hat die Kachel Mitglieder`, hat(s.html, 'data-kachel="mitglieder"'));
+    s = await seite(`/mitglieder/${ziel.kamerad}`, k.cookie);
+    check(`${n}: Detailseite → 200, nur der Abschnitt Stammdaten, schreibgeschützt`,
+      s.status === 200 && JSON.stringify(abschnitteIn(s.html)) === '["stammdaten"]' && !hat(s.html, 'id="stamm-vorname"') && hat(s.html, ziel.name), `${s.status} ${abschnitteIn(s.html)}`);
+    check(`${n}: Detailseite ohne Zugang, Rollen, Protokoll, PIN-Hash`, !hat(s.html, "reset-pin") && !hat(s.html, "Änderungsverlauf") && !hat(s.html, "$2a$") && !hat(s.html, "$2b$"));
+  }
+  s = await seite(`/mitglieder/${ziel.kamerad}`, kueche.cookie);
+  check("Küchen-Admin: Karten-ID der Person erscheint NICHT auf der Detailseite (Küchen-Abschnitt folgt in Paket 4)", !hat(s.html, `K-${stamp}`));
+
+  // Admin
+  s = await seite("/mitglieder", admin.cookie);
+  check("Admin: Liste mit Neues Mitglied, Aktionen-Menü und Login-Spalte", s.status === 200 && hat(s.html, "Neues Mitglied") && hat(s.html, "Aktionen für") && hat(s.html, "kein Login"), String(s.status));
+  check("Admin: Kopfzeile zeigt Mitglieder, nicht mehr Benutzerverwaltung", hat(s.html, 'href="/mitglieder"') && !hat(s.html, "Benutzerverwaltung"));
+  s = await seite(`/mitglieder/${ziel.kamerad}`, admin.cookie);
+  const ab = abschnitteIn(s.html);
+  check("Admin: Detailseite mit Stammdaten, Zugang, Rollen und Verlauf in dieser Reihenfolge", s.status === 200 && JSON.stringify(ab) === '["stammdaten","zugang","rollen","verlauf"]', `${s.status} ${ab}`);
+  check("Admin: Stammdaten sind bearbeitbar (Eingabefeld, Deaktivieren)", hat(s.html, 'id="stamm-vorname"') && hat(s.html, "Deaktivieren"));
+  check("Admin: Zugang zeigt den Benutzernamen der Person und die PIN-Funktion", hat(s.html, ziel.name) && hat(s.html, "PIN zurücksetzen"));
+  check("Admin: Rollen-Auswahl für alle vier Module", ["PSA", "Küche", "Führerschein", "Funk"].every((x) => hat(s.html, x)));
+  check("Admin: kein PIN-Hash und kein Login-PIN im HTML", !hat(s.html, "$2a$") && !hat(s.html, "$2b$"));
+  s = await seite(`/mitglieder/${ohneLogin.kamerad}`, admin.cookie);
+  check("Admin: Person ohne Login → Hinweis und Formular zum Anlegen", s.status === 200 && hat(s.html, "hat noch keinen Login") && hat(s.html, "Login anlegen") && hat(s.html, "kein Login"));
+  s = await seite("/mitglieder/2147483000", admin.cookie);
+  check("Admin: unbekannte Person → 404", s.status === 404, String(s.status));
+  s = await seite("/mitglieder/abc", admin.cookie);
+  check("Admin: ungültige id → 404", s.status === 404, String(s.status));
+  s = await seite(`/mitglieder/${admin.kamerad}`, admin.cookie);
+  check("Admin: die eigene Person bleibt bearbeitbar und nicht deaktivierbar", s.status === 200 && hat(s.html, "kannst du nicht deaktivieren") && hat(s.html, "(du)"));
 } finally {
   // Aufräumen nur über gemerkte IDs und exakte Namen
   try {

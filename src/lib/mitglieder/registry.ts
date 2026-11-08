@@ -1,3 +1,7 @@
+import { rollenAbschnitt } from "@/components/mitglieder/abschnitte/rollen";
+import { stammdatenAbschnitt } from "@/components/mitglieder/abschnitte/stammdaten";
+import { verlaufAbschnitt } from "@/components/mitglieder/abschnitte/verlauf";
+import { zugangAbschnitt } from "@/components/mitglieder/abschnitte/zugang";
 import type { MitgliedAbschnitt } from "./abschnitte";
 
 // Registry der Abschnitte auf /mitglieder/[id] und im Profil.
@@ -8,5 +12,11 @@ import type { MitgliedAbschnitt } from "./abschnitte";
 // (z. B. components/psa/mitglied-abschnitt.tsx) und trägt sie hier ein.
 //
 // Reihenfolge: Bereiche (Stammdaten 10, Zugang 20, Rollen 30), dann Module
-// (PSA 100, Küche 110, Funk 120), zuletzt der Verlauf (900).
-export const ABSCHNITTE: readonly MitgliedAbschnitt[] = [];
+// (PSA 100, Küche 110, Funk 120), zuletzt der Verlauf (900). Angezeigt wird nur,
+// was `rechte()` für den Benutzer freigibt.
+export const ABSCHNITTE: readonly MitgliedAbschnitt[] = [
+  stammdatenAbschnitt,
+  zugangAbschnitt,
+  rollenAbschnitt,
+  verlaufAbschnitt,
+];
