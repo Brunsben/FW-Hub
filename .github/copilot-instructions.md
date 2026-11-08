@@ -122,8 +122,10 @@ Scopes:
   über `kameraden`. Diese Teilsicht gehört bewusst nicht in schema.ts
 - Policies core.kameraden: kameraden_lesen (eigene Zeile, psa_rolle
   Admin/Kleiderwart, app_rolle Admin), kameraden_anlegen und kameraden_aendern
-  (psa_rolle Admin/Kleiderwart, app_rolle Admin), dazu die Lese-Policies für
-  Food und Funk. Es gibt keine DELETE-Policy
+  **nur app_rolle Admin** (Migration 0015; bis 0014 durften auch psa_rolle
+  Admin/Kleiderwart schreiben), dazu die Lese-Policies für Food und Funk. Es
+  gibt keine DELETE-Policy. PSA Admin/Kleiderwart lesen alle Kameraden und
+  pflegen nur noch die Größen (psa.kamerad_details)
 - Policies core.benutzer: benutzer_select (globaler Admin alles, sonst die
   eigene Zeile), benutzer_insert/update/delete nur app_rolle Admin. Auch PSA-
   Admin/Kleiderwart schreiben core.benutzer nicht direkt
@@ -364,7 +366,7 @@ Schritte
    | Kamerad deaktivieren (Kleiderwart in /psa, Testkamerad mit Konto) | Kamerad inaktiv, Konto in /admin/benutzer inaktiv, Login des Kontos scheitert. Den eigenen Kameraden deaktivieren → 409 mit Meldung |
    | Karten-ID setzen (Küche-Verwaltung, Testkamerad) | Gespeichert. Dieselbe ID bei einem anderen Kameraden → 409. Im PSA-Formular ist das Feld schreibgeschützt. Anmeldung mit der Testkarte am Kiosk /food klappt |
    | Rollen ändern (Admin in /admin/benutzer, Testkamerad) | Rolle setzen und entfernen klappt. Das Konto des Testkameraden muss sich neu anmelden. Ein Kleiderwart kann keine Rollen ändern |
-   | Kamerad anlegen (Kleiderwart in /psa) | Stammdaten werden gespeichert |
+   | Kamerad anlegen (damals Kleiderwart in /psa; seit 0015 nur globaler Admin in /mitglieder) | Stammdaten werden gespeichert |
    | /food (Kiosk) und /funk als Funk-Admin | Seiten laden, Kameradenlisten erscheinen |
 9. **Abschluss**: Testkamerad bleibt inaktiv. Backup-Datei bis zum nächsten
    Tag aufbewahren. Uptime Kuma grün. drizzle/manual/create-fw-app-role.sql darf
@@ -384,6 +386,65 @@ Rückweg
   braucht bewusst das Löschen der Zeile mit dem höchsten created_at
 - Letzter Ausweg: Restore aus dem Backup (Änderungen seit dem Backup gehen
   verloren)
+
+### Ausrollen Migration 0015 (Kameraden schreiben nur globale Admins)
+Befehle gegen den Server führt der Mensch aus. 0015 ist restriktiv: Die ALTE App
+(vor Paket 4/5) kann danach keine Kameraden mehr als Kleiderwart anlegen oder
+ändern. Reihenfolge deshalb **App, dann 0015**. 0015 ersetzt nur zwei Policies
+(Anzahl Policies in core bleibt gleich) und braucht keine Rollenänderung.
+
+Vorbereitung (lokal, vorher grün): `npx tsc --noEmit`, `npm run build`,
+`node scripts/test-haertung.mjs` (106 Prüfungen), `node scripts/test-mitglieder-rechte.mjs`,
+`node scripts/test-mitglieder-lib.mjs`, mit Dev-Server `node scripts/test-mitglieder.mjs`.
+Rechtetest zusätzlich gegen einen Klon, dessen Owner weder Superuser noch
+BYPASSRLS hat (`TEST_DB=<klon> node scripts/test-haertung.mjs`).
+
+Schritte
+1. **Backup**: `/root/fw/FW-Hub/scripts/server-backup.sh` als root. Exit 0, neue
+   `.dump`-Datei in `/root/backups/fwhub/`, Kopie außerhalb des Servers
+2. **Code holen**: in `~/fw/FW-Hub` `git pull`
+3. **Stand erfassen** (als Owner im psql, `docker exec -it fw_postgres psql -U nocodb -d fwhub`):
+   ```sql
+   select count(*) from drizzle.__drizzle_migrations;            -- 15
+   select count(*) from pg_policies where schemaname = 'core';   -- 12
+   select policyname, with_check from pg_policies
+    where schemaname = 'core' and policyname = 'kameraden_anlegen'; -- enthält psa_rolle
+   ```
+4. **App ausrollen** in `~/fw/fwhub-stack`:
+   `docker compose build portal && docker compose up -d portal` (nie mit `-v`).
+   Prüfen: `/api/health` ok, Start-Schutz ohne Fehler im Log. Kurzer Smoke gegen
+   die noch alte Policy: Login, `/mitglieder`, `/psa`
+5. **Migration 0015**: in `~/fw/FW-Hub` `scripts/server-migrate.sh`. Erwartet
+   `Migrationen eingetragen: 15 -> 16` und `Policies in core: 12` vorher wie nachher
+6. **Policies prüfen** (als Owner):
+   ```sql
+   select policyname, coalesce(qual,'') || ' ' || coalesce(with_check,'')
+     from pg_policies
+    where schemaname = 'core' and policyname in ('kameraden_anlegen','kameraden_aendern');
+   -- nur noch app_rolle = 'Admin', kein psa_rolle
+   ```
+7. **Smoke-Test** mit Test-Konten, nicht mit echten Mitgliedern:
+   | Test | Erwartung |
+   |---|---|
+   | Globaler Admin: Kamerad in /mitglieder anlegen, Stammdaten ändern, deaktivieren | klappt, Änderungsverlauf zeigt den Eintrag |
+   | Kleiderwart: /psa öffnen | Größenübersicht und Ausrüstung laden, kein Kameradenformular |
+   | Kleiderwart: Größen eines Kameraden ändern (/mitglieder/[id] → PSA) | gespeichert |
+   | Kleiderwart: `/mitglieder/[id]` Stammdaten | nur lesend, kein Speichern |
+   | Küchen-Admin: Karten-ID setzen (Abschnitt Küche) | gespeichert (läuft über set_karten_id, unabhängig von 0015) |
+   | Funk-Gerätewart: /funk, Gerätezuteilung | Kameradenliste erscheint |
+   | Jede Rolle: /profil | "Meine Daten" nur lesend |
+8. **Abschluss**: Backup-Datei bis zum nächsten Tag aufbewahren, Uptime Kuma grün
+
+Rückweg
+- 0015 schlägt fehl: Es ist eine Transaktion, nichts wurde angewendet
+- Probleme nach 0015: Rücknahme-SQL aus dem Kopf von
+  drizzle/0015_kameraden_nur_admin_schreibt.sql als Owner ausführen (stellt die
+  Policies mit psa_rolle wieder her; der Eintrag für 0015 bleibt in
+  drizzle.__drizzle_migrations). Die neue App braucht diesen Rückweg nicht,
+  sie schreibt Kameraden nur als globaler Admin
+- Probleme in der App: vorheriges Image starten. Vor 0015 ist das ungefährlich;
+  nach 0015 kann die alte App Kameraden nicht als Kleiderwart schreiben, dann
+  zusätzlich das Rücknahme-SQL ausführen
 
 ### Offene Punkte (Datenbank)
 - **Eigene Owner-Rolle `fw_owner` statt Superuser `nocodb`** (nicht umgesetzt).
@@ -500,8 +561,23 @@ verlinken auf /mitglieder/[id] (`MitgliedLink`, Ziel aus `mitgliedLinkZiel`).
   Person, keine Route `GET /api/food/admin/users`). Namen in Ausrüstungstabelle,
   Funk-Geräteliste und "Heutige Anmeldungen" verlinken auf `/mitglieder/[id]`
   (`MitgliedLink`, bei Kürzung mit `title`). Auswahllisten (Ausgabe, Zuteilung)
-  bleiben. Die alten Schreibrouten `POST/PATCH/DELETE /api/psa/kameraden` bleiben
-  bis zur restriktiven Migration 0015 bestehen und werden danach entfernt
+  bleiben. Die früheren Schreibrouten `POST/PATCH/DELETE /api/psa/kameraden` sind
+  entfernt (405); `GET` bleibt für Auswahllisten. Kameraden anlegen, ändern und
+  deaktivieren geht nur über `/api/mitglieder*` als globaler Admin, in der
+  Datenbank durchgesetzt durch Migration 0015
+- **Profil ("Meine Daten", Paket 6):** `/profil` zeigt jede Person ihre eigenen
+  Abschnitte, nur lesend. Abschnitte mit `profil: true` in der Registry
+  (Stammdaten, PSA, Funk) erscheinen dort; Zugang, Rollen, Küche und Verlauf nicht.
+  PSA-Abschnitt sieht, wer PSA-Verwaltung ist oder bei sich selbst eine psa_rolle
+  hat (`kannPsaAbschnittSehen`), Funk entsprechend (`kannFunkAbschnittSehen`)
+- **Vorbereitung eigene Größen (nicht umgesetzt):** User sollen später ihre
+  Größen selbst pflegen. Dafür kein direktes Schreibrecht auf
+  psa.kamerad_details (User schreiben in PSA-Tabellen nie), sondern eine
+  SECURITY-DEFINER-Funktion `psa.eigene_groessen_setzen` nach dem Muster von
+  `core.eigene_pin_setzen` (nur die Zeile mit kamerad_id = app.kamerad_id, nur
+  die Größenspalten). Der Profil-Abschnitt ist darauf vorbereitet
+  (`bearbeiten` wird durchgereicht, `kannPsaAbschnittBearbeiten` bleibt
+  PSA-Verwaltung)
 - **Änderungsprotokoll:** Abschnitt "Änderungsverlauf" (nur globale Admins) aus
   `core.mitglieder_audit`
 - **Tests:** `scripts/test-mitglieder-rechte.mjs` und `test-mitglieder-lib.mjs`
