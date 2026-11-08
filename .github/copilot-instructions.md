@@ -446,6 +446,24 @@ Rückweg
   nach 0015 kann die alte App Kameraden nicht als Kleiderwart schreiben, dann
   zusätzlich das Rücknahme-SQL ausführen
 
+### Tests (scripts/)
+Alle Skripte laufen nur lokal (sie brechen bei nicht lokaler Datenbank oder
+nicht lokalem Server ab), legen Testdaten mit Zeitstempel-Präfix an und räumen nur
+über gemerkte IDs auf. "Dev-Server" heißt `npx next dev --webpack -p 3100`.
+| Skript | Prüft | Dev-Server |
+|---|---|---|
+| test-haertung.mjs | RLS, Spaltenrechte, Funktionen, Trigger, Änderungsprotokoll auf core.kameraden/benutzer; mit `TEST_DB=<klon>` gegen einen Klon mit Owner ohne BYPASSRLS | nein |
+| test-psa.mjs | RLS aller PSA-Tabellen je Rolle (DB) und PSA-API (Kreislauf, User-Schreibwege 403, Löschregeln, Changelog) | Teil 2 |
+| test-sitzungen.mjs | JWT-Claims, /api/admin/*, Token-Widerruf, PIN, Abmelden, Selbstschutz, Logout, Startseite/Kacheln, ungültige JWTs | ja |
+| test-food.mjs | Karten-ID-Route, set_karten_id, CSV-Import/-Export, Funk-Scope, /food/admin/heute | ja |
+| test-mitglieder.mjs, -rechte.mjs, -lib.mjs | Mitgliederverwaltung (API, Seiten, Profil), Rechteregeln, Validierung | ja / nein / nein |
+| test-login-sperre.mjs, test-login-deaktiviert.mjs, test-client-ip.mjs | Login-Sperre, deaktivierte Konten, Client-IP | ja / ja / nein |
+| test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
+| test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
+Der Letzte-Admin-Schutz ist auf Datenbankebene in test-haertung (1e/1f) geprüft.
+Über die API ist er seit 0015 nicht mehr erreichbar: Kameraden deaktivieren darf nur
+ein globaler Admin, und der Selbstschutz greift davor (test-sitzungen).
+
 ### Offene Punkte (Datenbank)
 - **Eigene Owner-Rolle `fw_owner` statt Superuser `nocodb`** (nicht umgesetzt).
   Aktuell gehören die core-Tabellen und -Funktionen der Rolle `nocodb`
