@@ -226,14 +226,28 @@ export function BenutzerManager({
                 return (
                   <TableRow key={row.id}>
                     <TableCell>
-                      {row.vorname} {row.name}
+                      {/* Lange Namen kürzen (voller Name per title), damit die
+                          Spalte "Aktionen" im sichtbaren Bereich bleibt. */}
+                      <span
+                        className="block max-w-[9rem] truncate"
+                        title={`${row.vorname} ${row.name}`}
+                      >
+                        {row.vorname} {row.name}
+                      </span>
                       {!row.kameradAktiv && (
-                        <span className="ml-1 text-xs text-muted-foreground">(Kamerad inaktiv)</span>
+                        <span className="block text-xs text-muted-foreground">(Kamerad inaktiv)</span>
                       )}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {row.benutzername}
-                      {selbst && <span className="ml-1 text-xs text-muted-foreground">(du)</span>}
+                      <div className="flex items-center gap-1">
+                        <span
+                          className="max-w-[9rem] truncate"
+                          title={row.benutzername}
+                        >
+                          {row.benutzername}
+                        </span>
+                        {selbst && <span className="shrink-0 text-xs font-normal text-muted-foreground">(du)</span>}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={row.rolle === "Admin" ? "default" : "secondary"}>{row.rolle}</Badge>
