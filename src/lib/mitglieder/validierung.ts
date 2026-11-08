@@ -3,7 +3,9 @@
 //
 // Bewusst nur Stammdaten: Rollenspalten und die Karten-ID werden hier nie
 // angenommen. Sie schreiben ausschließlich set_kamerad_rollen und set_karten_id.
-// Unbekannte Felder im Body werden ignoriert.
+// Wer sie trotzdem schickt, bekommt einen Fehler mit dem richtigen Ort (kein
+// stilles Ignorieren, sonst glaubt der Aufrufer, sie seien gespeichert).
+// Sonstige unbekannte Felder im Body werden ignoriert.
 
 export interface StammdatenEingabe {
   vorname?: string;
@@ -21,6 +23,17 @@ export interface LoginEingabe {
 }
 
 export type Pruefung<T> = { ok: true; daten: T } | { ok: false; fehler: string };
+
+const ROLLEN_FELDER = [
+  "psaRolle", "foodRolle", "fkRolle", "funkRolle",
+  "psa_rolle", "food_rolle", "fk_rolle", "funk_rolle", "rollen",
+];
+const KARTEN_FELDER = ["kartenId", "karten_id"];
+
+export const FEHLER_ROLLEN =
+  "Rollen werden hier nicht geändert: Rollen über /mitglieder/[id] → Rollen.";
+export const FEHLER_KARTEN_ID =
+  "Die Karten-ID wird hier nicht geändert: Karten-ID über den Abschnitt Küche.";
 
 const MAX = { vorname: 100, name: 100, dienstgrad: 50, email: 200, personalnummer: 50, benutzername: 64 };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,6 +76,8 @@ export function pruefeStammdaten(
   modus: "anlegen" | "aendern",
 ): Pruefung<StammdatenEingabe> {
   if (!istObjekt(body)) return { ok: false, fehler: "Ungültiger Body" };
+  if (ROLLEN_FELDER.some((f) => f in body)) return { ok: false, fehler: FEHLER_ROLLEN };
+  if (KARTEN_FELDER.some((f) => f in body)) return { ok: false, fehler: FEHLER_KARTEN_ID };
   const daten: StammdatenEingabe = {};
 
   for (const [feld, bezeichnung, pflicht] of [

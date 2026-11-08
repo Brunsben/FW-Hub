@@ -162,10 +162,10 @@ try {
   check("doppelter Benutzername (Groß-/Kleinschreibung egal) → 409, kein Mitglied angelegt", r.status === 409 && (await owner`select id from core.kameraden where name = ${stamp + "-zwei"}`).length === 0, `${r.status} ${r.json?.error}`);
   r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "Drei", name: `${stamp}-drei`, login: { benutzername: `${stamp}-l3`, pin: "123" } });
   check("PIN zu kurz → 400, kein Mitglied angelegt", r.status === 400 && (await owner`select id from core.kameraden where name = ${stamp + "-drei"}`).length === 0);
-  r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "Rollen", name: `${stamp}-rollen`, psaRolle: "Admin", psa_rolle: "Admin", kartenId: "x", karten_id: "y" });
-  const rId = r.json?.mitglied?.id; if (rId) ids.kam.push(rId);
-  const rRow = rId ? (await owner`select psa_rolle, karten_id from core.kameraden where id = ${rId}`)[0] : null;
-  check("Rollen und Karten-ID im Body werden beim Anlegen ignoriert", r.status === 201 && rRow?.psa_rolle === null && rRow?.karten_id === null);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "Rollen", name: `${stamp}-rollen`, psaRolle: "Admin" });
+  check("Anlegen mit Rollen im Body → 400 mit Hinweis, nichts angelegt", r.status === 400 && r.json?.error?.includes("Rollen über /mitglieder/[id] → Rollen") && (await owner`select id from core.kameraden where name = ${stamp + "-rollen"}`).length === 0, `${r.status} ${r.json?.error}`);
+  r = await api("POST", "/api/mitglieder", admin.cookie, { vorname: "Karte", name: `${stamp}-karte`, kartenId: "x" });
+  check("Anlegen mit Karten-ID im Body → 400 mit Hinweis, nichts angelegt", r.status === 400 && r.json?.error?.includes("Karten-ID über den Abschnitt Küche") && (await owner`select id from core.kameraden where name = ${stamp + "-karte"}`).length === 0, `${r.status} ${r.json?.error}`);
 
   // ── Ändern, Deaktivieren, Reaktivieren ─────────────────────────────────────
   r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, kw.cookie, { dienstgrad: "X" });
@@ -178,10 +178,14 @@ try {
   check("Ändern mit ungültiger id → 400", r.status === 400);
   r = await api("PATCH", `/api/mitglieder/2147483000`, admin.cookie, { dienstgrad: "X" });
   check("Ändern eines unbekannten Mitglieds → 404", r.status === 404);
-  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { dienstgrad: "OBM", psaRolle: "Admin", kartenId: "geklaut", rolle: "Admin" });
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { dienstgrad: "X", psaRolle: "Admin" });
+  check("Ändern mit Rollen im Body → 400 mit Hinweis", r.status === 400 && r.json?.error?.includes("Rollen über /mitglieder/[id] → Rollen"), `${r.status} ${r.json?.error}`);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { dienstgrad: "X", kartenId: "geklaut" });
+  check("Ändern mit Karten-ID im Body → 400 mit Hinweis", r.status === 400 && r.json?.error?.includes("Karten-ID über den Abschnitt Küche"), `${r.status} ${r.json?.error}`);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { dienstgrad: "OBM" });
   const zRow = (await owner`select psa_rolle, karten_id, dienstgrad from core.kameraden where id = ${ziel.kamerad}`)[0];
   check("Admin ändert den Dienstgrad → 200", r.status === 200 && r.json.mitglied.dienstgrad === "OBM" && zRow.dienstgrad === "OBM");
-  check("Rollen und Karten-ID im Body werden beim Ändern ignoriert", zRow.psa_rolle === "User" && zRow.karten_id === `K-${stamp}`);
+  check("Nach den abgelehnten Anfragen sind Rollen und Karten-ID unverändert", zRow.psa_rolle === "User" && zRow.karten_id === `K-${stamp}`);
   r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { personalnummer: `P${stamp}kw` });
   check("Personalnummer einer anderen Person → 409", r.status === 409, `${r.status} ${r.json?.error}`);
   r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { aktiv: false });

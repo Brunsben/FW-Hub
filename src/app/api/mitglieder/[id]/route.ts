@@ -35,7 +35,8 @@ export async function GET(
 // Stammdaten ändern, Kamerad deaktivieren und reaktivieren (nur globaler Admin).
 //   Body: beliebige von { vorname, name, dienstgrad, email, personalnummer, aktiv }
 // Rollen, Karten-ID und Zugang gehören nicht hierher (set_kamerad_rollen,
-// set_karten_id, /api/admin/benutzer) und werden aus dem Body ignoriert.
+// set_karten_id, /api/admin/benutzer). Rollen und Karten-ID im Body lehnt die
+// Prüfung mit 400 und dem Hinweis auf den richtigen Ort ab.
 // Die Deaktivierung eines Kameraden sperrt dessen Login über den Trigger
 // core.kamerad_deaktiviert; Reaktivieren öffnet den Login NICHT wieder.
 // Schutzregeln (eigener Kamerad, letzter Admin) kommen als 409 aus dem Trigger.
