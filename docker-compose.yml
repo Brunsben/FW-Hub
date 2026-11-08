@@ -80,7 +80,7 @@ services:
   # Passwort mit Sonderzeichen in der URL kodiert eintragen (wie bei fw_app).
   # Auf dem Server liegt nur ~/fw/fwhub-stack (Service portal) und der Postgres
   # gehört zu einem anderen Compose-Projekt: Dort NICHT "docker compose run
-  # migrate" verwenden, sondern docker build/run (siehe
+  # migrate" verwenden, sondern scripts/server-migrate.sh (siehe
   # .github/copilot-instructions.md, "Produktion: Server-Struktur").
   migrate:
     profiles: ["migrate"]

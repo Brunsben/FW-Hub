@@ -17,8 +17,8 @@ COPY . .
 RUN npm run build
 
 # ── Stage 3: Migrationsdienst ───────────────────────────
-# Eigenes kleines Image für Migrationen. Server: `docker build --target migrate`
-# und `docker run` (siehe .github/copilot-instructions.md, "Produktion:
+# Eigenes kleines Image für Migrationen. Server: scripts/server-migrate.sh (baut
+# dieses Image und startet es; siehe .github/copilot-instructions.md, "Produktion:
 # Server-Struktur und Migrationen"). Entwicklung: `docker compose run --rm migrate
 # [--bis 0012]` mit der docker-compose.yml des Repos.
 # Enthält nur scripts/migrate.mjs, drizzle/ (SQL + Journal) und die zwei Pakete,

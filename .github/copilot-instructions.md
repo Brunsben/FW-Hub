@@ -34,10 +34,9 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
 - MIGRATE_DATABASE_URL → Owner-Rolle. NUR für Migrationen über
   `node scripts/migrate.mjs` (npm run db:migrate). Wendet alle ausstehenden
   Migrationen in einer Transaktion an; `--bis 0012` begrenzt den Lauf auf eine
-  Nummer. Auf dem Server über das Migrations-Image (`docker build --target
-  migrate`, dann `docker run`), siehe "Produktion: Server-Struktur und
-  Migrationen". Nie mit fw_app migrieren, nie `drizzle-kit migrate`
-  (verschluckt Fehler).
+  Nummer. Auf dem Server über `scripts/server-migrate.sh`, siehe "Produktion:
+  Server-Struktur und Migrationen". Nie mit fw_app migrieren, nie
+  `drizzle-kit migrate` (verschluckt Fehler).
 - Startschutz (src/instrumentation.ts → lib/db/startup-check.ts): In
   Produktion bricht der Start ab, wenn AUTH_DATABASE_URL fehlt, die
   Hauptverbindung Superuser/BYPASSRLS hat oder die Auth-Verbindung Superuser
@@ -149,22 +148,26 @@ Aufbau auf dem Server
 - Die docker-compose.yml im Repo (mit Service `migrate`) ist die
   Entwicklungs- und Referenzdatei. Auf dem Server wird sie NICHT benutzt
 
-Migrationen auf dem Server. Bewusst kein `docker compose run`: Compose könnte
-sonst im falschen Projekt einen zweiten Postgres auf dasselbe Volume starten.
-1. In `~/fw/FW-Hub`: `git pull`, dann `docker build --target migrate -t fwhub-migrate .`
-   Das Image enthält scripts/migrate.mjs, die SQL-Dateien und das Journal. Nach
-   jedem `git pull` neu bauen, sonst fehlen neue Migrationen
-2. `docker run --rm --network fw-network --env-file <datei> fwhub-migrate [--bis 0012]`
-   - `<datei>` enthält eine Zeile
-     `MIGRATE_DATABASE_URL=postgresql://<owner>:<passwort>@fw_postgres:5432/fwhub`
-     (Passwort URL-kodiert, Datei mit `chmod 600` außerhalb des Repos, z. B.
-     `~/fw/migrate.env`). Mit `-e MIGRATE_DATABASE_URL=...` statt `--env-file`
-     landet das Passwort in der Shell-History
-   - Ohne Argument werden ALLE ausstehenden Migrationen in EINER Transaktion
-     angewendet. `--bis 0012` endet nach dieser Nummer
-   - Erwartete Ausgabe: `Migrationen eingetragen: <vorher> -> <nachher>`
-   - Die Rolle muss Eigentümerin der Tabellen sein (aktuell `nocodb`, siehe
-     "Offene Punkte")
+Migrationen auf dem Server: in `~/fw/FW-Hub` nach `git pull`
+`scripts/server-migrate.sh [--bis 0012]`. Bewusst kein `docker compose run`:
+Compose könnte sonst im falschen Projekt einen zweiten Postgres auf dasselbe
+Volume starten. Das Skript
+- baut das Migrations-Image neu (Dockerfile-Stage `migrate`: migrate.mjs, SQL
+  und Journal), sodass nach einem `git pull` keine Migration fehlt
+- liest POSTGRES_USER und POSTGRES_PASSWORD zur Laufzeit aus dem Container
+  `fw_postgres`. Es gibt keine Passwortdatei, und das Passwort steht nicht in
+  der Befehlszeile, in der Shell-History oder in der Ausgabe
+- startet einen kurzlebigen Container im Netz `fw-network`, kodiert die Zugangs-
+  daten URL-konform und migriert `fw_postgres:5432/fwhub`
+- reicht alle Argumente an scripts/migrate.mjs durch. Ohne Argument werden ALLE
+  ausstehenden Migrationen in EINER Transaktion angewendet, `--bis 0012` endet
+  nach dieser Nummer
+- gibt am Ende die Zahl der Migrationen und der Policies in core aus und endet
+  mit dem Exit-Code der Migration
+Erwartete Ausgabe: `Migrationen eingetragen: <vorher> -> <nachher>`, danach
+`Migrationen: <Anzahl>` und `Policies in core: <Anzahl>`. Die Migrationsrolle
+ist POSTGRES_USER des Containers und muss Eigentümerin der Tabellen sein
+(aktuell `nocodb`, siehe "Offene Punkte").
 
 App ausrollen: in `~/fw/fwhub-stack` `docker compose build portal && docker
 compose up -d portal`. Nie `docker compose down -v` (das Postgres-Volume
@@ -185,7 +188,7 @@ Was man wissen muss
 
 Schritte
 1. **Vorbereitung**: Lokal tsc, Build, test-haertung.mjs und test-ui-a.mjs
-   grün. Auf dem Server `git pull` und das Migrations-Image bauen. Test-Konten
+   grün. Auf dem Server `git pull` in `~/fw/FW-Hub`. Test-Konten
    für den Smoke-Test festlegen: ein Testkamerad mit Benutzer, klar benannt
    (z. B. "Test-Rollout"). Kameraden werden nie gelöscht, der Testkamerad
    bleibt danach inaktiv
@@ -206,24 +209,23 @@ Schritte
      select count(*) from core.benutzer where rolle = 'Admin' and aktiv;   -- mindestens 1
      select distinct tableowner from pg_tables where schemaname = 'core';  -- = Migrationsrolle
      ```
-4. **Migrationsrolle prüfen**: Die Rolle in MIGRATE_DATABASE_URL muss genau die
-   sein, die die letzte Abfrage nennt, sonst fehlen ihr Rechte an den
-   Tabellen. Die frühere Pflicht, den Eigentümer von set_karten_id auf eine
+4. **Migrationsrolle prüfen**: POSTGRES_USER von `fw_postgres` (die Rolle, mit
+   der das Skript migriert) muss genau die sein, die die letzte Abfrage nennt,
+   sonst fehlen ihr Rechte an den Tabellen. Die frühere Pflicht, den Eigentümer von set_karten_id auf eine
    Rolle mit RLS-Bypass zu stellen, entfällt ab 0012 (die Funktion arbeitet
    jetzt ohne Bypass)
-5. **Migration 0012**: Migrations-Container mit `--bis 0012`, erwartet
-   `12 -> 13`. Prüfen:
-   `select count(*) from pg_policies where schemaname = 'core'` ergibt 12 (alte
-   und neue Policies), `relrowsecurity` und `relforcerowsecurity` sind für
-   kameraden und benutzer `t`, Trigger `kameraden_deaktiviert_benutzer` auf
+5. **Migration 0012**: `scripts/server-migrate.sh --bis 0012`, erwartet
+   `12 -> 13` und `Policies in core: 12` (alte und neue Policies). Prüfen:
+   `relrowsecurity` und `relforcerowsecurity` sind für kameraden und benutzer
+   `t`, Trigger `kameraden_deaktiviert_benutzer` auf
    core.kameraden vorhanden, Funktionen eigene_pin_setzen,
    eigene_sitzungen_beenden, kamerad_deaktiviert, set_kamerad_rollen und
    set_karten_id in core. Die alte App läuft weiter: Login und /psa öffnen
 6. **App ausrollen** (Befehle oben, nie mit `-v`). Prüfen: /api/health ist ok,
    der Start-Schutz meldet im Log keinen Fehler. Kurzer Smoke gegen den
    additiven Stand: Login, /admin/benutzer, /psa
-7. **Migration 0013**: Migrations-Container ohne Argument, erwartet `13 -> 14`.
-   Prüfen: Policies in core = 10, kameraden_scope und benutzer_scope sind weg.
+7. **Migration 0013**: `scripts/server-migrate.sh`, erwartet `13 -> 14` und
+   `Policies in core: 10`. Prüfen: kameraden_scope und benutzer_scope sind weg.
    Dann die Rechte:
    ```sql
    select has_table_privilege('fw_app', 'core.kameraden', 'INSERT'),            -- f
@@ -273,7 +275,8 @@ Rückweg
   Migrationen aus. Die Funktionen aus 0012 sind schon gegen einen Eigentümer
   ohne BYPASSRLS getestet, sie müssen nicht geändert werden. Zu erledigen sind
   Rolle anlegen, Eigentum und Schema-Rechte übertragen (auch psa, fw_funk,
-  fw_food), MIGRATE_DATABASE_URL umstellen, create-fw-app-role.sql und diese
+  fw_food), scripts/server-migrate.sh auf die neue Rolle umstellen (liest bisher
+  POSTGRES_USER aus fw_postgres), create-fw-app-role.sql und diese
   Anleitung nachziehen und mit test-haertung gegen einen Klon mit dieser Rolle
   prüfen
 
