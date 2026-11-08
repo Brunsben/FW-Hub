@@ -44,7 +44,8 @@ let fail = 0;
 const check = (n, c, i = "") => { if (!c) fail++; console.log(`${c ? "OK  " : "FEHLER"} ${n}${i ? " — " + i : ""}`); };
 const ids = { kam: [], ben: [] }, namen = [], ips = [];
 let ipZaehler = 0;
-const neueIp = () => { const ip = `10.88.${Math.floor(Math.random() * 200) + 1}.${++ipZaehler}`; ips.push(ip); return ip; };
+// Dokumentationsbereich 203.0.113.0/24: gilt als öffentliche Adresse (private würden als "unbekannt" gewertet).
+const neueIp = () => { const ip = `203.0.113.${++ipZaehler}`; ips.push(ip); return ip; };
 const hash = await bcrypt.hash(PIN, 12);
 
 async function mk(suffix, { benutzerAktiv = true, kameradAktiv = true } = {}) {
@@ -111,8 +112,10 @@ try {
   const f6 = await login(F.name, FALSCH, ipF);
   check("deaktiviert + richtige PIN: 5x 403, 6. Versuch gesperrt (429)", eStat.every((s) => s === 403) && e6.status === 429, `${eStat} / ${e6.status}`);
   check("falsche PIN: 5x 401, 6. Versuch gesperrt (429), identisch", fStat.every((s) => s === 401) && f6.status === 429, `${fStat} / ${f6.status}`);
-  const g = await login(F.name, PIN, neueIp());
-  check("Gesperrt bleibt gesperrt, auch mit richtiger PIN und fremder IP (429)", g.status === 429);
+  const g = await login(F.name, PIN, ipF);
+  check("Gesperrt bleibt gesperrt, auch mit richtiger PIN von derselben IP (429)", g.status === 429);
+  const g2 = await login(F.name, PIN, neueIp());
+  check("Von einer anderen IP ist derselbe Name NICHT gesperrt (Name+IP-Sperre)", g2.status === 200, String(g2.status));
 
   // ── Laufzeit: Mediane über je 7 Versuche (Zähler zwischen den Versuchen löschen, sonst Sperre)
   const U1 = await mk("t1"), U2 = await mk("t2", { benutzerAktiv: false });

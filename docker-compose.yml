@@ -34,8 +34,13 @@ services:
     image: nginx:1.29-alpine
     container_name: fw_nginx
     logging: *default-logging
+    # NUR auf Loopback binden. Der Cloudflare Tunnel (cloudflared als Host-Dienst)
+    # verbindet auf 127.0.0.1:8180, und nginx vertraut dafür der Gateway-Adresse
+    # des Docker-Netzes (set_real_ip_from in nginx.conf). Auf 0.0.0.0 gebunden
+    # könnte jeder im Netz über diese Adresse die Client-IP fälschen und die
+    # IP-Sperre des Logins umgehen.
     ports:
-      - "${PORTAL_PORT:-8180}:8080"
+      - "127.0.0.1:${PORTAL_PORT:-8180}:8080"
     volumes:
       - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
       - ./nginx-ratelimit.conf:/etc/nginx/conf.d/ratelimit.conf:ro

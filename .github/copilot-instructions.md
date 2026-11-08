@@ -174,6 +174,43 @@ App ausrollen: in `~/fw/fwhub-stack` `docker compose build portal && docker
 compose up -d portal`. Nie `docker compose down -v` (das Postgres-Volume
 setup_postgres_data ist external).
 
+### Produktion: Client-IP, Tunnel und Login-Sperre
+Ausführlich in `drizzle/manual/login-sperre.md`. Kurzfassung:
+
+Aufbau (Stand 08.11.2026): Browser → Cloudflare → **Cloudflare Tunnel**
+(`cloudflared` als Host-Dienst) → `http://127.0.0.1:8180` → nginx (`fw_nginx`)
+→ `portal`. Die Client-IP kommt aus `CF-Connecting-IP`, nginx macht daraus
+`$remote_addr` und `X-Real-IP`, die App liest nur `X-Real-IP` (Fallback: letzter
+Eintrag von `X-Forwarded-For`).
+
+- **Portbindung:** nginx 8180 ist auf `127.0.0.1` gebunden. **Er darf nicht
+  wieder auf `0.0.0.0` gebunden werden.** Sonst kann jeder im LAN über die
+  Gateway-Adresse `CF-Connecting-IP` fälschen und die IP-Sperre umgehen.
+  8190 (Uptime-Kuma-Proxy, aus dem LAN genutzt) und 8192 (Homarr) sind davon
+  unabhängig
+- **Warum `set_real_ip_from 172.18.0.1`:** Eine Verbindung vom Host auf einen
+  veröffentlichten Docker-Port sieht der Container mit der Gateway-Adresse des
+  Docker-Netzes als Absender. Ohne die Zeile ignoriert nginx `CF-Connecting-IP`
+  und alle Nutzer hätten dieselbe interne Adresse. Vertretbar ist das nur wegen
+  der Loopback-Bindung. Bei Änderungen am Docker-Netz die Gateway-Adresse neu
+  prüfen (`docker network inspect <netz>`)
+- **Die Cloudflare-Netze** in `nginx.conf` (IPv4 und IPv6) sind nur für den
+  direkten Proxy-Betrieb relevant, im Tunnel-Betrieb unwirksam
+- **Server-Dateien nicht im Repo:** `feuerwehr-portal/docker-compose.yml` und die
+  dortige nginx-Konfiguration wurden auf dem Server lokal angepasst. `nginx.conf`
+  und `docker-compose.yml` im Repo sind die Referenz und werden von Hand
+  abgeglichen
+- **Login-Sperre:** 5 Fehlversuche je Name+IP, 50 je Name (alle IPs), 30 je IP,
+  jeweils 15 Minuten. IPv6 wird pro /64 gezählt. Private, Loopback-, Docker- und
+  ungültige Adressen gelten als "unbekannt" (Warnung im Log, keine IP-Sperre).
+  Eine Logzeile `Login-Sperre: Client-IP … nicht öffentlich` bedeutet: Die
+  Proxy-Kette ist kaputt
+- **Prüfen:** `SELECT ip, count(*) FROM core.login_attempts GROUP BY ip ORDER BY
+  2 DESC LIMIT 10;` zeigt echte öffentliche Adressen, wenn die Kette stimmt
+- **Tests:** `node scripts/test-client-ip.mjs` (ohne Server),
+  `node scripts/test-login-sperre.mjs` und `node scripts/test-login-deaktiviert.mjs`
+  (mit lokalem Dev-Server)
+
 ### Produktion: Backup
 `scripts/server-backup.sh` sichert die Datenbank `fwhub` aus dem Container
 `fw_postgres` (`pg_dump -Fc`) nach `/root/backups/fwhub/` und läuft täglich per
