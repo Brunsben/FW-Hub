@@ -91,16 +91,15 @@ try {
   const admG = { "app.kamerad_id": ADM, "app.app_rolle": "Admin" };
   const tvVon = async (tx, id) => (await tx`select token_version tv, aktiv from core.benutzer where id = ${id}`)[0];
 
-  // ── 1. Kleiderwart deaktiviert Kamerad -> Benutzer deaktiviert, token_version + 1
+  // ── 1. Kamerad deaktivieren -> Benutzer deaktiviert, token_version + 1 (nur globaler Admin darf, Migration 0015)
   await als(kwG, async (tx) => {
-    const vorher = await tvVon(tx, zielB); // Kleiderwart sieht fremde Benutzer nicht mehr -> undefined
+    const vorher = await tvVon(tx, zielB); // Kleiderwart sieht fremde Benutzer nicht -> undefined
     check("Kleiderwart sieht fremde core.benutzer nicht (benutzer_select)", vorher === undefined);
   });
   const tv0 = (await owner`select token_version tv from core.benutzer where id = ${zielB}`)[0].tv;
-  await als(kwG, async (tx) => {
+  await als(admG, async (tx) => {
     const r = await tx`update core.kameraden set aktiv = false, updated_at = now() where id = ${ZIEL} returning id`;
-    check("1 Kleiderwart deaktiviert Kamerad (UPDATE aktiv)", r.length === 1);
-    await tx`select set_config('app.app_rolle','Admin',true)`; // nur zum Lesen im Test
+    check("1 globaler Admin deaktiviert Kamerad (UPDATE aktiv)", r.length === 1);
     const z = await tvVon(tx, zielB);
     check("1 Benutzer des Kameraden deaktiviert", z.aktiv === false);
     check("1 token_version um 1 erhöht", z.tv === tv0 + 1, `${tv0} -> ${z.tv}`);
@@ -108,9 +107,18 @@ try {
   const nach = (await owner`select aktiv, token_version tv from core.benutzer where id = ${zielB}`)[0];
   check("1 Rollback wirksam (Testdaten unverändert)", nach.aktiv === true && nach.tv === tv0);
 
-  await als(kwG, async (tx) => {
-    const e = await fehler(tx, "FW001", (sp) => sp`update core.kameraden set aktiv = false where id = ${KW}`);
-    check("1b Kleiderwart kann eigenen Kameraden nicht deaktivieren (FW001)", e.ok, e.got);
+  // Migration 0015: Kleiderwart und PSA Admin können Kameraden nicht mehr ändern, also auch nicht deaktivieren
+  for (const [n, g] of [["Kleiderwart", kwG], ["PSA Admin", { "app.kamerad_id": KW, "app.psa_rolle": "Admin" }]]) {
+    await als(g, async (tx) => {
+      const r = await tx`update core.kameraden set aktiv = false where id = ${ZIEL} returning id`;
+      check(`1h ${n} deaktiviert Kamerad → 0 Zeilen (nur globaler Admin, 0015)`, r.length === 0);
+      await tx`select set_config('app.app_rolle','Admin',true)`; // nur zum Lesen im Test
+      check(`1h ${n}: Benutzer der Person bleibt aktiv, token_version unverändert`, (await tvVon(tx, zielB)).aktiv === true);
+    });
+  }
+  await als(admG, async (tx) => {
+    const e = await fehler(tx, "FW001", (sp) => sp`update core.kameraden set aktiv = false where id = ${ADM}`);
+    check("1b globaler Admin kann den eigenen Kameraden nicht deaktivieren (FW001)", e.ok, e.got);
     const r = await tx`update core.kameraden set aktiv = false where id = ${FREI} returning id`;
     check("1c Kamerad ohne Account deaktivieren geht", r.length === 1);
     const r2 = await tx`update core.kameraden set aktiv = false where id = ${FREI} returning id`;
@@ -123,13 +131,13 @@ try {
       await tx`update core.benutzer set aktiv = false where rolle = 'Admin' and id <> ${admB}`;
       await tx`set local role fw_app`;
       await tx`select set_config('app.kamerad_id', ${String(KW)}, true)`;
-      await tx`select set_config('app.psa_rolle', 'Kleiderwart', true)`;
+      await tx`select set_config('app.app_rolle', 'Admin', true)`;
       const e = await fehler(tx, "FW001", (sp) => sp`update core.kameraden set aktiv = false where id = ${ADM}`);
       check("1e letzter aktiver Admin kann nicht per Kamerad-Deaktivierung wegfallen (FW001)", e.ok, e.got);
       throw new Rollback();
     });
   } catch (e) { if (!(e instanceof Rollback)) throw e; }
-  await als(kwG, async (tx) => {
+  await als({ "app.kamerad_id": KW, "app.app_rolle": "Admin" }, async (tx) => {
     const r = await tx`update core.kameraden set aktiv = false where id = ${ADM} returning id`;
     check("1f Mit weiterem aktiven Admin ist Deaktivierung erlaubt", r.length === 1);
   });
@@ -190,10 +198,11 @@ try {
     check("3 set_kamerad_rollen als Kleiderwart -> abgelehnt", e.ok, e.got);
     e = await fehler(tx, "42501", (sp) => sp`delete from core.kameraden where id = ${ZIEL}`);
     check("3 Kleiderwart löscht Kamerad -> abgelehnt", e.ok, e.got);
-    const neu = await tx`insert into core.kameraden (name, vorname, dienstgrad, email, personalnummer, aktiv) values (${stamp + "-neu"}, 'Hrt', 'OFM', 'a@b.c', ${stamp}, true) returning id`;
-    check("3 Kleiderwart legt Kamerad mit Stammdaten an (erlaubt)", neu.length === 1);
+    // Migration 0015: Stammdaten schreiben nur noch globale Admins
+    e = await fehler(tx, "42501", (sp) => sp`insert into core.kameraden (name, vorname, dienstgrad, email, personalnummer, aktiv) values (${stamp + "-neu"}, 'Hrt', 'OFM', 'a@b.c', ${stamp}, true)`);
+    check("3 Kleiderwart legt Kamerad mit Stammdaten an → abgelehnt (nur globaler Admin, 0015)", e.ok, e.got);
     const up = await tx`update core.kameraden set vorname = 'Neu', dienstgrad = 'HFM', updated_at = now() where id = ${ZIEL} returning id`;
-    check("3 Kleiderwart ändert Stammdaten (erlaubt)", up.length === 1);
+    check("3 Kleiderwart ändert Stammdaten → 0 Zeilen (nur globaler Admin, 0015)", up.length === 0);
     const alle = await tx`select id from core.kameraden`;
     check("3 Kleiderwart sieht alle Kameraden", alle.length > 4, `${alle.length} Zeilen`);
     const bs = await tx`select id from core.benutzer`;
@@ -202,6 +211,21 @@ try {
     await tx`select core.set_karten_id(${ZIEL}::integer, ${"k-" + stamp})`;
     const kk = (await tx`select karten_id from core.kameraden where id = ${ZIEL}`)[0].karten_id;
     check("3 set_karten_id MIT food_rolle=Admin funktioniert", kk === "k-" + stamp);
+  });
+
+  // ── 3a. PSA Admin: ebenfalls keine Stammdaten mehr (0015); globaler Admin darf
+  await als({ "app.kamerad_id": KW, "app.psa_rolle": "Admin" }, async (tx) => {
+    const e = await fehler(tx, "42501", (sp) => sp`insert into core.kameraden (name, vorname) values ('a', 'b')`);
+    check("3a PSA Admin legt Kamerad an → abgelehnt (0015)", e.ok, e.got);
+    const up = await tx`update core.kameraden set vorname = 'Neu' where id = ${ZIEL} returning id`;
+    check("3a PSA Admin ändert Stammdaten → 0 Zeilen (0015)", up.length === 0);
+    check("3a PSA Admin liest weiterhin alle Kameraden", (await tx`select id from core.kameraden`).length > 4);
+  });
+  await als(admG, async (tx) => {
+    const neu = await tx`insert into core.kameraden (name, vorname, dienstgrad, email, personalnummer, aktiv) values (${stamp + "-neu"}, 'Hrt', 'OFM', 'a@b.c', ${stamp}, true) returning id`;
+    check("3a globaler Admin legt Kamerad mit Stammdaten an (erlaubt)", neu.length === 1);
+    const up = await tx`update core.kameraden set vorname = 'Neu', dienstgrad = 'HFM', updated_at = now() where id = ${ZIEL} returning id`;
+    check("3a globaler Admin ändert Stammdaten (erlaubt)", up.length === 1);
   });
 
   // ── 3b. Küchen-Admin NUR mit food_rolle (ohne psa_rolle, ohne app_rolle): echter Einsatzfall von set_karten_id
@@ -292,15 +316,15 @@ try {
     await tx`select set_config('app.app_rolle','Admin',true)`;
     return tx`select abschnitt, feld, alt, neu, akteur_kamerad_id, akteur_name from core.mitglieder_audit where kamerad_id = ${kamerad} order by id`;
   };
-  await als(kwG, async (tx) => {
+  await als(admG, async (tx) => {
     await tx`update core.kameraden set vorname = 'Geändert', dienstgrad = 'HFM', updated_at = now() where id = ${ZIEL}`;
     const z = await auditLesen(tx, ZIEL);
     const vn = z.find((x) => x.feld === "vorname"), dg = z.find((x) => x.feld === "dienstgrad");
-    check("7 Kleiderwart ändert Stammdaten → Protokoll mit altem/neuem Wert", vn?.alt === "Hrt" && vn?.neu === "Geändert" && dg?.neu === "HFM" && vn?.abschnitt === "stammdaten");
-    check("7 Protokoll nennt den Akteur (Kamerad-ID und Name)", vn?.akteur_kamerad_id === KW && vn?.akteur_name === `Hrt ${stamp}-kw`, `${vn?.akteur_kamerad_id} ${vn?.akteur_name}`);
+    check("7 globaler Admin ändert Stammdaten → Protokoll mit altem/neuem Wert", vn?.alt === "Hrt" && vn?.neu === "Geändert" && dg?.neu === "HFM" && vn?.abschnitt === "stammdaten");
+    check("7 Protokoll nennt den Akteur (Kamerad-ID und Name)", vn?.akteur_kamerad_id === ADM && vn?.akteur_name === `Hrt ${stamp}-adm`, `${vn?.akteur_kamerad_id} ${vn?.akteur_name}`);
     check("7 unveränderte Felder erzeugen keinen Eintrag", !z.some((x) => x.feld === "name" || x.feld === "email"));
   });
-  await als(kwG, async (tx) => {
+  await als(admG, async (tx) => {
     await tx`update core.kameraden set aktiv = false where id = ${ZIEL}`;
     const z = await auditLesen(tx, ZIEL);
     check("7 Deaktivieren: Eintrag für den Kameraden UND für den Zugang (Trigger-Kette)",

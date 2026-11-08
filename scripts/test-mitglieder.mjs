@@ -406,6 +406,18 @@ try {
   check("Profil Kleiderwart: Stammdaten und PSA, im Profil trotzdem nur lesend", JSON.stringify(abschnitteIn(s.html)) === '["stammdaten","psa"]' && !hat(s.html, 'id="psa-jackeGroesse"') && !hat(s.html, "Größen speichern"), `${abschnitteIn(s.html)}`);
   s = await profil(kueche);
   check("Profil Küchen-Admin: nur Stammdaten (Karten-ID und QR-Link gehören nicht ins Profil)", JSON.stringify(abschnitteIn(s.html)) === '["stammdaten"]' && !hat(s.html, `K-${stamp}`) && !hat(s.html, "QR-Link"), `${abschnitteIn(s.html)}`);
+
+  // ── Paket 7: alte Schreibrouten /api/psa/kameraden sind entfernt, GET bleibt ──
+  for (const m of ["POST", "PATCH", "DELETE"]) {
+    for (const [n, k] of [["Kleiderwart", kw], ["globaler Admin", admin]]) {
+      s = await api(m, "/api/psa/kameraden", k.cookie, { name: "x" });
+      check(`${m} /api/psa/kameraden als ${n} → 405 (Route entfernt)`, s.status === 405, `${s.status}`);
+    }
+  }
+  s = await api("GET", "/api/psa/kameraden?nurAktiv=true", kw.cookie);
+  check("GET /api/psa/kameraden (Auswahllisten) liefert weiter Kameraden", s.status === 200 && Array.isArray(s.json?.kameraden) && s.json.kameraden.length > 0, `${s.status}`);
+  s = await api("GET", "/api/psa/kameraden", undefined);
+  check("GET /api/psa/kameraden ohne Anmeldung → 401", s.status === 401, `${s.status}`);
 } finally {
   // Aufräumen nur über gemerkte IDs und exakte Namen
   try {

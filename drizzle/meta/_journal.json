@@ -106,6 +106,13 @@
       "when": 1794147225623,
       "tag": "0014_mitglieder_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794158736213,
+      "tag": "0015_kameraden_nur_admin_schreibt",
+      "breakpoints": true
     }
   ]
 }
