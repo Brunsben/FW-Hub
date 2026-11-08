@@ -15,6 +15,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
+import { schutz } from "./lib/schutz.mjs";
 
 const P = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const ENV = `${P}/.env.local`;
@@ -23,12 +24,7 @@ const req = createRequire(`${P}/package.json`);
 const postgres = (await import(pathToFileURL(req.resolve("postgres")).href)).default;
 const ziel = (u) => { if (!process.env.TEST_DB) return u; const x = new URL(u); x.pathname = `/${process.env.TEST_DB}`; return x.toString(); };
 
-// Schutz: legt Testdaten an. Nur gegen lokale Datenbanken.
-const lokal = (h) => ["localhost", "127.0.0.1", "[::1]", "::1"].includes(h);
-for (const name of ["DATABASE_URL", "MIGRATE_DATABASE_URL"]) {
-  if (!process.env[name]) { console.error(`Abbruch: ${name} ist nicht gesetzt.`); process.exit(2); }
-  if (!lokal(new URL(process.env[name]).hostname)) { console.error(`Abbruch: ${name} zeigt nicht auf eine lokale Datenbank.`); process.exit(2); }
-}
+schutz({ db: ["DATABASE_URL", "MIGRATE_DATABASE_URL"] });
 const app = postgres(ziel(process.env.DATABASE_URL), { max: 2, onnotice: () => {} });
 const owner = postgres(ziel(process.env.MIGRATE_DATABASE_URL), { max: 2, onnotice: () => {} });
 

@@ -447,8 +447,11 @@ Rückweg
   zusätzlich das Rücknahme-SQL ausführen
 
 ### Tests (scripts/)
-Alle Skripte laufen nur lokal (sie brechen bei nicht lokaler Datenbank oder
-nicht lokalem Server ab), legen Testdaten mit Zeitstempel-Präfix an und räumen nur
+Alle Skripte, die Daten schreiben oder löschen, rufen `schutz()` aus
+scripts/lib/schutz.mjs auf: Jede benutzte Verbindungs-URL (DATABASE_URL,
+AUTH_DATABASE_URL, MIGRATE_DATABASE_URL, TEST_BASE) muss gesetzt und lokal sein,
+sonst Exit 2 vor dem ersten Verbindungsaufbau (nur Namen in der Meldung, nie
+Werte). Neue Testskripte binden den Helfer ein. Sie legen Testdaten mit Zeitstempel-Präfix an und räumen nur
 über gemerkte IDs auf. "Dev-Server" heißt `npx next dev --webpack -p 3100`.
 | Skript | Prüft | Dev-Server |
 |---|---|---|
@@ -461,6 +464,7 @@ nicht lokalem Server ab), legen Testdaten mit Zeitstempel-Präfix an und räumen
 | test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
 | test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
 | test-setup.mjs | Erst-Einrichtung /setup in einer Wegwerf-Kopie von fwhub_dev mit leerem core.benutzer (eigener Dev-Server auf 3101; den Dev-Server auf 3100 vorher beenden) | eigener |
+| test-startschutz.mjs | Datenbank-Startschutz: `next start` bricht bei fehlender/falscher Rolle ab, `next dev` warnt nur, keine URLs oder Passwörter in der Ausgabe (Ports 3102/3103, braucht `npm run build`, Dev-Server auf 3100 vorher beenden) | eigener |
 Der Letzte-Admin-Schutz ist auf Datenbankebene in test-haertung (1e/1f) geprüft.
 Über die API ist er seit 0015 nicht mehr erreichbar: Kameraden deaktivieren darf nur
 ein globaler Admin, und der Selbstschutz greift davor (test-sitzungen).

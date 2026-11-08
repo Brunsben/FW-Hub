@@ -12,13 +12,13 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { schutz } from "./lib/schutz.mjs";
 
 const PROJECT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const BASE = process.env.TEST_BASE || "http://localhost:3100";
 if (existsSync(`${PROJECT}/.env.local`)) process.loadEnvFile(`${PROJECT}/.env.local`);
-const lokal = (h) => ["localhost", "127.0.0.1", "[::1]", "::1"].includes(h);
-if (!process.env.MIGRATE_DATABASE_URL) { console.error("Abbruch: MIGRATE_DATABASE_URL ist nicht gesetzt."); process.exit(2); }
-if (!lokal(new URL(process.env.MIGRATE_DATABASE_URL).hostname) || !lokal(new URL(BASE).hostname)) { console.error("Abbruch: Datenbank und Server müssen lokal sein."); process.exit(2); }
+schutz({ db: ["MIGRATE_DATABASE_URL"], base: BASE });
+
 const req = createRequire(`${PROJECT}/package.json`);
 const imp = async (m) => import(pathToFileURL(req.resolve(m)).href);
 const bcrypt = (await imp("bcryptjs")).default;

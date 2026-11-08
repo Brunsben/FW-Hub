@@ -18,6 +18,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { schutz } from "./lib/schutz.mjs";
 
 const P = resolve(fileURLToPath(new URL("..", import.meta.url)));
 if (existsSync(`${P}/.env.local`)) process.loadEnvFile(`${P}/.env.local`);
@@ -27,13 +28,7 @@ const postgres = (await imp("postgres")).default;
 const bcrypt = (await imp("bcryptjs")).default;
 const BASE = process.env.TEST_BASE || "http://localhost:3100";
 
-// Schutz: Dieser Test legt Konten an. Nur gegen lokale Datenbank und lokalen Server.
-const lokal = (h) => ["localhost", "127.0.0.1", "[::1]", "::1"].includes(h);
-if (!process.env.MIGRATE_DATABASE_URL) { console.error("Abbruch: MIGRATE_DATABASE_URL ist nicht gesetzt."); process.exit(2); }
-if (!lokal(new URL(process.env.MIGRATE_DATABASE_URL).hostname) || !lokal(new URL(BASE).hostname)) {
-  console.error("Abbruch: Datenbank und Server müssen lokal sein (localhost / 127.0.0.1).");
-  process.exit(2);
-}
+schutz({ db: ["MIGRATE_DATABASE_URL"], base: BASE });
 const owner = postgres(process.env.MIGRATE_DATABASE_URL, { max: 1, onnotice: () => {} });
 
 const stamp = `lg${Date.now().toString(36)}`;

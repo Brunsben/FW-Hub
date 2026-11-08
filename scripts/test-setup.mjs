@@ -18,14 +18,11 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { schutz } from "./lib/schutz.mjs";
 
 const P = resolve(fileURLToPath(new URL("..", import.meta.url)));
 if (existsSync(`${P}/.env.local`)) process.loadEnvFile(`${P}/.env.local`);
-const lokal = (h) => ["localhost", "127.0.0.1", "[::1]", "::1"].includes(h);
-for (const name of ["DATABASE_URL", "AUTH_DATABASE_URL", "MIGRATE_DATABASE_URL"]) {
-  if (!process.env[name]) { console.error(`Abbruch: ${name} ist nicht gesetzt.`); process.exit(2); }
-  if (!lokal(new URL(process.env[name]).hostname)) { console.error(`Abbruch: ${name} zeigt nicht auf eine lokale Datenbank.`); process.exit(2); }
-}
+schutz({ db: ["DATABASE_URL", "AUTH_DATABASE_URL", "MIGRATE_DATABASE_URL"] });
 const COPY_DB = "fwhub_setup_test", PORT = 3101, BASE = `http://localhost:${PORT}`;
 const QUELLE = new URL(process.env.MIGRATE_DATABASE_URL).pathname.slice(1);
 const toDb = (u, db) => { const x = new URL(u); x.pathname = `/${db}`; return x.toString(); };

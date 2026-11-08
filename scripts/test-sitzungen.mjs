@@ -18,6 +18,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { schutz } from "./lib/schutz.mjs";
 
 const P = resolve(fileURLToPath(new URL("..", import.meta.url)));
 if (existsSync(`${P}/.env.local`)) process.loadEnvFile(`${P}/.env.local`);
@@ -27,12 +28,7 @@ const postgres = (await imp("postgres")).default;
 const bcrypt = (await imp("bcryptjs")).default;
 const BASE = process.env.TEST_BASE || "http://localhost:3100";
 
-const lokal = (h) => ["localhost", "127.0.0.1", "[::1]", "::1"].includes(h);
-for (const name of ["DATABASE_URL", "MIGRATE_DATABASE_URL"]) {
-  if (!process.env[name]) { console.error(`Abbruch: ${name} ist nicht gesetzt.`); process.exit(2); }
-  if (!lokal(new URL(process.env[name]).hostname)) { console.error(`Abbruch: ${name} zeigt nicht auf eine lokale Datenbank.`); process.exit(2); }
-}
-if (!lokal(new URL(BASE).hostname)) { console.error("Abbruch: TEST_BASE ist nicht lokal."); process.exit(2); }
+schutz({ db: ["DATABASE_URL", "MIGRATE_DATABASE_URL"], base: BASE });
 const app = postgres(process.env.DATABASE_URL, { max: 1, onnotice: () => {} });
 const owner = postgres(process.env.MIGRATE_DATABASE_URL, { max: 1, onnotice: () => {} });
 
