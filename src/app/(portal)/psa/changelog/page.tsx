@@ -32,8 +32,8 @@ export default async function PsaChangelogPage() {
     .limit(200);
 
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-bold">Changelog</h1>
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Changelog</h1>
       <Card>
         <CardHeader>
           <CardTitle>Letzte Änderungen</CardTitle>
@@ -54,7 +54,7 @@ export default async function PsaChangelogPage() {
                 <TableRow>
                   <TableCell
                     colSpan={5}
-                    className="text-center text-muted-foreground"
+                    className="py-10 text-center text-muted-foreground"
                   >
                     Noch keine Einträge.
                   </TableCell>

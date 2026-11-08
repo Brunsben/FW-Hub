@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
-// Vorläufiger Logout-Button bis zur Portal-Shell (Stufe 4).
-export function LogoutButton() {
+// Abmelden-Knopf (Kopfzeile und Handy-Menü). className erlaubt größere
+// Touch-Flächen im Handy-Menü.
+export function LogoutButton({ className }: { className?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -20,7 +21,13 @@ export function LogoutButton() {
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={logout} disabled={busy}>
+    <Button
+      variant="outline"
+      size="sm"
+      className={className}
+      onClick={logout}
+      loading={busy}
+    >
       Abmelden
     </Button>
   );

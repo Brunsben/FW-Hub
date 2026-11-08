@@ -103,7 +103,7 @@ export function StatsView() {
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="text-center text-muted-foreground"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   Lädt…
                 </TableCell>
@@ -112,7 +112,7 @@ export function StatsView() {
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="text-center text-muted-foreground"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   Keine Daten im Zeitraum.
                 </TableCell>

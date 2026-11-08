@@ -103,9 +103,9 @@ export default async function FunkPage() {
     }));
 
     return (
-      <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
         <div>
-          <h1 className="text-2xl font-bold">Funktechnik – Geräte</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Funktechnik – Geräte</h1>
           <p className="text-sm text-muted-foreground">
             Angemeldet als {session.kameradName} ({session.funkRole})
           </p>
@@ -133,7 +133,7 @@ export default async function FunkPage() {
                   <TableRow>
                     <TableCell
                       colSpan={4}
-                      className="text-center text-muted-foreground"
+                      className="py-10 text-center text-muted-foreground"
                     >
                       Noch keine Geräte erfasst.
                     </TableCell>
@@ -219,9 +219,9 @@ export default async function FunkPage() {
   );
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <div>
-        <h1 className="text-2xl font-bold">Meine Funkgeräte</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Meine Funkgeräte</h1>
         <p className="text-sm text-muted-foreground">
           Angemeldet als {session.kameradName} ({session.funkRole})
         </p>
@@ -246,7 +246,7 @@ export default async function FunkPage() {
                 <TableRow>
                   <TableCell
                     colSpan={4}
-                    className="text-center text-muted-foreground"
+                    className="py-10 text-center text-muted-foreground"
                   >
                     Dir ist derzeit kein Gerät zugeteilt.
                   </TableCell>

@@ -352,7 +352,7 @@ export function KameradenManager({ kameraden }: { kameraden: KameradRow[] }) {
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="text-center text-muted-foreground"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   Keine Kameraden gefunden.
                 </TableCell>

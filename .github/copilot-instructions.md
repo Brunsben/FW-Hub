@@ -119,6 +119,29 @@ Scopes:
   (components/app-header.tsx) vom Layout. Nicht pro Seite einbinden.
   Außerhalb des Rahmens bleiben der Kiosk /food, /food/m/[token], /login,
   /setup und /api
+- Primärfarbe ist Feuerwehr-Rot als Token: hell `#c8102e`, dunkel `#ff6b6b`
+  (mit dunklem Vordergrund). Kontrast prüfen mit `node scripts/kontrast.mjs`:
+  Text mindestens 4,5:1, Bedienelemente (Eingaberand `--input`, Fokusring
+  `--ring`, Primär-Fläche) mindestens 3:1, in beiden Themes
+- Einheitliche Maße: Seitenwurzel `<main className="mx-auto flex w-full
+  max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">`, Überschrift
+  `<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">`,
+  Feldgruppen `grid gap-2`, Formulare `grid gap-4`
+- Kopfzeile ab md in einer Zeile, darunter (Handy) als Menü
+  (components/header-mobile-menu.tsx, Sheet). Ein neues Portal-Modul wird nur
+  in `sichtbareModule()` (app-header.tsx) und `MODUL_ICONS`
+  (components/modul-icons.ts) eingetragen; Kopfzeile, Handy-Menü und
+  Startseiten-Kacheln folgen daraus
+- Tabellen immer mit components/ui/table (Kopf hinterlegt, Zeilen mit Hover,
+  unter md seitlich scrollbar). Leere Liste: eine Zeile mit
+  `className="py-10 text-center text-muted-foreground"` und kurzer Meldung
+- `<Button loading={busy}>` für asynchrone Aktionen (Spinner, gesperrt)
+  statt nur `disabled`. Tastaturfokus bleibt sichtbar: Komponenten nutzen
+  `focus-visible:ring-ring/80`, Links den globalen Outline aus globals.css
+- Nach `npx shadcn@latest add …` package.json und package-lock.json prüfen:
+  Der Generator hat `sheet.tsx` mit `import { cn } from "cn"` und der fremden
+  npm-Abhängigkeit `cn` erzeugt. Import auf `@/lib/utils` umstellen und das
+  Paket mit `npm uninstall cn` wieder entfernen
 
 ## Verbindliche System-Invarianten
 Eine Invariante hat NIE nur einen Durchsetzungsort. Bei jeder neuen Regel

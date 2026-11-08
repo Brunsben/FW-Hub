@@ -221,7 +221,7 @@ export function MenuManager({
           )}
 
           <div className="sm:col-span-2">
-            <Button type="submit" disabled={saving || !form.description.trim()}>
+            <Button type="submit" loading={saving} disabled={!form.description.trim()}>
               {saving ? "Speichert…" : "Menü speichern"}
             </Button>
           </div>

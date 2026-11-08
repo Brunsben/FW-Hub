@@ -358,7 +358,7 @@ export function VerlaufBrowser({
                 <div className="sm:col-span-2">
                   <Button
                     type="submit"
-                    disabled={busy || !pForm.ausruestungstueckId}
+                    loading={busy} disabled={!pForm.ausruestungstueckId}
                   >
                     {busy ? "Speichert…" : "Prüfung speichern"}
                   </Button>
@@ -382,7 +382,7 @@ export function VerlaufBrowser({
                   <TableRow>
                     <TableCell
                       colSpan={6}
-                      className="text-center text-muted-foreground"
+                      className="py-10 text-center text-muted-foreground"
                     >
                       Keine Prüfungen erfasst.
                     </TableCell>
@@ -463,7 +463,7 @@ export function VerlaufBrowser({
                 <div className="sm:col-span-2">
                   <Button
                     type="submit"
-                    disabled={busy || !wForm.ausruestungstueckId}
+                    loading={busy} disabled={!wForm.ausruestungstueckId}
                   >
                     {busy ? "Speichert…" : "Wäsche speichern"}
                   </Button>
@@ -485,7 +485,7 @@ export function VerlaufBrowser({
                   <TableRow>
                     <TableCell
                       colSpan={4}
-                      className="text-center text-muted-foreground"
+                      className="py-10 text-center text-muted-foreground"
                     >
                       Keine Wäsche-Einträge erfasst.
                     </TableCell>
@@ -562,7 +562,7 @@ export function VerlaufBrowser({
                 <div className="sm:col-span-2">
                   <Button
                     type="submit"
-                    disabled={busy || !sForm.ausruestungstueckId || !sForm.foto}
+                    loading={busy} disabled={!sForm.ausruestungstueckId || !sForm.foto}
                   >
                     {busy ? "Speichert…" : "Schaden speichern"}
                   </Button>
@@ -584,7 +584,7 @@ export function VerlaufBrowser({
                   <TableRow>
                     <TableCell
                       colSpan={4}
-                      className="text-center text-muted-foreground"
+                      className="py-10 text-center text-muted-foreground"
                     >
                       Keine Schäden erfasst.
                     </TableCell>

@@ -436,7 +436,7 @@ export function AusruestungManager({
               />
             </div>
             <div className="sm:col-span-2">
-              <Button type="submit" disabled={creating}>
+              <Button type="submit" loading={creating}>
                 {creating ? "Wird angelegt…" : "Stück anlegen"}
               </Button>
             </div>
@@ -547,7 +547,7 @@ export function AusruestungManager({
               />
             </div>
             <div className="flex gap-2 sm:col-span-2">
-              <Button type="submit" disabled={busyId === editForm.id}>
+              <Button type="submit" loading={busyId === editForm.id}>
                 {busyId === editForm.id ? "Speichert…" : "Änderungen speichern"}
               </Button>
               <Button
@@ -584,7 +584,7 @@ export function AusruestungManager({
             <Button
               type="button"
               onClick={confirmIssue}
-              disabled={!issueKamerad || busyId === issuePiece.id}
+              loading={busyId === issuePiece.id} disabled={!issueKamerad}
             >
               Ausgeben
             </Button>
@@ -619,7 +619,7 @@ export function AusruestungManager({
               <TableRow>
                 <TableCell
                   colSpan={canEdit ? 6 : 5}
-                  className="text-center text-muted-foreground"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   Keine Ausrüstungsstücke gefunden.
                 </TableCell>

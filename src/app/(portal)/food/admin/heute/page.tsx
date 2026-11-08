@@ -72,10 +72,10 @@ export default async function FoodAdminHeutePage() {
   });
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Heutige Anmeldungen</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Heutige Anmeldungen</h1>
           <p className="text-sm text-muted-foreground">
             {datumText}
             {menu ? ` · ${menu.description}` : " · kein Menü eingetragen"}
@@ -152,7 +152,7 @@ export default async function FoodAdminHeutePage() {
                 <TableRow>
                   <TableCell
                     colSpan={zweiMenues ? 2 : 1}
-                    className="text-center text-muted-foreground"
+                    className="py-10 text-center text-muted-foreground"
                   >
                     Heute noch keine Anmeldungen.
                   </TableCell>

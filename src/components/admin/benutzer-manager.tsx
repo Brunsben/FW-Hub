@@ -299,12 +299,12 @@ export function BenutzerManager({
             )}
 
             {aktion.art === "pin" && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="grid gap-1.5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
                   <Label htmlFor="reset-pin">Neue PIN (mind. 6 Zeichen)</Label>
                   <Input id="reset-pin" type="password" autoComplete="new-password" value={resetPin} onChange={(e) => setResetPin(e.target.value)} />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label htmlFor="reset-pin2">PIN bestätigen</Label>
                   <Input id="reset-pin2" type="password" autoComplete="new-password" value={resetPin2} onChange={(e) => setResetPin2(e.target.value)} />
                 </div>
@@ -312,8 +312,8 @@ export function BenutzerManager({
             )}
 
             {aktion.art === "rollen" && (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <div className="grid gap-1.5">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="grid gap-2">
                   <Label>Globale Rolle</Label>
                   <Select value={globalRolle} onValueChange={setGlobalRolle}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -325,7 +325,7 @@ export function BenutzerManager({
                   </Select>
                 </div>
                 {SPALTEN.map((s) => (
-                  <div key={s.key} className="grid gap-1.5">
+                  <div key={s.key} className="grid gap-2">
                     <Label>{s.label}</Label>
                     <Select
                       value={rollen[s.key]}
@@ -345,7 +345,7 @@ export function BenutzerManager({
             )}
 
             <div className="flex gap-2">
-              <Button onClick={ausfuehren} disabled={busy}>
+              <Button onClick={ausfuehren} loading={busy}>
                 {busy ? "Speichere …" : "Bestätigen"}
               </Button>
               <Button variant="outline" onClick={() => setAktion(null)} disabled={busy}>
@@ -366,8 +366,8 @@ export function BenutzerManager({
               Alle aktiven Kameraden haben bereits einen Account.
             </p>
           ) : (
-            <form onSubmit={anlegen} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <div className="grid gap-1.5">
+            <form onSubmit={anlegen} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-2">
                 <Label>Kamerad</Label>
                 <Select value={neuKamerad} onValueChange={setNeuKamerad}>
                   <SelectTrigger><SelectValue placeholder="Kamerad wählen" /></SelectTrigger>
@@ -380,19 +380,19 @@ export function BenutzerManager({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="neu-name">Benutzername</Label>
                 <Input id="neu-name" autoComplete="off" value={neuName} onChange={(e) => setNeuName(e.target.value)} />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="neu-pin">PIN (mind. 6 Zeichen)</Label>
                 <Input id="neu-pin" type="password" autoComplete="new-password" value={neuPin} onChange={(e) => setNeuPin(e.target.value)} />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="neu-pin2">PIN bestätigen</Label>
                 <Input id="neu-pin2" type="password" autoComplete="new-password" value={neuPin2} onChange={(e) => setNeuPin2(e.target.value)} />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label>Globale Rolle</Label>
                 <Select value={neuRolle} onValueChange={setNeuRolle}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -404,7 +404,7 @@ export function BenutzerManager({
                 </Select>
               </div>
               <div className="sm:col-span-2 lg:col-span-5">
-                <Button type="submit" disabled={busy || !neuKamerad || !neuName || !neuPin}>
+                <Button type="submit" loading={busy} disabled={!neuKamerad || !neuName || !neuPin}>
                   Anlegen
                 </Button>
               </div>

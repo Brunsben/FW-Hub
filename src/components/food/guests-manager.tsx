@@ -100,7 +100,7 @@ export function GuestsManager({ today }: { today: string }) {
               className="w-28"
             />
           </div>
-          <Button type="button" onClick={save} disabled={saving}>
+          <Button type="button" onClick={save} loading={saving}>
             {saving ? "Speichert…" : "Gäste speichern"}
           </Button>
         </div>

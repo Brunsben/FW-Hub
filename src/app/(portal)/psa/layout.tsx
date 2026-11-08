@@ -29,13 +29,13 @@ export default async function PsaLayout({
       <HashScroll />
       {/* PSA-Unternavigation; Kopfzeile, Profil und Abmelden kommen aus dem
           Seitenrahmen app/(portal)/layout.tsx */}
-      <nav className="border-b bg-card" aria-label="PSA">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 p-3">
+      <nav className="border-b bg-muted/30" aria-label="PSA">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6">
           {items.map((i) => (
             <Link
               key={i.href}
               href={i.href}
-              className="rounded-md px-3 py-1.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              className="inline-flex h-9 shrink-0 items-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               {i.label}
             </Link>

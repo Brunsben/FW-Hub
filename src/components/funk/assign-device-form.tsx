@@ -127,7 +127,7 @@ export function AssignDeviceForm({
       )}
 
       <div className="sm:col-span-2">
-        <Button type="submit" disabled={submitting || !deviceId || !ownerId}>
+        <Button type="submit" loading={submitting} disabled={!deviceId || !ownerId}>
           {submitting ? "Wird zugeteilt…" : "Gerät zuteilen"}
         </Button>
       </div>

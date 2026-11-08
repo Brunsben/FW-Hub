@@ -64,27 +64,27 @@ export function SetupForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={onSubmit} className="grid gap-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
               <Label htmlFor="vorname">Vorname</Label>
               <Input id="vorname" value={vorname} onChange={(e) => setVorname(e.target.value)} required />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
               <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label htmlFor="benutzername">Benutzername</Label>
             <Input id="benutzername" autoComplete="username" value={benutzername} onChange={(e) => setBenutzername(e.target.value)} required />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
               <Label htmlFor="pin">PIN (mind. {MIN_PIN} Zeichen)</Label>
               <Input id="pin" type="password" autoComplete="new-password" value={pin} onChange={(e) => setPin(e.target.value)} required />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label htmlFor="pin2">PIN bestätigen</Label>
               <Input id="pin2" type="password" autoComplete="new-password" value={pin2} onChange={(e) => setPin2(e.target.value)} required />
             </div>
@@ -94,7 +94,7 @@ export function SetupForm() {
               {error}
             </p>
           )}
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" loading={busy}>
             {busy ? "Richte ein …" : "Einrichten"}
           </Button>
         </form>

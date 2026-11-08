@@ -308,7 +308,7 @@ export function TypenManager({
             <div className="flex gap-2 sm:col-span-2">
               <Button
                 type="submit"
-                disabled={submitting || !form.bezeichnung.trim()}
+                loading={submitting} disabled={!form.bezeichnung.trim()}
               >
                 {submitting
                   ? "Speichert…"
@@ -343,7 +343,7 @@ export function TypenManager({
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="text-center text-muted-foreground"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   Keine Typen erfasst.
                 </TableCell>

@@ -63,7 +63,8 @@
   --card-foreground: #111827;
   --popover: #ffffff;
   --popover-foreground: #111827;
-  --primary: #dc2626;
+  /* Feuerwehr-Rot: 5,88:1 mit weißem Text, auch als Linktext und Fokusring */
+  --primary: #c8102e;
   --primary-foreground: #ffffff;
   --secondary: #f3f4f6;
   --secondary-foreground: #1f2937;
@@ -79,21 +80,23 @@
   --success-foreground: #ffffff;
   --warning: #b45309;
   --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #dc2626;
-  --chart-1: #dc2626;
+  /* Eingabefeld-Rand: 3,76:1 gegen Hintergrund/Karte (vorher #e5e7eb = 1,24:1,
+     WCAG 1.4.11 verlangt 3:1 für Bedienelemente) */
+  --input: #7c8493;
+  --ring: #c8102e;
+  --chart-1: #c8102e;
   --chart-2: #10b981;
   --chart-3: #3b82f6;
   --chart-4: #f59e0b;
   --chart-5: #8b5cf6;
   --sidebar: #ffffff;
   --sidebar-foreground: #111827;
-  --sidebar-primary: #dc2626;
+  --sidebar-primary: #c8102e;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f3f4f6;
   --sidebar-accent-foreground: #1f2937;
   --sidebar-border: #e5e7eb;
-  --sidebar-ring: #dc2626;
+  --sidebar-ring: #c8102e;
 }
 
 .dark {
@@ -104,9 +107,8 @@
   --card-foreground: #f9fafb;
   --popover: #1f2937;
   --popover-foreground: #f9fafb;
-  /* Helleres Rot mit dunklem Text: #dc2626 hatte als Text auf dem dunklen
-     Hintergrund nur 3,67:1 (auf Karten 3,04:1). */
-  --primary: #f87171;
+  /* Helleres Feuerwehr-Rot mit dunklem Text (6,39:1; auf Karten 5,29:1) */
+  --primary: #ff6b6b;
   --primary-foreground: #111827;
   --secondary: #374151;
   --secondary-foreground: #f9fafb;
@@ -120,21 +122,22 @@
   --success-foreground: #052e16;
   --warning: #fbbf24;
   --border: #374151;
-  --input: #4b5563;
-  --ring: #f87171;
-  --chart-1: #ef4444;
+  /* 4,46:1 gegen Hintergrund, 3,69:1 gegen Karte (vorher #4b5563 = 1,94:1) */
+  --input: #778091;
+  --ring: #ff6b6b;
+  --chart-1: #ff6b6b;
   --chart-2: #34d399;
   --chart-3: #60a5fa;
   --chart-4: #fbbf24;
   --chart-5: #a78bfa;
   --sidebar: #111827;
   --sidebar-foreground: #f9fafb;
-  --sidebar-primary: #f87171;
+  --sidebar-primary: #ff6b6b;
   --sidebar-primary-foreground: #111827;
   --sidebar-accent: #1f2937;
   --sidebar-accent-foreground: #f9fafb;
   --sidebar-border: #374151;
-  --sidebar-ring: #f87171;
+  --sidebar-ring: #ff6b6b;
 }
 
 @layer base {
@@ -143,5 +146,12 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Sichtbarer Tastaturfokus für alles ohne eigenen Fokusstil (Links,
+     Kopfzeile, Kacheln). :where() hat keine Spezifität, Komponenten mit
+     outline-none + ring (Button, Input, Select) behalten ihren Stil. */
+  :where(a, button, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }

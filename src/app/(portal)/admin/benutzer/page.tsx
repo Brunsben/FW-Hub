@@ -47,9 +47,9 @@ export default async function AdminBenutzerPage() {
   });
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <div>
-        <h1 className="text-2xl font-bold">Benutzerverwaltung</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Benutzerverwaltung</h1>
         <p className="text-sm text-muted-foreground">
           Angemeldet als {admin.kamerad_name} (globaler Admin)
         </p>

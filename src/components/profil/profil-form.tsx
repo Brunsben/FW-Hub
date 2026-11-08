@@ -96,24 +96,24 @@ export function ProfilForm() {
           <CardTitle>PIN ändern</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={pinAendern} className="grid gap-3">
-            <div className="grid gap-1.5">
+          <form onSubmit={pinAendern} className="grid gap-4">
+            <div className="grid gap-2">
               <Label htmlFor="alt">Aktuelle PIN</Label>
               <Input id="alt" type="password" autoComplete="current-password" value={alt} onChange={(e) => setAlt(e.target.value)} />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
                 <Label htmlFor="neu">Neue PIN (mind. 6 Zeichen)</Label>
                 <Input id="neu" type="password" autoComplete="new-password" value={neu} onChange={(e) => setNeu(e.target.value)} />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="neu2">Neue PIN bestätigen</Label>
                 <Input id="neu2" type="password" autoComplete="new-password" value={neu2} onChange={(e) => setNeu2(e.target.value)} />
               </div>
             </div>
             <MeldungBox m={pinMeldung} />
             <div>
-              <Button type="submit" disabled={busy || !alt || !neu || !neu2}>
+              <Button type="submit" loading={busy} disabled={!alt || !neu || !neu2}>
                 PIN ändern
               </Button>
             </div>
@@ -131,7 +131,7 @@ export function ProfilForm() {
           </p>
           <MeldungBox m={abmeldenMeldung} />
           <div>
-            <Button variant="destructive" onClick={ueberallAbmelden} disabled={busy}>
+            <Button variant="destructive" onClick={ueberallAbmelden} loading={busy}>
               Überall abmelden
             </Button>
           </div>

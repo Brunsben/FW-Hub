@@ -82,7 +82,8 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              disabled={submitting || !benutzername.trim() || !pin}
+              loading={submitting}
+              disabled={!benutzername.trim() || !pin}
             >
               {submitting ? "Anmeldung läuft…" : "Anmelden"}
             </Button>

@@ -238,7 +238,7 @@ export function NormenManager({ normen }: { normen: NormRow[] }) {
             )}
 
             <div className="flex gap-2 sm:col-span-2">
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" loading={submitting}>
                 {submitting
                   ? "Speichert…"
                   : form.id
@@ -271,7 +271,7 @@ export function NormenManager({ normen }: { normen: NormRow[] }) {
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="text-center text-muted-foreground"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   Keine Normen erfasst.
                 </TableCell>

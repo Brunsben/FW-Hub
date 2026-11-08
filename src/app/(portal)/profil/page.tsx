@@ -41,9 +41,9 @@ export default async function ProfilPage() {
   ] as const;
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <div>
-        <h1 className="text-2xl font-bold">Mein Profil</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Mein Profil</h1>
         <p className="text-sm text-muted-foreground">
           {profil?.vorname} {profil?.name} · Benutzername {profil?.benutzername}
         </p>

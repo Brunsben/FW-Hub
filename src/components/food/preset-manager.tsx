@@ -124,7 +124,7 @@ export function PresetManager({ presets }: { presets: PresetRow[] }) {
               <TableRow>
                 <TableCell
                   colSpan={3}
-                  className="text-center text-muted-foreground"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   Keine Voreinstellungen.
                 </TableCell>

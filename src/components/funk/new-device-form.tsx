@@ -125,7 +125,7 @@ export function NewDeviceForm() {
       )}
 
       <div className="sm:col-span-2">
-        <Button type="submit" disabled={submitting || !serialNumber.trim()}>
+        <Button type="submit" loading={submitting} disabled={!serialNumber.trim()}>
           {submitting ? "Wird angelegt…" : "Gerät anlegen"}
         </Button>
       </div>
