@@ -460,6 +460,7 @@ nicht lokalem Server ab), legen Testdaten mit Zeitstempel-Präfix an und räumen
 | test-login-sperre.mjs, test-login-deaktiviert.mjs, test-client-ip.mjs | Login-Sperre, deaktivierte Konten, Client-IP | ja / ja / nein |
 | test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
 | test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
+| test-setup.mjs | Erst-Einrichtung /setup in einer Wegwerf-Kopie von fwhub_dev mit leerem core.benutzer (eigener Dev-Server auf 3101; den Dev-Server auf 3100 vorher beenden) | eigener |
 Der Letzte-Admin-Schutz ist auf Datenbankebene in test-haertung (1e/1f) geprüft.
 Über die API ist er seit 0015 nicht mehr erreichbar: Kameraden deaktivieren darf nur
 ein globaler Admin, und der Selbstschutz greift davor (test-sitzungen).
