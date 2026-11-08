@@ -87,7 +87,12 @@ export function KarteFormular({
             placeholder={bereit ? "Bereit: Karte an den Leser halten …" : "Karten-ID"}
             className={"max-w-xs " + (bereit ? "border-primary ring-[3px] ring-ring/80" : "")}
             onChange={(e) => setWert(e.target.value)}
-            onBlur={() => setBereit(false)}
+            onBlur={() => {
+              // Scan abgebrochen (Feld leer verlassen): die gespeicherte ID wieder anzeigen,
+              // sonst sieht es aus, als wäre sie weg.
+              if (bereit && wert.trim() === "") setWert(kartenId ?? "");
+              setBereit(false);
+            }}
           />
           <Button type="button" variant="outline" onClick={scanStarten}>
             <ScanLine aria-hidden /> Karte scannen

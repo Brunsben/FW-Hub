@@ -494,6 +494,14 @@ verlinken auf /mitglieder/[id] (`MitgliedLink`, Ziel aus `mitgliedLinkZiel`).
   Küchen-Admin), Funk (zugeteilte Geräte, nur lesend; Funk Admin/Gerätewart).
   Dateien: `components/<modul>/mitglied-abschnitt.tsx`. Ein globaler Admin ohne
   Modulrolle sieht keine Modul-Abschnitte
+- **Module zeigen Personen nur an (Paket 5):** PSA hat statt des Kameradenformulars
+  eine schreibgeschützte Größenübersicht (`/psa#groessen`), die Küche-Verwaltung
+  nur noch den CSV-Import der Karten-IDs (keine Personenliste, keinen QR-Link je
+  Person, keine Route `GET /api/food/admin/users`). Namen in Ausrüstungstabelle,
+  Funk-Geräteliste und "Heutige Anmeldungen" verlinken auf `/mitglieder/[id]`
+  (`MitgliedLink`, bei Kürzung mit `title`). Auswahllisten (Ausgabe, Zuteilung)
+  bleiben. Die alten Schreibrouten `POST/PATCH/DELETE /api/psa/kameraden` bleiben
+  bis zur restriktiven Migration 0015 bestehen und werden danach entfernt
 - **Änderungsprotokoll:** Abschnitt "Änderungsverlauf" (nur globale Admins) aus
   `core.mitglieder_audit`
 - **Tests:** `scripts/test-mitglieder-rechte.mjs` und `test-mitglieder-lib.mjs`

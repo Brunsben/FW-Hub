@@ -16,7 +16,7 @@ export default async function PsaLayout({
   // Links nur für Bereiche, die die aktuelle Rolle sehen darf.
   const items = [
     { href: "/psa", label: "Dashboard", show: true },
-    { href: "/psa#kameraden", label: "Kameraden", show: canEdit },
+    { href: "/psa#groessen", label: "Größen", show: canEdit },
     { href: "/psa#ausruestung", label: "Ausrüstung", show: canEdit },
     { href: "/psa/typen", label: "Typen", show: canEdit },
     { href: "/psa/normen", label: "Normen", show: canEdit },

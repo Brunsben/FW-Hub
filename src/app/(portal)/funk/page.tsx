@@ -31,6 +31,8 @@ import {
   type DeviceType,
 } from "@/lib/funk-labels";
 import { NewDeviceForm } from "@/components/funk/new-device-form";
+import { MitgliedLink } from "@/components/mitglieder/mitglied-link";
+import { mitgliedLinkZiel } from "@/lib/mitglieder/rechte";
 import {
   AssignDeviceForm,
   type AssignableDevice,
@@ -152,7 +154,14 @@ export default async function FunkPage() {
                       </TableCell>
                       <TableCell>
                         {r.ownerId ? (
-                          `${r.ownerVorname} ${r.ownerName}`
+                          <MitgliedLink
+                            ziel={mitgliedLinkZiel(
+                              { kamerad_id: session.kameradId, app_role: "User", funk_rolle: session.funkRole },
+                              r.ownerId,
+                            )}
+                          >
+                            {`${r.ownerVorname} ${r.ownerName}`}
+                          </MitgliedLink>
                         ) : (
                           <span className="text-muted-foreground">
                             Nicht zugewiesen

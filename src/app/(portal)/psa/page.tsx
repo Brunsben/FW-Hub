@@ -17,9 +17,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  KameradenManager,
-  type KameradRow,
-} from "@/components/psa/kameraden-manager";
+  GroessenUebersicht,
+  type GroessenZeile,
+} from "@/components/psa/groessen-uebersicht";
+import { mitgliedLinkZiel } from "@/lib/mitglieder/rechte";
 import {
   AusruestungManager,
   type KameradOption,
@@ -187,16 +188,14 @@ export default async function PsaPage() {
     ),
   ]);
 
-  const kameradenRows: KameradRow[] = await withScope(scope, (tx) =>
+  // Nur, was die Größenübersicht und die Auswahllisten brauchen. Stammdaten
+  // (E-Mail, Personalnummer, Karten-ID) pflegt die Mitgliederverwaltung.
+  const kameradenRows = await withScope(scope, (tx) =>
     tx
       .select({
         id: kameraden.id,
         vorname: kameraden.vorname,
         name: kameraden.name,
-        dienstgrad: kameraden.dienstgrad,
-        email: kameraden.email,
-        personalnummer: kameraden.personalnummer,
-        kartenId: kameraden.kartenId,
         aktiv: kameraden.aktiv,
         jackeGroesse: psaKameradDetails.jackeGroesse,
         hoseGroesse: psaKameradDetails.hoseGroesse,
@@ -228,6 +227,17 @@ export default async function PsaPage() {
     .filter((k) => k.aktiv)
     .map((k) => ({ id: k.id, label: `${k.vorname} ${k.name}` }));
 
+  // Namen verlinken auf /mitglieder/[id]. Diese Seite ist nur für PSA-Admin und
+  // Kleiderwart, die Mitglieder sehen dürfen.
+  const linkUser = { kamerad_id: session.kameradId, app_role: session.isGlobalAdmin ? "Admin" : "User", psa_rolle: session.psaRole };
+  const groessenZeilen: GroessenZeile[] = kameradenRows.map((k) => ({
+    ...k,
+    link: mitgliedLinkZiel(linkUser, k.id),
+  }));
+  const mitgliedLinks: Record<number, string | null> = Object.fromEntries(
+    kameradenRows.map((k) => [k.id, mitgliedLinkZiel(linkUser, k.id)]),
+  );
+
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <div>
@@ -244,8 +254,8 @@ export default async function PsaPage() {
         <StatCard label="Prüfung fällig" value={pruefungFaellig} />
       </div>
 
-      <section id="kameraden" className="scroll-mt-20">
-        <KameradenManager kameraden={kameradenRows} />
+      <section id="groessen" className="scroll-mt-20">
+        <GroessenUebersicht zeilen={groessenZeilen} />
       </section>
 
       <section id="ausruestung" className="scroll-mt-20">
@@ -253,6 +263,7 @@ export default async function PsaPage() {
           pieces={pieces}
           typen={typen}
           kameraden={kameradenOptions}
+          mitgliedLinks={mitgliedLinks}
           canEdit
         />
       </section>

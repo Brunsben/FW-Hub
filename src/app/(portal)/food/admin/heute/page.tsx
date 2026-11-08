@@ -6,6 +6,8 @@ import { foodGuests, foodRegistrations, kameraden } from "@/lib/db/schema";
 import { requireFoodSession } from "@/lib/food-auth";
 import { getMenuForDate, today } from "@/lib/food-utils";
 import { redirectNoModuleAccess } from "@/lib/module-guard";
+import { MitgliedLink } from "@/components/mitglieder/mitglied-link";
+import { mitgliedLinkZiel } from "@/lib/mitglieder/rechte";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -38,6 +40,7 @@ export default async function FoodAdminHeutePage() {
       const anmeldungen = await tx
         .select({
           id: foodRegistrations.id,
+          kameradId: foodRegistrations.kameradId,
           vorname: kameraden.vorname,
           name: kameraden.name,
           menuChoice: foodRegistrations.menuChoice,
@@ -161,7 +164,14 @@ export default async function FoodAdminHeutePage() {
                 anmeldungen.map((a) => (
                   <TableRow key={a.id} data-anmeldung={a.id}>
                     <TableCell className="font-medium">
-                      {`${a.name}, ${a.vorname}`}
+                      <MitgliedLink
+                        ziel={mitgliedLinkZiel(
+                          { kamerad_id: session.kameradId, app_role: "User", food_rolle: session.foodRole },
+                          a.kameradId,
+                        )}
+                      >
+                        {`${a.name}, ${a.vorname}`}
+                      </MitgliedLink>
                     </TableCell>
                     {zweiMenues && (
                       <TableCell>

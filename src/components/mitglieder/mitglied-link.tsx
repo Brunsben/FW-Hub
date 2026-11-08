@@ -9,15 +9,19 @@ export function MitgliedLink({
   ziel,
   children,
   className,
+  title,
 }: {
   ziel: string | null;
   children: React.ReactNode;
   className?: string;
+  /** Voller Name als Tooltip, wenn der Text gekürzt dargestellt wird */
+  title?: string;
 }) {
-  if (!ziel) return <span className={className}>{children}</span>;
+  if (!ziel) return <span className={className} title={title}>{children}</span>;
   return (
     <Link
       href={ziel}
+      title={title}
       className={
         "rounded-sm font-medium underline-offset-4 hover:underline" +
         (className ? ` ${className}` : "")

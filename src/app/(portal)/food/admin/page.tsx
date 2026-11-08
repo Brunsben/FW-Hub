@@ -2,9 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { asc, gte } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { withFoodScope } from "@/lib/db/scoped";
 import { redirectNoModuleAccess } from "@/lib/module-guard";
-import { foodMenus, foodPresetMenus, kameraden } from "@/lib/db/schema";
+import { foodMenus, foodPresetMenus } from "@/lib/db/schema";
 import { requireFoodSession } from "@/lib/food-auth";
 import { today } from "@/lib/food-utils";
 import { MenuManager, type MenuRow } from "@/components/food/menu-manager";
@@ -13,10 +12,7 @@ import {
   PresetManager,
   type PresetRow,
 } from "@/components/food/preset-manager";
-import {
-  KameradenCardsManager,
-  type KameradCardRow,
-} from "@/components/food/kameraden-cards-manager";
+import { KartenImport } from "@/components/food/karten-import";
 import { StatsView } from "@/components/food/stats-view";
 
 export default async function FoodAdminPage() {
@@ -49,24 +45,6 @@ export default async function FoodAdminPage() {
     .from(foodPresetMenus)
     .orderBy(asc(foodPresetMenus.sortOrder), asc(foodPresetMenus.name));
 
-  // core.kameraden liegt hinter RLS → Lesen nur im Food-Admin-Scope
-  // (Policy kameraden_food_admin_read).
-  const kameradenList: KameradCardRow[] = await withFoodScope(
-    { kameradId: session.kameradId, foodRolle: session.foodRole },
-    (tx) =>
-      tx
-        .select({
-          id: kameraden.id,
-          vorname: kameraden.vorname,
-          name: kameraden.name,
-          personalnummer: kameraden.personalnummer,
-          kartenId: kameraden.kartenId,
-          aktiv: kameraden.aktiv,
-        })
-        .from(kameraden)
-        .orderBy(asc(kameraden.name), asc(kameraden.vorname)),
-  );
-
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -91,7 +69,7 @@ export default async function FoodAdminPage() {
       />
       <GuestsManager today={todayStr} />
       <PresetManager presets={presets} />
-      <KameradenCardsManager kameraden={kameradenList} />
+      <KartenImport />
       <StatsView />
     </main>
   );

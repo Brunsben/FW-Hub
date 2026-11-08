@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PSA_STATUS, statusVariant } from "@/lib/psa-status";
+import { MitgliedLink } from "@/components/mitglieder/mitglied-link";
 
 export interface PieceRow {
   id: number;
@@ -67,11 +68,14 @@ export function AusruestungManager({
   pieces,
   typen,
   kameraden,
+  mitgliedLinks,
   canEdit,
 }: {
   pieces: PieceRow[];
   typen: TypOption[];
   kameraden: KameradOption[];
+  /** Ziel des Namens-Links je Kamerad-ID (siehe mitgliedLinkZiel), null = Klartext */
+  mitgliedLinks?: Record<number, string | null>;
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -636,7 +640,19 @@ export function AusruestungManager({
                       {p.status ?? "—"}
                     </Badge>
                   </TableCell>
-                  <TableCell>{p.kameradName ?? "—"}</TableCell>
+                  <TableCell>
+                    {p.kameradName ? (
+                      <MitgliedLink
+                        ziel={p.kameradId ? (mitgliedLinks?.[p.kameradId] ?? null) : null}
+                        title={p.kameradName}
+                        className="block max-w-[14rem] truncate"
+                      >
+                        {p.kameradName}
+                      </MitgliedLink>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
                   <TableCell>{fmt(p.naechstePruefung)}</TableCell>
                   {canEdit && (
                     <TableCell className="text-right">

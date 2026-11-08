@@ -354,6 +354,38 @@ try {
   check("QR-Link: Küchen-Admin erzeugt den Link → 200 mit /food/m/...", r.status === 200 && (r.json?.url ?? "").startsWith("/food/m/") && (r.json?.url ?? "").length > 28, String(r.status));
   r = await api("POST", "/api/food/admin/mobile-token", kw.cookie, { kameradId: ziel.kamerad });
   check("QR-Link: Kleiderwart (keine Küchenrolle) → 401 oder 403", r.status === 401 || r.status === 403, String(r.status));
+
+  // ── Module umgestellt (Paket 5) ────────────────────────────────────────────
+  // Anmeldung der Zielperson für heute, damit die Küche-Seite ihren Namen zeigt
+  const heuteBerlin = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin" }).format(new Date());
+  await owner`insert into fw_food.registrations (kamerad_id, date) values (${ziel.kamerad}, ${heuteBerlin}) on conflict do nothing`;
+
+  // PSA: Größenübersicht statt Kameradenformular
+  s = await seite("/psa", kw.cookie);
+  check("PSA: Seite lädt für den Kleiderwart", s.status === 200, String(s.status));
+  check("PSA: Größenübersicht (schreibgeschützt) mit Link zu den Mitgliedern", hat(s.html, 'id="groessen"') && hat(s.html, "Übersicht, schreibgeschützt") && hat(s.html, 'href="/mitglieder"'));
+  check("PSA: Name in der Übersicht verlinkt auf /mitglieder/[id]", hat(s.html, `href="/mitglieder/${ziel.kamerad}"`));
+  check("PSA: Größe der Zielperson steht in der Übersicht (XL)", hat(s.html, ">XL<"));
+  check("PSA: kein Kameradenformular mehr (keine Stammdaten-Eingabefelder)", !hat(s.html, 'id="f-vorname"') && !hat(s.html, 'id="f-personalnummer"') && !hat(s.html, 'id="f-kartenId"') && !hat(s.html, 'id="kameraden"'));
+  check("PSA: Navigation zeigt Größen statt Kameraden", hat(s.html, 'href="/psa#groessen"') && !hat(s.html, 'href="/psa#kameraden"'));
+  check("PSA: Träger in der Ausrüstungstabelle verlinkt", hat(s.html, `${stamp}-sn`) && hat(s.html, `href="/mitglieder/${ziel.kamerad}"`));
+  check("PSA: kein PIN-Hash, keine Karten-ID und keine E-Mail im HTML", !hat(s.html, "$2a$") && !hat(s.html, `K-${stamp}`) && !hat(s.html, "@example.org"));
+  s = await seite("/psa", psaUser.cookie);
+  check("PSA-User: eigene Ausrüstung ohne Größenübersicht und ohne Mitglieder-Links", s.status === 200 && !hat(s.html, 'id="groessen"') && !hat(s.html, "/mitglieder/"));
+
+  // Küche: Personenliste raus, CSV-Import bleibt
+  s = await seite("/food/admin", kueche.cookie);
+  check("Küche-Verwaltung: Seite lädt für den Küchen-Admin", s.status === 200, String(s.status));
+  check("Küche-Verwaltung: CSV-Import bleibt, mit Hinweis auf Mitglieder → Person → Küche", hat(s.html, "Karten-IDs per CSV importieren") && hat(s.html, "csv-import") && hat(s.html, "Mitglieder → Person → Küche"));
+  check("Küche-Verwaltung: keine Personenliste, keine Karten-ID, kein QR je Person", !hat(s.html, "Karten-ID-Zuordnung") && !hat(s.html, `K-${stamp}`) && !hat(s.html, ziel.name) && !hat(s.html, "k-search") && !hat(s.html, "QR-Code"));
+  r = await api("GET", "/api/food/admin/users", kueche.cookie);
+  check("Küche: die Listen-Route /api/food/admin/users gibt es nicht mehr (404)", r.status === 404, String(r.status));
+  s = await seite("/food/admin/heute", kueche.cookie);
+  check("Küche heute: Name der angemeldeten Person verlinkt auf /mitglieder/[id]", s.status === 200 && hat(s.html, `href="/mitglieder/${ziel.kamerad}"`), String(s.status));
+
+  // Funk: Besitzer in der Geräteliste verlinkt
+  s = await seite("/funk", funkGw.cookie);
+  check("Funk: Besitzer in der Geräteliste verlinkt auf /mitglieder/[id]", s.status === 200 && hat(s.html, geraetSn) && hat(s.html, `href="/mitglieder/${ziel.kamerad}"`), String(s.status));
 } finally {
   // Aufräumen nur über gemerkte IDs und exakte Namen
   try {
