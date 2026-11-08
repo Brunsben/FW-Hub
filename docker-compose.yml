@@ -75,7 +75,13 @@ services:
   #   docker compose run --rm migrate               # alle ausstehenden Migrationen
   #   docker compose run --rm migrate --bis 0012    # nur bis einschließlich 0012
   # Verbindet als POSTGRES_USER (Eigentümer der Tabellen), nicht als fw_app.
+  # Datenbankname aus FWHUB_DB (Default fwhub), NICHT aus POSTGRES_DB: Dessen
+  # Default "nocodb" ist die NocoDB-Datenbank, nicht die des FW-Hub.
   # Passwort mit Sonderzeichen in der URL kodiert eintragen (wie bei fw_app).
+  # Auf dem Server liegt nur ~/fw/fwhub-stack (Service portal) und der Postgres
+  # gehört zu einem anderen Compose-Projekt: Dort NICHT "docker compose run
+  # migrate" verwenden, sondern docker build/run (siehe
+  # .github/copilot-instructions.md, "Produktion: Server-Struktur").
   migrate:
     profiles: ["migrate"]
     build:
@@ -83,7 +89,7 @@ services:
       target: migrate
     logging: *default-logging
     environment:
-      MIGRATE_DATABASE_URL: "postgresql://${POSTGRES_USER:-nocodb}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nocodb}"
+      MIGRATE_DATABASE_URL: "postgresql://${POSTGRES_USER:-nocodb}:${POSTGRES_PASSWORD}@postgres:5432/${FWHUB_DB:-fwhub}"
     depends_on:
       postgres:
         condition: service_healthy
