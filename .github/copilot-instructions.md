@@ -488,6 +488,12 @@ verlinken auf /mitglieder/[id] (`MitgliedLink`, Ziel aus `mitgliedLinkZiel`).
   (`MitgliedAbschnitt`) bringt Titel, Reihenfolge, `rechte(user, id)` und eine
   Server-Komponente mit. Ein neues Modul legt eine Datei an und trägt eine Zeile
   in die Registry ein. Reihenfolge: Bereiche 10/20/30, Module ab 100, Verlauf 900
+- **Modul-Abschnitte:** PSA (Größen bearbeiten über `/api/psa/groessen/[id]`,
+  ausgegebene Ausrüstung lesen; PSA Admin/Kleiderwart), Küche (Karten-ID mit
+  Scan-Eingabefeld über `set_karten_id`, QR-Link zur mobilen Anmeldung;
+  Küchen-Admin), Funk (zugeteilte Geräte, nur lesend; Funk Admin/Gerätewart).
+  Dateien: `components/<modul>/mitglied-abschnitt.tsx`. Ein globaler Admin ohne
+  Modulrolle sieht keine Modul-Abschnitte
 - **Änderungsprotokoll:** Abschnitt "Änderungsverlauf" (nur globale Admins) aus
   `core.mitglieder_audit`
 - **Tests:** `scripts/test-mitglieder-rechte.mjs` und `test-mitglieder-lib.mjs`

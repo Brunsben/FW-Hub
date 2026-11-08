@@ -1,3 +1,6 @@
+import { foodAbschnitt } from "@/components/food/mitglied-abschnitt";
+import { funkAbschnitt } from "@/components/funk/mitglied-abschnitt";
+import { psaAbschnitt } from "@/components/psa/mitglied-abschnitt";
 import { rollenAbschnitt } from "@/components/mitglieder/abschnitte/rollen";
 import { stammdatenAbschnitt } from "@/components/mitglieder/abschnitte/stammdaten";
 import { verlaufAbschnitt } from "@/components/mitglieder/abschnitte/verlauf";
@@ -18,5 +21,8 @@ export const ABSCHNITTE: readonly MitgliedAbschnitt[] = [
   stammdatenAbschnitt,
   zugangAbschnitt,
   rollenAbschnitt,
+  psaAbschnitt,
+  foodAbschnitt,
+  funkAbschnitt,
   verlaufAbschnitt,
 ];

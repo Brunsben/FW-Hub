@@ -1,5 +1,6 @@
 // Unit-Test der Eingabeprüfung der Mitgliederverwaltung (src/lib/mitglieder/validierung.ts).
 // Aufruf: node scripts/test-mitglieder-lib.mjs   (kein Server, keine Datenbank nötig)
+import { pruefeGroessen } from "../src/lib/psa-groessen.ts";
 import { FEHLER_KARTEN_ID, FEHLER_ROLLEN, pruefeLogin, pruefeStammdaten } from "../src/lib/mitglieder/validierung.ts";
 
 let fail = 0;
@@ -58,6 +59,18 @@ check("Login: Benutzername mit Leerzeichen", lg({ benutzername: "max muster", pi
 check("Login: Benutzername leer", lg({ benutzername: "  ", pin: "123456" }).ok, false);
 check("Login: Benutzername zu lang", lg({ benutzername: "x".repeat(65), pin: "123456" }).ok, false);
 check("Login: kein Objekt", lg("x").ok, false);
+
+// PSA-Größen
+const gr = (b) => pruefeGroessen(b);
+check("Größen: ein Feld genügt, Leerraum wird entfernt", gr({ jackeGroesse: " 52 " }), { ok: true, daten: { jackeGroesse: "52" } });
+check("Größen: leer und null entfernen die Größe", gr({ hoseGroesse: "", stiefelGroesse: null, hemdGroesse: "  " }), { ok: true, daten: { hoseGroesse: null, stiefelGroesse: null, hemdGroesse: null } });
+check("Größen: alle sieben Felder", Object.keys(gr({ jackeGroesse: "a", hoseGroesse: "b", stiefelGroesse: "c", handschuhGroesse: "d", hemdGroesse: "e", poloshirtGroesse: "f", fleeceGroesse: "g" }).daten).length, 7);
+check("Größen: unbekannte Felder werden ignoriert", gr({ jackeGroesse: "L", name: "x", psaRolle: "Admin" }), { ok: true, daten: { jackeGroesse: "L" } });
+check("Größen: nur unbekannte Felder → Fehler", gr({ name: "x" }).ok, false);
+check("Größen: leerer Body → Fehler", gr({}).ok, false);
+check("Größen: zu lang → Fehler", gr({ jackeGroesse: "x".repeat(21) }).ok, false);
+check("Größen: Zahl statt Text → Fehler", gr({ jackeGroesse: 52 }).ok, false);
+check("Größen: kein Objekt → Fehler", [gr(null).ok, gr("x").ok, gr([]).ok], [false, false, false]);
 
 console.log(fail === 0 ? "\nALLE TESTS OK" : `\n${fail} TEST(S) FEHLGESCHLAGEN`);
 process.exit(fail ? 1 : 0);

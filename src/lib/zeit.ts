@@ -29,6 +29,22 @@ export function datumZeit(zeitpunkt: Date | string): string {
   }).format(new Date(zeitpunkt));
 }
 
+// Datum als "08.11.2026". Nimmt einen Date oder einen reinen Datumstext
+// YYYY-MM-DD (dann ohne Zeitzonenumrechnung, sonst könnte der Tag verrutschen).
+export function datumKurz(wert: Date | string | null | undefined): string {
+  if (!wert) return "–";
+  if (typeof wert === "string" && /^\d{4}-\d{2}-\d{2}$/.test(wert)) {
+    const [j, m, t] = wert.split("-");
+    return `${t}.${m}.${j}`;
+  }
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: BERLIN,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(wert));
+}
+
 // Tage auf ein Datum YYYY-MM-DD addieren (negativ = zurück), ohne Zeitzoneneffekt.
 export function addDays(datum: string, tage: number): string {
   const [j, m, t] = datum.split("-").map(Number);

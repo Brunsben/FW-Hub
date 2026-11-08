@@ -35,7 +35,7 @@ const stamp = `mg${Date.now().toString(36)}`;
 const PIN = "121212";
 let fail = 0;
 const check = (n, c, i = "") => { if (!c) fail++; console.log(`${c ? "OK  " : "FEHLER"} ${n}${i ? " — " + i : ""}`); };
-const ids = { kam: [], ben: [] }, namen = [];
+const ids = { kam: [], ben: [], stueck: [], typ: [], geraet: [], zuteilung: [] }, namen = [];
 let ipZaehler = 0;
 const hash = await bcrypt.hash(PIN, 12);
 
@@ -86,6 +86,17 @@ try {
   const ziel = await konto("ziel", { psa: "User", karte: `K-${stamp}` });
   const ohneLogin = await konto("kein", { login: false });
   for (const k of [admin, kw, psaUser, kueche, funkGw, funkMit, ohne]) await anmelden(k);
+
+  // Modul-Testdaten für die Zielperson: ein ausgegebenes Stück (Prüfung fällig) und ein zugeteiltes Funkgerät
+  let [typ] = await owner`select id from psa.ausruestungstypen order by id limit 1`;
+  if (!typ) { [typ] = await owner`insert into psa.ausruestungstypen (bezeichnung) values (${stamp + "-typ"}) returning id`; ids.typ.push(typ.id); }
+  const [stueck] = await owner`insert into psa.ausruestungstuecke (ausruestungstyp_id, seriennummer, status, kamerad_id, naechste_pruefung) values (${typ.id}, ${stamp + "-sn"}, 'Ausgegeben', ${ziel.kamerad}, '2020-01-01') returning id`;
+  ids.stueck.push(stueck.id);
+  const geraetSn = `${stamp}-fg`;
+  const [geraet] = await owner`insert into fw_funk.devices (serial_number, device_type) values (${geraetSn}, 'sepura') returning id`;
+  ids.geraet.push(geraet.id);
+  const [zuteilung] = await owner`insert into fw_funk.device_assignments (device_id, owner_id) values (${geraet.id}, ${ziel.kamerad}) returning id`;
+  ids.zuteilung.push(zuteilung.id);
 
   // ── Zugriff ────────────────────────────────────────────────────────────────
   let r = await api("GET", "/api/mitglieder", null);
@@ -251,12 +262,11 @@ try {
     s = await seite("/", k.cookie);
     check(`${n}: Startseite hat die Kachel Mitglieder`, hat(s.html, 'data-kachel="mitglieder"'));
     s = await seite(`/mitglieder/${ziel.kamerad}`, k.cookie);
-    check(`${n}: Detailseite → 200, nur der Abschnitt Stammdaten, schreibgeschützt`,
-      s.status === 200 && JSON.stringify(abschnitteIn(s.html)) === '["stammdaten"]' && !hat(s.html, 'id="stamm-vorname"') && hat(s.html, ziel.name), `${s.status} ${abschnitteIn(s.html)}`);
+    const erwartet = { Kleiderwart: "psa", "Küchen-Admin": "food", "Funk-Gerätewart": "funk" }[n];
+    check(`${n}: Detailseite → 200, Stammdaten (schreibgeschützt) und der Abschnitt ${erwartet}`,
+      s.status === 200 && JSON.stringify(abschnitteIn(s.html)) === JSON.stringify(["stammdaten", erwartet]) && !hat(s.html, 'id="stamm-vorname"') && hat(s.html, ziel.name), `${s.status} ${abschnitteIn(s.html)}`);
     check(`${n}: Detailseite ohne Zugang, Rollen, Protokoll, PIN-Hash`, !hat(s.html, "reset-pin") && !hat(s.html, "Änderungsverlauf") && !hat(s.html, "$2a$") && !hat(s.html, "$2b$"));
   }
-  s = await seite(`/mitglieder/${ziel.kamerad}`, kueche.cookie);
-  check("Küchen-Admin: Karten-ID der Person erscheint NICHT auf der Detailseite (Küchen-Abschnitt folgt in Paket 4)", !hat(s.html, `K-${stamp}`));
 
   // Admin
   s = await seite("/mitglieder", admin.cookie);
@@ -277,10 +287,83 @@ try {
   check("Admin: ungültige id → 404", s.status === 404, String(s.status));
   s = await seite(`/mitglieder/${admin.kamerad}`, admin.cookie);
   check("Admin: die eigene Person bleibt bearbeitbar und nicht deaktivierbar", s.status === 200 && hat(s.html, "kannst du nicht deaktivieren") && hat(s.html, "(du)"));
+
+  // ── Modul-Abschnitte (Paket 4) ─────────────────────────────────────────────
+  s = await seite(`/mitglieder/${ziel.kamerad}`, kw.cookie);
+  check("PSA: Größenfelder sind für den Kleiderwart bearbeitbar", hat(s.html, 'id="psa-jackeGroesse"') && hat(s.html, "Größen speichern"));
+  check("PSA: ausgegebenes Stück erscheint mit Seriennummer", hat(s.html, `${stamp}-sn`));
+  check("PSA: überfällige Prüfung ist als fällig markiert", hat(s.html, "(fällig)") && hat(s.html, "01.01.2020"));
+  check("PSA: kein Küche- und kein Funk-Inhalt beim Kleiderwart", !hat(s.html, "karten-id") && !hat(s.html, geraetSn) && !hat(s.html, "QR-Link"));
+  s = await seite(`/mitglieder/${ziel.kamerad}`, kueche.cookie);
+  check("Küche: Karten-ID im Eingabefeld, Scan- und QR-Funktion", hat(s.html, `K-${stamp}`) && hat(s.html, "Karte scannen") && hat(s.html, "QR-Link erzeugen"));
+  check("Küche: kein PSA- und kein Funk-Inhalt beim Küchen-Admin", !hat(s.html, `${stamp}-sn`) && !hat(s.html, geraetSn) && !hat(s.html, "psa-jackeGroesse"));
+  s = await seite(`/mitglieder/${ziel.kamerad}`, funkGw.cookie);
+  check("Funk: zugeteiltes Gerät mit Seriennummer, Link zur Geräteverwaltung", hat(s.html, geraetSn) && hat(s.html, "Sepura") && hat(s.html, 'href="/funk"'));
+  check("Funk: nur lesend, kein PSA- und Küche-Inhalt", !hat(s.html, `${stamp}-sn`) && !hat(s.html, "karten-id") && !hat(s.html, "psa-jackeGroesse"));
+  s = await seite(`/mitglieder/${ohneLogin.kamerad}`, funkGw.cookie);
+  check("Funk: Person ohne Gerät → Hinweis", hat(s.html, "Keine Funkgeräte zugeteilt"));
+  s = await seite(`/mitglieder/${ziel.kamerad}`, admin.cookie);
+  check("Admin ohne Modulrollen sieht keinen Modul-Abschnitt", !abschnitteIn(s.html).some((a) => ["psa", "food", "funk"].includes(a)) && !hat(s.html, `${stamp}-sn`) && !hat(s.html, geraetSn));
+
+  // Größen-API
+  const gr = (cookie, id, body) => api("PATCH", `/api/psa/groessen/${id}`, cookie, body);
+  r = await gr(null, ziel.kamerad, { jackeGroesse: "L" });
+  check("Größen: ohne Anmeldung → 401", r.status === 401);
+  for (const [n, k] of [["PSA-User", psaUser], ["Küchen-Admin", kueche], ["Funk-Gerätewart", funkGw], ["ohne Rolle", ohne]]) {
+    r = await gr(k.cookie, ziel.kamerad, { jackeGroesse: "L" });
+    check(`Größen: ${n} → 401 oder 403`, r.status === 403 || r.status === 401, String(r.status));
+  }
+  r = await gr(kw.cookie, ziel.kamerad, { jackeGroesse: " L ", hoseGroesse: "52", fleeceGroesse: "" });
+  const gRow = (await owner`select jacke_groesse, hose_groesse, fleece_groesse from psa.kamerad_details where kamerad_id = ${ziel.kamerad}`)[0];
+  check("Größen: Kleiderwart speichert → 200, getrimmt, leer = null", r.status === 200 && gRow?.jacke_groesse === "L" && gRow.hose_groesse === "52" && gRow.fleece_groesse === null, `${r.status} ${JSON.stringify(gRow)}`);
+  r = await gr(kw.cookie, ziel.kamerad, { jackeGroesse: "XL" });
+  const gRow2 = (await owner`select jacke_groesse, hose_groesse from psa.kamerad_details where kamerad_id = ${ziel.kamerad}`)[0];
+  check("Größen: weiteres Speichern ändert nur die genannten Felder (Upsert)", r.status === 200 && gRow2.jacke_groesse === "XL" && gRow2.hose_groesse === "52");
+  r = await gr(kw.cookie, ohneLogin.kamerad, { stiefelGroesse: "44" });
+  check("Größen: für eine Person ohne bisherige Größen wird die Zeile angelegt", r.status === 200 && (await owner`select stiefel_groesse from psa.kamerad_details where kamerad_id = ${ohneLogin.kamerad}`)[0]?.stiefel_groesse === "44");
+  r = await gr(kw.cookie, ziel.kamerad, { jackeGroesse: "x".repeat(21) });
+  check("Größen: zu lang → 400", r.status === 400);
+  r = await gr(kw.cookie, ziel.kamerad, {});
+  check("Größen: leerer Body → 400", r.status === 400);
+  r = await gr(kw.cookie, "abc", { jackeGroesse: "L" });
+  check("Größen: ungültige id → 400", r.status === 400);
+  r = await gr(kw.cookie, 2147483000, { jackeGroesse: "L" });
+  check("Größen: unbekannte Person → 404", r.status === 404);
+  const cl = (await owner`select aktion, details from psa.changelog where benutzer = ${kw.name} order by id desc limit 1`)[0];
+  check("Größen: Eintrag im PSA-Changelog", cl?.aktion === "Größen bearbeitet" && cl.details === `Mg ${ohneLogin.name}`, JSON.stringify(cl));
+
+  // Karten-ID über die Küche (PUT /api/food/admin/users/[id] -> set_karten_id)
+  const karte = (cookie, id, body) => api("PUT", `/api/food/admin/users/${id}`, cookie, body);
+  for (const [n, k] of [["Kleiderwart", kw], ["Funk-Gerätewart", funkGw], ["ohne Rolle", ohne]]) {
+    r = await karte(k.cookie, ohneLogin.kamerad, { card_id: `X-${stamp}` });
+    check(`Karten-ID: ${n} → 403`, r.status === 403 || r.status === 401, String(r.status));
+  }
+  r = await karte(kueche.cookie, ohneLogin.kamerad, { card_id: `K2-${stamp}` });
+  check("Karten-ID: Küchen-Admin setzt die ID → 200", r.status === 200 && (await owner`select karten_id from core.kameraden where id = ${ohneLogin.kamerad}`)[0].karten_id === `K2-${stamp}`, String(r.status));
+  r = await karte(kueche.cookie, funkMit.kamerad, { card_id: `K2-${stamp}` });
+  check("Karten-ID: dieselbe ID bei einer anderen Person → 409", r.status === 409, `${r.status} ${r.json?.error}`);
+  const kaud = await audit(ohneLogin.kamerad);
+  check("Karten-ID: Eintrag im Änderungsprotokoll mit dem Küchen-Admin als Akteur", kaud.some((a) => a.feld === "karten_id" && a.neu === `K2-${stamp}` && a.akteur_kamerad_id === kueche.kamerad));
+  r = await karte(kueche.cookie, ohneLogin.kamerad, { card_id: null });
+  check("Karten-ID: Küchen-Admin entfernt die ID → 200, NULL", r.status === 200 && (await owner`select karten_id from core.kameraden where id = ${ohneLogin.kamerad}`)[0].karten_id === null);
+  r = await karte(kueche.cookie, ohneLogin.kamerad, {});
+  check("Karten-ID: ohne card_id → 400", r.status === 400);
+
+  // QR-Link (mobile Anmeldung)
+  r = await api("POST", "/api/food/admin/mobile-token", kueche.cookie, { kameradId: ziel.kamerad });
+  check("QR-Link: Küchen-Admin erzeugt den Link → 200 mit /food/m/...", r.status === 200 && (r.json?.url ?? "").startsWith("/food/m/") && (r.json?.url ?? "").length > 28, String(r.status));
+  r = await api("POST", "/api/food/admin/mobile-token", kw.cookie, { kameradId: ziel.kamerad });
+  check("QR-Link: Kleiderwart (keine Küchenrolle) → 401 oder 403", r.status === 401 || r.status === 403, String(r.status));
 } finally {
   // Aufräumen nur über gemerkte IDs und exakte Namen
   try {
     if (namen.length) await owner`delete from core.login_attempts where benutzername in ${owner(namen.map((n) => n.toLowerCase()))}`;
+    if (ids.zuteilung.length) await owner`delete from fw_funk.device_assignments where id in ${owner(ids.zuteilung)}`;
+    if (ids.geraet.length) await owner`delete from fw_funk.devices where id in ${owner(ids.geraet)}`;
+    if (ids.stueck.length) await owner`delete from psa.ausruestungstuecke where id in ${owner(ids.stueck)}`;
+    if (ids.typ.length) await owner`delete from psa.ausruestungstypen where id in ${owner(ids.typ)}`;
+    if (ids.kam.length) await owner`delete from fw_food.mobile_tokens where kamerad_id in ${owner(ids.kam)}`;
+    if (namen.length) await owner`delete from psa.changelog where benutzer in ${owner(namen)}`;
     if (ids.kam.length) await owner`delete from core.mitglieder_audit where kamerad_id in ${owner(ids.kam)}`;
     if (ids.kam.length) await owner`delete from core.benutzer where kamerad_id in ${owner(ids.kam)}`;
     if (ids.kam.length) await owner`delete from core.kameraden where id in ${owner(ids.kam)}`;
