@@ -36,7 +36,24 @@ gleich("Ostersonntag", [2024, 2025, 2026, 2027].map(ostersonntag), ["2024-03-31"
 gleich("Feiertage 2026", [...feiertageNiedersachsen(2026).keys()], [
   "2026-01-01", "2026-04-03", "2026-04-06", "2026-05-01", "2026-05-14", "2026-05-25",
   "2026-10-03", "2026-10-31", "2026-12-25", "2026-12-26"]);
-check("Reformationstag erst ab 2018", !feiertageNiedersachsen(2017).has("2017-10-31") && feiertageNiedersachsen(2018).get("2018-10-31") === "Reformationstag");
+// Bewegliche Feiertage 2024–2030 als feste Sollwerte (Kalenderdaten, nicht aus der Formel abgeleitet)
+const BEWEGLICH = {
+  2024: ["2024-03-29", "2024-04-01", "2024-05-09", "2024-05-20"],
+  2025: ["2025-04-18", "2025-04-21", "2025-05-29", "2025-06-09"],
+  2026: ["2026-04-03", "2026-04-06", "2026-05-14", "2026-05-25"],
+  2027: ["2027-03-26", "2027-03-29", "2027-05-06", "2027-05-17"],
+  2028: ["2028-04-14", "2028-04-17", "2028-05-25", "2028-06-05"],
+  2029: ["2029-03-30", "2029-04-02", "2029-05-10", "2029-05-21"],
+  2030: ["2030-04-19", "2030-04-22", "2030-05-30", "2030-06-10"],
+};
+const NAMEN = ["Karfreitag", "Ostermontag", "Christi Himmelfahrt", "Pfingstmontag"];
+for (const [jahr, daten] of Object.entries(BEWEGLICH)) {
+  const f = feiertageNiedersachsen(Number(jahr));
+  gleich(`${jahr}: Karfreitag, Ostermontag, Himmelfahrt, Pfingstmontag`, daten.map((d) => f.get(d)), NAMEN);
+  check(`${jahr}: Reformationstag 31.10.`, f.get(`${jahr}-10-31`) === "Reformationstag");
+  check(`${jahr}: genau 10 Feiertage`, f.size === 10, String(f.size));
+}
+check("Reformationstag erst ab 2018",!feiertageNiedersachsen(2017).has("2017-10-31") && feiertageNiedersachsen(2018).get("2018-10-31") === "Reformationstag");
 
 // ── Spec 5.1: Tabelle wochen_zyklus ──
 const M = ["D", "", "D", "Z"];

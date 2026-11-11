@@ -117,9 +117,13 @@ Vor dem Ausrollen
    mit Dev-Server `node scripts/test-dienstplan-auth.mjs`,
    `node scripts/test-mitglieder.mjs`, `node scripts/test-sitzungen.mjs`,
    `node scripts/test-setup.mjs` (eigener Server, 3100 vorher beenden)
-2. Backup: `/root/fw/FW-Hub/scripts/server-backup.sh` als root, Kopie außerhalb
+2. Docker-Build einmal auf dem Windows-Rechner (auf dem Mac gibt es kein
+   Docker, die Stages sind dort nie gebaut worden): `docker build .` (Portal)
+   und `docker build --target import .` (Import). Beide müssen durchlaufen,
+   bevor auf dem Server gebaut wird.
+3. Backup: `/root/fw/FW-Hub/scripts/server-backup.sh` als root, Kopie außerhalb
    des Servers
-3. Stand erfassen (Owner-psql): `select count(*) from drizzle.__drizzle_migrations;`
+4. Stand erfassen (Owner-psql): `select count(*) from drizzle.__drizzle_migrations;`
    (vor dem Dienstplan: 16, also 0000–0015)
 
 Migrationen, Reihenfolge
@@ -630,6 +634,11 @@ Verbleibende Hinweise im Bericht (blockieren nicht)
   - `GET personen` (Planer): aktive Kameraden mit Anzeigename und aktive
     externe Personen für die Auswahl
   - `GET kategorien` (Mitglied, aus Phase 2)
+- **Personenauswahl nur für Planer (bewusste Entscheidung, Ben 11.11.2026):**
+  `GET personen` ist nur in der Route auf Planer und Admin beschränkt. Die
+  Datenbank trennt hier nicht, weil Mitglieder `kameraden_namen()` lesen dürfen
+  (sie sehen die Namen im Plan, Phase 2). Die Liste enthält nur Namensfelder.
+  So belassen, keine eigene Datenbankfunktion.
 - Änderungen nach der Freigabe sind für Planer erlaubt (Spec 6, Einzeländerungen).
   Die Markierung "geändert" und die Version bei der Freigabe kommen mit Phase 9.
 - Hinweise (nicht blockierend, in `GET plaene/[jahr]`): Dienstabend ohne Thema,
@@ -638,7 +647,9 @@ Verbleibende Hinweise im Bericht (blockieren nicht)
   Termine zählen nicht.
 
 Geprüft (11.11.2026, Mac)
-- `scripts/test-dienstplan-kalender.mjs` 26/0 (inkl. Akzeptanztest 2026),
+- `scripts/test-dienstplan-kalender.mjs` 47/0 (inkl. Akzeptanztest 2026 und
+  Feiertagen 2024–2030: Karfreitag, Ostermontag, Himmelfahrt, Pfingstmontag
+  als feste Sollwerte, Reformationstag 31.10. jedes Jahr, ab 2018),
   `scripts/test-dienstplan-eingabe.mjs` 41/0, `scripts/test-dienstplan-api.mjs`
   69/0 (Dev-Server; Admin/Planer/Mitglied-Konten, Jahr 2095, räumt selbst auf),
   `scripts/test-dienstplan-auth.mjs` 62/0 (findet die 17 neuen Routen selbst).
@@ -661,10 +672,7 @@ Geprüft (11.11.2026, Mac)
 - Kopieren einer Themenposition (Drag and Drop mit Alt-Taste) kommt mit Phase 7.
 
 ### Offene Fragen
-- `GET personen` ist nur in der Route auf Planer beschränkt: Mitglieder dürfen
-  `kameraden_namen()` lesen (sie sehen die Namen im Plan, Entscheidung Phase 2),
-  die Datenbank trennt hier nicht. Die Liste enthält nur Namensfelder. Bewusst
-  so gelassen; bei Bedarf eigene Funktion nur für Planer.
+- keine
 
 ## Phase 5 – Eingabemaske, Verwaltung, Feiertage
 
