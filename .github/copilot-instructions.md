@@ -482,8 +482,13 @@ Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Ze
 | test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
 | test-dienstplan-rls.mjs | RLS aller Tabellen in dienstplan je Rolle und Organisation, Trigger (Version, Freigabeschutz), kameraden_namen(), dienst_rolle in core | nein |
 | test-dienstplan-auth.mjs | Alle Routen unter /api/dienstplan ohne Login → 401 (findet die Routen selbst; Token-Routen: 401/403), Claim dienst_rolle, Rollenvergabe | ja |
+| test-dienstplan-import-lib.mjs, test-dienstplan-import.mjs | Excel-Import Dienstplan: Analyse-Regeln (ohne DB) bzw. Ende zu Ende als fw_app mit erzeugter Excel (Jahre 2091/2092), Localhost-Sperre von `--testdaten` | nein / nein |
 | test-setup.mjs | Erst-Einrichtung /setup in einer Wegwerf-Kopie von fwhub_dev mit leerem core.benutzer (eigener Dev-Server auf 3101; den Dev-Server auf 3100 vorher beenden) | eigener |
 | test-startschutz.mjs | Datenbank-Startschutz: `next start` bricht bei fehlender/falscher Rolle ab, `next dev` warnt nur, keine URLs oder Passwörter in der Ausgabe (Ports 3102/3103, braucht `npm run build`, Dev-Server auf 3100 vorher beenden) | eigener |
+`scripts/dienstplan-import.mjs` ist kein Testskript, sondern das Werkzeug für den
+einmaligen Excel-Import (auch gegen Produktion) und ruft darum `schutz()` nicht auf.
+Nur sein Modus `--testdaten` (legt Kameraden an) bricht ohne lokale DATABASE_URL ab.
+Ablauf und Klärung: docs/dienstplan/PROGRESS.md, Phase 4 und Deployment-Checkliste.
 Der Letzte-Admin-Schutz ist auf Datenbankebene in test-haertung (1e/1f) geprüft.
 Über die API ist er seit 0015 nicht mehr erreichbar: Kameraden deaktivieren darf nur
 ein globaler Admin, und der Selbstschutz greift davor (test-sitzungen).

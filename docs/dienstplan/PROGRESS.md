@@ -12,7 +12,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | 1 | Core-Migration (Spitzname, Anzeigename-Funktion mit Tests) | fertig (Migration 0016 lokal angewendet, nicht auf dem Server) |
 | 2 | Schema `dienstplan`, Migration, RLS, Claim `dienst_rolle`, Seeds | fertig (Migrationen 0017, 0018 lokal angewendet, nicht auf dem Server) |
 | 3 | API inkl. Generator und Akzeptanztest 2026 | offen |
-| 4 | Importskript Excel (Themenkatalog, Blockvorschläge, Verantwortliche, Pläne) | offen |
+| 4 | Importskript Excel (Themenkatalog, Blockvorschläge, Verantwortliche, Pläne) | fertig (lokal mit Testdaten importiert; echter Import wartet auf Klärung, siehe Phase 4) |
 | 5 | Eingabemaske (Klickbedienung), Verwaltung, Feiertagshinweise | offen |
 | 6 | Präsentationsansicht mit Live-Aktualisierung und Anzeige-Token | offen |
 | 7 | Drag and Drop, Rückgängig, Vorjahresanzeige | offen |
@@ -89,8 +89,13 @@ Mac (eingerichtet am 11.11.2026, Shell zsh, kein Docker):
 - Kontrolle nach der Einrichtung (Stand Phase 2): siehe Phase 2, "Geprüft".
 - test-setup und test-startschutz beendeten ihre Server nur mit `taskkill`
   (Windows). Seit Phase 2 über `scripts/lib/prozess.mjs`, auch auf dem Mac.
-- Die DB enthält keine echten Mitglieder. Für den Import (Phase 4) braucht es
-  Kameraden mit echten Namen, siehe dort.
+- Die DB enthält keine echten Mitglieder. Seit Phase 4 liegen dort Testdaten aus
+  dem Import (`--testdaten`): 35 Kameraden mit `personalnummer` `TEST-DP-…` und
+  die Pläne 2023–2026 (freigegeben). Neu aufbauen: `node
+  scripts/dienstplan-import.mjs --testdaten --als <Dev-Admin-Kamerad> --ersetzen`.
+  Entfernen (Owner-psql, nur lokal): Pläne, Themen, Blöcke, externe Personen und
+  `ausgleich_personen` löschen, dann `core.mitglieder_audit` und `core.kameraden`
+  der `TEST-DP-%`-Kameraden.
 
 ## Deployment-Checkliste
 
@@ -101,6 +106,7 @@ Wird in jeder Phase ergänzt. Allgemeiner Ablauf siehe copilot-instructions.md
 Vor dem Ausrollen
 1. Lokal grün: `npx tsc --noEmit`, `npm run build`, `node scripts/test-haertung.mjs`,
    `node scripts/test-dienstplan-rls.mjs`, `node scripts/test-anzeigename.mjs`,
+   `node scripts/test-dienstplan-import-lib.mjs`, `node scripts/test-dienstplan-import.mjs`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-auth.mjs`,
    `node scripts/test-mitglieder.mjs`, `node scripts/test-sitzungen.mjs`,
@@ -157,6 +163,39 @@ Smoke-Test nach dem Ausrollen
 - Globaler Admin: `/mitglieder/[id]` → Rollen zeigt "Dienstplan"; Rolle Planer
   setzen und wieder entfernen, Verlauf zeigt dienst_rolle
 - Login als normaler Benutzer klappt (Claim dienst_rolle leer)
+
+Import der Excel-Pläne 2023–2026 (Phase 4, nach den Migrationen)
+- Voraussetzung: 0018 ist angewendet, die Kameraden stehen in der
+  Produktionsdatenbank. Spitznamen (z. B. Kürzel in der Ausbilder-Spalte) vorher
+  in `/mitglieder` pflegen, dann ordnet der Abgleich sie selbst zu.
+- Die Zuordnungsdatei gilt nur für die Datenbank, gegen die sie erstellt wurde
+  (Kamerad-IDs). Darum Probelauf und Klärung gegen die Produktion, nicht lokal.
+- Ablauf:
+  1. Excel nach `~/fw/FW-Hub/data/import/` kopieren (ignoriert, nie committen).
+  2. Probelauf (liest nur, READ-ONLY-Transaktion):
+     `node scripts/dienstplan-import.mjs --dry-run` mit DATABASE_URL = fw_app der
+     Produktion. Ergebnis: `data/import/klaerung-<datum>.csv` und
+     `data/import/zuordnung-vorlage-<datum>.json`.
+  3. Vorlage prüfen und als `data/import/zuordnung.json` speichern: offene Personen
+     (Kamerad-ID, "alle_gf", "offen" oder extern), bestätigte Themen-Zusammen-
+     führungen von `themen_vorschlaege` nach `themen`, bestätigte Blöcke von
+     `bloecke_vorschlaege` nach `bloecke`. Probelauf wiederholen, bis
+     "Import wäre so möglich" erscheint.
+  4. Backup (`server-backup.sh`), dann Import:
+     `node scripts/dienstplan-import.mjs --als <Kamerad-ID des Dienstplan-Admins>`.
+     Erwartet: je Jahr `Plan JJJJ: N Termine, freigegeben`, Exit 0.
+  5. Prüfen (Owner-psql): `select jahr, status, (select count(*) from
+     dienstplan.termine t where t.plan_id = p.id) from dienstplan.plaene p order
+     by jahr;` und `select count(*) from core.kameraden where personalnummer like
+     'TEST-%';` (muss 0 sein).
+- `--testdaten` bricht gegen jeden nicht-lokalen Host ab (Exit 2) und darf auf
+  dem Server nie benutzt werden.
+- Wie das Skript auf dem Server läuft (Node, node_modules, Netz fw-network),
+  ist noch offen, siehe Phase 4, Offene Fragen.
+- Rückweg: Der Import ist eine Transaktion; bei einem Fehler wird nichts
+  geschrieben. Nach erfolgreichem Import: mit `--ersetzen` neu importieren
+  (löscht die Pläne der Jahre samt Terminen; Katalog, Blöcke und externe
+  Personen bleiben und werden wiederverwendet) oder als Owner die Pläne löschen.
 
 Sichtbarkeit (Spec 11: Nutzer sehen das Modul erst nach Release 1)
 - Bis zur Freischaltung gibt es keinen Eintrag in Kopfzeile, Kacheln und
@@ -378,8 +417,113 @@ Geprüft (Mac, Postgres 17, Tests als fw_app):
     DATABASE_URL auf localhost zeigt. Sonst Abbruch mit Fehlermeldung, egal
     welches Flag gesetzt ist. So angelegte Kameraden sind erkennbar markiert
     (personalnummer mit Präfix `TEST-`).
+  - Der Klärungsbericht liegt unter `data/import/` (`klaerung-<datum>.csv`),
+    damit `.gitignore` ihn ausschließt (11.11.2026). `.DS_Store` ist ebenfalls
+    ignoriert.
+- Aufbau: `scripts/dienstplan-import.mjs` (Excel lesen, Datenbank, Bericht
+  schreiben) und `scripts/lib/dienstplan-import.mjs` (reine Analyse, ohne
+  Datenbank testbar). Aufruf und Optionen im Kopf des Skripts (`--hilfe`).
+- Läuft als fw_app (DATABASE_URL) im Dienstplan-Scope mit Rolle Admin (GUCs wie
+  `withDienstplanScope`), nicht als Owner: RLS greift auch beim Import. Kameraden
+  liest es nur über `dienstplan.kameraden_namen()`. Alles in einer Transaktion,
+  `--dry-run` als READ-ONLY-Transaktion (schreibt wirklich nichts).
+- `--als <kameradId>` ist ohne `--dry-run` Pflicht (aktiver Kamerad):
+  `freigegeben_von` der Pläne und `app.kamerad_id` für das Änderungsprotokoll.
+- Manuelle Klärung über `data/import/zuordnung.json` (Vorlage schreibt jeder
+  Lauf): `personen` (Kamerad-ID, "alle_gf", "offen" oder `{"extern":
+  {"organisation", "name", "funktion"}}`), `themen` (Variante → Zieltitel),
+  `bloecke` (Listen von Titeln). Vorschläge stehen getrennt in
+  `themen_vorschlaege` und `bloecke_vorschlaege` und wirken erst, wenn sie
+  übernommen werden (Spec: "zur manuellen Bestätigung").
+- Was den Import blockiert: unbekannte oder mehrdeutige Personen, widersprüchliche
+  oder ungültige Zuordnungen, unbekannte Typen, ungültige Daten, vorhandene Pläne
+  ohne `--ersetzen`. Alles andere ist ein Hinweis im Bericht.
+- Personen-Abgleich: Nachname, Nachname mit Initial bzw. Vornamen-Präfix
+  ("Name, J.", "J. Name", "Name, Mar."), Vorname und Nachname, Spitzname
+  (unabhängig von `spitzname_anzeigen`). Groß/klein egal, ß = ss. Inaktive
+  Kameraden zählen mit (Altdaten). Schreibvarianten derselben Angabe
+  ("B.Name"/"B. Name", "Name, I"/"I. Name") werden zu einer Person
+  zusammengefasst; die Zuordnungsdatei darf jede Variante als Schlüssel nutzen.
+- Organisationen ohne Person (Liste im Code: DRK, THW, Johanniter, ASB,
+  Malteser, Polizei, Gemeinde, Landkreis, Rettungsdienst sowie "OF/FF/FW <Ort>")
+  werden externe Personen ohne Namen. Gleiche Organisation wird wiederverwendet.
+- Themen: Trennung an "/", nicht in Klammern und nicht vor "-". Varianten, die
+  sich nur in Groß/klein und Leerzeichen unterscheiden, werden automatisch ein
+  Katalogeintrag (häufigste Schreibweise). Alles Weitere nur über die
+  Zuordnungsdatei; der Bericht schlägt vor (gleiche Wörter oder ein Titel enthält
+  den anderen).
+- Katalogthemen nur bei D und Z. G, O, J, K, B bekommen Freitext-Themen
+  (`titel_freitext`, Spec: "Sondertermine wie Weihnachtsfeier"). Entspricht der
+  Titel nur dem Kategorienamen ("Zwischendienst", "Ortskommando") und gibt es
+  keine Ausbilder, bekommt der Termin kein Thema.
+- Ausbilder-Zuordnung: Gruppen (an "/") positionsgleich zu den Themen; bei einem
+  Thema alle Personen daran; bei einer Gruppe und mehreren Themen die Gruppe an
+  jedem Thema; sonst alle am ersten Thema mit Hinweis im Bericht.
+- Blockvorschläge: gleiche Themenmenge (mindestens 2) an mindestens zwei
+  Terminen. Bestätigte Blöcke werden angelegt, die Termine verweisen mit
+  `aus_block_id` darauf.
+- Termine: `quelle = 'manuell'` ohne Regelbezug, `dauer_minuten` leer
+  (Standarddauer der Kategorie), Uhrzeit wie in Excel (leer bleibt leer).
+  Positionen von Themen und Verantwortlichen beginnen bei 1.
+- Pläne werden direkt als `freigegeben` angelegt, `freigegeben_am` = Zeitpunkt
+  des Imports. Vorhandene Pläne: Abbruch, mit `--ersetzen` löschen und neu.
+  Katalog, Blöcke und externe Personen werden wiederverwendet, nicht dupliziert.
+- Blatt "Gruppenführer": Namen unter der Überschrift "GF" → `ausgleich_personen`
+  (nur Kameraden). Blatt "Diensttypen" wird nicht gelesen (Kategorien kommen aus
+  dem Seed in 0018, gleiche Kürzel).
+- Testdaten-Modus: legt fehlende Personen als Kameraden an (Vorname = Initial
+  oder "Test", Kürzel aus Großbuchstaben als Spitzname mit Anzeige) und ordnet
+  mehrdeutige Namen dem ersten Kandidaten zu (im Bericht so vermerkt).
+
+Geprüft (11.11.2026, Mac)
+- Probelauf gegen die Excel (Blätter 2023–2026): 220 Termine (4 ausgefallen),
+  64 Katalogthemen, 12 Vorschläge zum Zusammenführen, 5 Blockvorschläge,
+  61 Personen (nach Zusammenfassen der Schreibvarianten), 13 Hinweise. Ohne
+  echte Kameraden lokal: 54 offen (nur Platzhalter und Organisationen
+  zugeordnet), wie erwartet.
+- Testdaten-Import lokal: Pläne 2023–2026 freigegeben, 321 Verantwortliche,
+  17 Ausgleichspersonen. Plan 2026: D 25, Z 13, G 4, O 4, K 5, J 2, B 1.
+- Erneuter Lauf ohne `--ersetzen` → Abbruch; `--testdaten` mit fremdem Host →
+  Exit 2; ohne `--als` → Exit 2.
+- `scripts/test-dienstplan-import-lib.mjs` (71 Prüfungen, ohne DB) und
+  `scripts/test-dienstplan-import.mjs` (38 Prüfungen, DB ohne Server, Jahre
+  2091/2092, erfundene Namen, räumt selbst auf). Gegenprobe: ohne die
+  Localhost-Sperre schlägt der Test fehl.
+- tsc, eslint (neue Dateien) sauber; test-dienstplan-rls, test-haertung,
+  test-mitglieder(-lib, -rechte), test-anzeigename, test-client-ip,
+  test-dienstplan-auth, test-sitzungen, test-food grün (mit den Testdaten in der DB).
+
 ### Abweichungen von der Spec
+- Ausgefallen: Spec nennt nur Typ F. Im Blatt 2023 stehen Feiertage als D ohne
+  Uhrzeit und ohne Ausbilder; sie werden ebenfalls als ausgefallen übernommen
+  (Grund = Titel in `bemerkung`, Hinweis im Bericht). Nur bei ausdrücklichem Typ
+  D: Ein Termin ohne Typ (abgeleitet aus dem Titel) fällt nie automatisch aus.
+- Fehlt der Typ, wird er aus dem Titel abgeleitet (Spec nennt das nur für das
+  Blatt "2022"). Betrifft eine Zeile 2025, Hinweis im Bericht.
+- Ein Datum mit falschem Jahr im Blatt (eine Zeile 2023) wird auf das Planjahr
+  gesetzt, mit Hinweis.
+- Ältere Blätter ("2022", "GF 2022", "2022 (Corona Spezial)") werden nicht
+  importiert (Spec: "optional"). Nur Blätter "Dienstplan JJJJ".
+- `freigegeben_am` ist der Importzeitpunkt (das Freigabedatum steht nicht in
+  der Excel).
+- Spec 10.1 nennt "Themenkatalog aus allen Themen". Freitext-Themen der
+  Kategorien G, O, J, K, B kommen nicht in den Katalog (siehe Entscheidungen).
+
 ### Offene Fragen
+- **Ausführung auf dem Server (Ben):** Das Skript braucht Node 24, `exceljs`
+  und `postgres` (node_modules) und Zugriff auf `fw_postgres` im Netz
+  `fw-network`. Das Migrations-Image enthält beides nicht. Vorschlag: ein
+  kurzlebiger Container `node:24` im Netz `fw-network` mit dem Repo als Volume,
+  `npm ci` darin, DATABASE_URL = fw_app aus der Stack-Konfiguration. Alternative:
+  eine eigene Dockerfile-Stage `import` analog `migrate`. Entscheidung vor dem
+  echten Import.
+- **Klärung der Personen (Ben):** gegen die Produktion (Probelauf dort), siehe
+  Deployment-Checkliste. Ein Eintrag in der Ausbilder-Spalte sieht wie ein
+  Ortsname aus (2025, Zeile 9); bitte im Bericht prüfen (Kamerad, extern oder
+  offen).
+- **Hinweise im Bericht prüfen:** 8 Termine mit ungleicher Zahl von Themen und
+  Ausbilder-Gruppen (alle Ausbilder am ersten Thema). Nach dem Import in der
+  Eingabemaske (Phase 5) korrigierbar.
 
 ## Phase 3 – API und Generator
 

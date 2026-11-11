@@ -144,3 +144,5 @@ vite.config.ts.timestamp-*
 cookies.txt
 
 data/import/
+# macOS
+.DS_Store
