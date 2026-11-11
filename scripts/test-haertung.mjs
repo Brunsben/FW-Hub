@@ -144,7 +144,7 @@ try {
   await als(usrG, async (tx) => {
     let e = await fehler(tx, "42501", (sp) => sp`update core.kameraden set psa_rolle = 'Admin' where id = ${USR}`);
     check("2 User ändert eigene psa_rolle per SQL -> abgelehnt (42501)", e.ok, e.got);
-    for (const col of ["food_rolle", "fk_rolle", "funk_rolle"]) {
+    for (const col of ["food_rolle", "fk_rolle", "funk_rolle", "dienst_rolle"]) {
       e = await fehler(tx, "42501", (sp) => sp.unsafe(`update core.kameraden set ${col} = 'Admin' where id = ${USR}`));
       check(`2 User ändert eigene ${col} per SQL -> abgelehnt`, e.ok, e.got);
     }

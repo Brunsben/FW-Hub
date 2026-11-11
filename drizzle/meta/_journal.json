@@ -120,6 +120,20 @@
       "when": 1794358688949,
       "tag": "0016_kameraden_spitzname",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794360279431,
+      "tag": "0017_kameraden_dienst_rolle",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794360357395,
+      "tag": "0018_dienstplan_schema",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | Phase | Inhalt | Status |
 |---|---|---|
 | 1 | Core-Migration (Spitzname, Anzeigename-Funktion mit Tests) | fertig (Migration 0016 lokal angewendet, nicht auf dem Server) |
-| 2 | Schema `dienstplan`, Migration, RLS, Claim `dienst_rolle`, Seeds | offen |
+| 2 | Schema `dienstplan`, Migration, RLS, Claim `dienst_rolle`, Seeds | fertig (Migrationen 0017, 0018 lokal angewendet, nicht auf dem Server) |
 | 3 | API inkl. Generator und Akzeptanztest 2026 | offen |
 | 4 | Importskript Excel (Themenkatalog, Blockvorschläge, Verantwortliche, Pläne) | offen |
 | 5 | Eingabemaske (Klickbedienung), Verwaltung, Feiertagshinweise | offen |
@@ -34,10 +34,20 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 - (siehe je Phase)
 
 ### Offene Fragen
-- `fw_food`-Rechte für fw_app stehen weder in den Migrationen noch in
-  `drizzle/manual/create-fw-app-role.sql` (siehe Umgebung Mac). Auf dem
-  Windows-Rechner und auf dem Server sind sie vermutlich von Hand vergeben.
-  Soll das Skript sie aufnehmen? Nicht Teil des Dienstplans, nur gefunden.
+- **fw_food-Rechte (offen, wartet auf Ben):** Die Rechte von fw_app auf
+  `fw_food` stehen weder in den Migrationen noch in
+  `drizzle/manual/create-fw-app-role.sql`. Ben prüft auf dem Server mit
+  `\dp fw_food.*`, was dort vergeben ist. Danach wird exakt dieser Stand ins
+  Rollen-Skript übernommen. Bis dahin am Skript nichts ändern. Lokal (Mac) sind
+  die Rechte von Hand vergeben (siehe Umgebung Mac, Schritt 5).
+
+### Git
+- Arbeit ausschließlich auf `feature/dienstplan` (ab 11.11.2026, nach Phase 1).
+  `main` steht auf `origin/main`. Pushen macht Ben.
+- `.github/workflows`: `ci.yml` (type-check, build) und `security.yml` (npm
+  audit, Trivy, Gitleaks, Docker-Build zum Scannen) laufen bei Push und Pull
+  Request auf `main`, `security.yml` zusätzlich montags. Kein Deployment. Ein
+  Push auf `feature/dienstplan` startet nichts, erst ein Pull Request auf main.
 
 ### Umgebung (Rechner-spezifisch)
 Windows-Rechner: wie in CLAUDE.md (Container fwhub-postgres-dev, PowerShell).
@@ -73,10 +83,96 @@ Mac (eingerichtet am 11.11.2026, Shell zsh, kein Docker):
      ALL SEQUENCES IN SCHEMA fw_food TO fw_app;`
   6. Einen aktiven globalen Admin anlegen (test-haertung 1f/1g setzt einen
      echten Admin außerhalb der Testkonten voraus)
-- Kontrolle nach der Einrichtung: `test-haertung` 110 OK / 0 Fehler,
-  `test-mitglieder` 181 OK / 0 Fehler (Stand Phase 1).
+  7. PSA-Stammdaten: `npx --yes tsx@4.19.2 --env-file=.env.local
+     scripts/seed-psa-stammdaten.ts` (test-psa erwartet einen Ausrüstungstyp mit
+     Prüfintervall)
+- Kontrolle nach der Einrichtung (Stand Phase 2): siehe Phase 2, "Geprüft".
+- test-setup und test-startschutz beendeten ihre Server nur mit `taskkill`
+  (Windows). Seit Phase 2 über `scripts/lib/prozess.mjs`, auch auf dem Mac.
 - Die DB enthält keine echten Mitglieder. Für den Import (Phase 4) braucht es
   Kameraden mit echten Namen, siehe dort.
+
+## Deployment-Checkliste
+
+Was beim Ausrollen zu beachten ist. Befehle gegen den Server führt Ben aus.
+Wird in jeder Phase ergänzt. Allgemeiner Ablauf siehe copilot-instructions.md
+("Produktion: Server-Struktur und Migrationen", "Produktion: Backup").
+
+Vor dem Ausrollen
+1. Lokal grün: `npx tsc --noEmit`, `npm run build`, `node scripts/test-haertung.mjs`,
+   `node scripts/test-dienstplan-rls.mjs`, `node scripts/test-anzeigename.mjs`,
+   `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
+   mit Dev-Server `node scripts/test-dienstplan-auth.mjs`,
+   `node scripts/test-mitglieder.mjs`, `node scripts/test-sitzungen.mjs`,
+   `node scripts/test-setup.mjs` (eigener Server, 3100 vorher beenden)
+2. Backup: `/root/fw/FW-Hub/scripts/server-backup.sh` als root, Kopie außerhalb
+   des Servers
+3. Stand erfassen (Owner-psql): `select count(*) from drizzle.__drizzle_migrations;`
+   (vor dem Dienstplan: 16, also 0000–0015)
+
+Migrationen, Reihenfolge
+| Migration | Art | Reihenfolge | Hinweis |
+|---|---|---|---|
+| 0016_kameraden_spitzname | additiv | vor der App | Spalten, Spaltenrechte fw_app, Audit-Funktion ersetzt |
+| 0017_kameraden_dienst_rolle | additiv | **vor der App (Pflicht)** | Spalte dienst_rolle, set_kamerad_rollen und Audit-Funktion ersetzt |
+| 0018_dienstplan_schema | additiv | vor der App | Schema dienstplan (19 Tabellen, 39 Policies, Trigger, kameraden_namen()), Rechte fw_app, Seeds (Organisation 1, 7 Kategorien, 3 Regeln) |
+
+**Reihenfolge: erst alle Migrationen, dann die App.** Die neue App liest
+`core.kameraden.dienst_rolle` beim Login (ganze Zeile) und das Erst-Setup
+übergibt `dienst_rolle` an set_kamerad_rollen. Läuft die neue App gegen eine
+Datenbank ohne 0017, scheitert jede Anmeldung. Die alte App läuft mit allen
+drei Migrationen unverändert weiter (nur neue Spalten, Funktionen nehmen eine
+Obermenge an, neues Schema).
+
+Alle ausstehenden Migrationen in einem Lauf: in `~/fw/FW-Hub` nach `git pull`
+`scripts/server-migrate.sh`. Erwartet bei 0016–0018: `Migrationen eingetragen:
+16 -> 19`, `Policies in core` unverändert (keine neuen Policies in core).
+
+Manuelle Schritte auf dem Server
+- Nach 0016: `drizzle/manual/create-fw-app-role.sql` nur noch in der neuen
+  Fassung ausführen (alte Fassung entzieht die Spitzname-Rechte). Platzhalter
+  vorher durch die echten Passwörter ersetzen, sonst werden die Passwörter von
+  fw_app und fw_auth zurückgesetzt. Ein Lauf ist nach 0016 nicht nötig, nur
+  falls das Skript aus anderen Gründen läuft.
+- `create-fw-app-role.sql` fasst das Schema dienstplan nicht an; dessen
+  Rechte kommen nur aus den Migrationen.
+- Prüfen nach den Migrationen (Owner-psql):
+  ```sql
+  select has_column_privilege('fw_app','core.kameraden','spitzname','UPDATE'),          -- t
+         has_column_privilege('fw_app','core.kameraden','spitzname_anzeigen','INSERT'), -- t
+         has_column_privilege('fw_app','core.kameraden','karten_id','UPDATE'),          -- f
+         has_column_privilege('fw_app','core.kameraden','dienst_rolle','UPDATE'),       -- f
+         has_schema_privilege('fw_app','dienstplan','USAGE');                           -- t
+  select count(*) from pg_policies where schemaname = 'dienstplan';                    -- 39
+  select count(*) from pg_tables where schemaname = 'dienstplan' and not rowsecurity;  -- 0
+  select string_agg(kuerzel, ',' order by sortierung) from dienstplan.kategorien;      -- D,Z,G,O,J,K,B
+  ```
+
+App ausrollen: in `~/fw/fwhub-stack` `docker compose build portal && docker
+compose up -d portal` (nie `-v`).
+
+Smoke-Test nach dem Ausrollen
+- Globaler Admin: `/mitglieder/[id]` Spitzname setzen, Haken setzen,
+  Anzeigename zeigt den Spitznamen, Änderungsverlauf zeigt beide Felder
+- Globaler Admin: `/mitglieder/[id]` → Rollen zeigt "Dienstplan"; Rolle Planer
+  setzen und wieder entfernen, Verlauf zeigt dienst_rolle
+- Login als normaler Benutzer klappt (Claim dienst_rolle leer)
+
+Sichtbarkeit (Spec 11: Nutzer sehen das Modul erst nach Release 1)
+- Bis zur Freischaltung gibt es keinen Eintrag in Kopfzeile, Kacheln und
+  Profil. Die Rolle ist nur im Rollen-Abschnitt (globaler Admin) sichtbar. Die
+  Lese-Route `/api/dienstplan/kategorien` ist für angemeldete Personen
+  erreichbar, aber nirgends verlinkt.
+- Freischaltung (eigener Schritt nach der Abnahme): `sichtbareModule()` in
+  app-header.tsx, `MODUL_ICONS`, `ModulKey` in module-guard.ts, Profilzeile
+  "Dienstplan" (ohne Rolle: Mitglied).
+
+Rückweg
+- 0016–0018 sind additiv. Bei Problemen in der App: vorheriges Image starten,
+  Spalten und Schema können bleiben (die alte App kennt sie nicht).
+- Schema dienstplan vollständig entfernen (nur wenn nötig, Owner-psql):
+  `DROP SCHEMA dienstplan CASCADE;` und die Einträge 0018 in
+  drizzle.__drizzle_migrations löschen. Nicht für core-Migrationen.
 
 ---
 
@@ -151,29 +247,125 @@ Ausrollen 0016 (macht der Mensch): additiv, vor oder mit der App. Danach
 
 ## Phase 2 – Schema `dienstplan`
 
-Noch nicht begonnen. Konflikte Spec ↔ Repo am 11.11.2026 mit Ben geklärt:
+Umgesetzt (11.11.2026, Mac, Branch feature/dienstplan):
+- Migration `0017_kameraden_dienst_rolle`: Spalte `core.kameraden.dienst_rolle`,
+  `core.set_kamerad_rollen` kennt `dienst_rolle`, Audit protokolliert sie. fw_app
+  hat kein Schreibrecht auf die Spalte.
+- Migration `0018_dienstplan_schema`: alle Tabellen aus Spec 4.3 plus
+  `dienstplan.organisationen`; Rechte fw_app; Hilfsfunktionen `akt_org()`,
+  `akt_kamerad()`, `ist_admin()`, `ist_planer()`, `ist_mitglied()`; ENABLE und
+  FORCE RLS auf allen 19 Tabellen, 39 Policies; Trigger `plaene_schutz`
+  (Status/Freigabe nur Admin) und Versionszählung (Termin, Thema,
+  Verantwortlicher → `termine.aktualisiert_am` und `plaene.version`);
+  `dienstplan.kameraden_namen()`; Seeds (Organisation 1, Kategorien D Z G O J K
+  B, Regeln Dienstabende, Gruppenführerrunde, Ortskommando, Erinnerungs-
+  Einstellungen).
+- Drizzle-Schema `src/lib/db/schema-dienstplan.ts` (drizzle.config.ts liest
+  beide Schemadateien).
+- Claim `dienst_rolle`: JWT, Login, Erst-Setup (erster Admin bekommt Admin wie
+  in allen Modulen), Rollen-Route und -Formular, Mitglieder-Projektion,
+  Validierung (Rolle im Stammdaten-Body abgelehnt), Verlauf, Benutzerliste.
+- `src/lib/dienstplan/auth.ts` (Rollen, `requireDienstplanSession`,
+  Organisation 1), `withDienstplanScope` in `src/lib/db/scoped.ts`.
+- Erste Route `GET /api/dienstplan/kategorien` (Durchstich Session → Scope →
+  RLS, wird in Phase 3 Teil der API).
+- Tests: `scripts/test-dienstplan-rls.mjs` (74 Prüfungen),
+  `scripts/test-dienstplan-auth.mjs` (12 Prüfungen, findet alle Routen selbst);
+  test-haertung, test-setup, test-mitglieder-lib um dienst_rolle ergänzt.
+- `exceljs@4.4.0` als Abhängigkeit (Spec 9.1; für den Import in Phase 4).
+- `scripts/lib/prozess.mjs`: test-setup und test-startschutz beenden ihre
+  Server jetzt auch auf macOS/Linux (vorher nur `taskkill`).
+- Doku: copilot-instructions.md (Claim, Schema, Scope, Default Privileges,
+  Tests, Modulübersicht).
+
+Geprüft (Mac, Postgres 17, Tests als fw_app):
+- `node scripts/migrate.mjs` → `17 -> 19`
+- `test-dienstplan-rls` 74/0, `test-haertung` 111/0, `test-dienstplan-auth`
+  12/0, `test-mitglieder`, `test-sitzungen`, `test-ui-a`, `test-food`,
+  `test-psa`, `test-login-deaktiviert`, `test-login-sperre`, `test-setup`,
+  `test-startschutz`, `test-migr-bis`, `test-anzeigename`,
+  `test-mitglieder-lib`, `test-mitglieder-rechte`, `test-client-ip`: alle OK
+- Gegenproben: gelockerte Policy `plaene_lesen` → test-dienstplan-rls meldet 2
+  Fehler; Route ohne Login-Prüfung → test-dienstplan-auth meldet 2 Fehler
+  (beides danach zurückgenommen)
+- `npx tsc --noEmit`, `npm run build` ok; `npx eslint` 0 Fehler (7 alte
+  Warnungen in nicht berührten Dateien)
 
 ### Entscheidungen
 - Rollenwerte `Admin` / `Planer` / `Mitglied` (groß, wie die anderen Module),
   Bedeutung wie Spec Abschnitt 6.
 - Ohne `dienst_rolle` gilt eine angemeldete Person als `Mitglied`: /dienstplan
-  ist für alle sichtbar, die Rolle wird nur für Admin und Planer vergeben.
+  ist für alle sichtbar, die Rolle wird nur für Admin und Planer vergeben. Ein
+  unbekannter Wert gilt ebenfalls als Mitglied, nie als mehr.
 - Eigener Scope `withDienstplanScope` in `src/lib/db/scoped.ts` nach dem Muster
-  von `withFunkScope` (setzt `app.kamerad_id` und `app.dienst_rolle`).
+  von `withFunkScope` (setzt `app.kamerad_id`, `app.dienst_rolle`,
+  `app.dienst_org`).
+- Rechte im Detail (RLS):
+  - Mitglied: Kategorien, Kataloge (Themen, Bereiche, Blöcke) und externe
+    Personen lesen; freigegebene Pläne samt Terminen lesen; Vorschläge nur für
+    sich mit Status offen einreichen, eigene sehen.
+  - Planer: alle Pläne lesen; Termine, Themen, Verantwortliche schreiben (auch
+    nach Freigabe); Kataloge und externe Personen pflegen; Vorschläge
+    bearbeiten und löschen; Versionen und Exportläufe anlegen (nur im eigenen
+    Namen); Regeln, Ausgleichsliste und Exportprofile lesen.
+  - Admin: zusätzlich Kategorien, Regeln, Ausgleichsliste, Exportprofile,
+    Erinnerungseinstellungen; Pläne anlegen, freigeben, zurücksetzen, löschen.
+  - Status, Freigabe-Felder, Jahr und Organisation eines Plans ändert nur der
+    Admin (Trigger `plaene_schutz`). Planer dürfen den Plan sonst nur über die
+    Versionszählung berühren.
+  - Versionen und Exportläufe sind unveränderlich (kein UPDATE/DELETE für
+    fw_app). Den Erinnerungsversand schreibt später der Job (Release 2).
+- Namen: Das Modul liest core.kameraden nie direkt (E-Mail, Karten-ID,
+  Personalnummer). `dienstplan.kameraden_namen()` (SECURITY DEFINER) gibt allen
+  Dienstplan-Rollen nur id, Vorname, Name, Spitzname, Haken und aktiv zurück,
+  auch inaktive (alte Pläne). Muster wie `set_karten_id`.
+- E-Mail externer Personen: RLS kann Spalten nicht trennen. Mitglieder dürfen
+  die Zeilen lesen (Namen im Plan), die App gibt die E-Mail nur an Planer aus
+  (Projektion wie in der Mitgliederverwaltung).
+- Versionszählung per Trigger statt in jeder Route: Jede Änderung, egal von
+  welcher Route, erhöht `plaene.version` (Grundlage für die Live-Ansicht).
+- Seeds in der Migration (idempotent), vor dem Einschalten von RLS, damit sie
+  auch mit einem Owner ohne BYPASSRLS laufen. Uhrzeit 19:30 für D, Z, G, O, J
+  laut Plänen 2023–2026; K und B ohne Standarduhrzeit. Dauern laut Annahme der
+  Spec (D, Z, G, O, J 2 h; K 4 h), B (Osterfeuer) 4 h.
+- Regel Dienstabende gültig ab 01.01.2026 (Zwischendienst seit 2026 eine Woche
+  vor dem Dienstabend). Eine Regel für 2023–2025 gibt es nicht; die Altpläne
+  kommen als Import (manuell), nicht aus dem Generator.
+- Nutzer sehen das Modul bis Release 1 nicht (Spec 11): kein Eintrag in
+  Kopfzeile, Kacheln, Profil. Siehe Deployment-Checkliste, "Sichtbarkeit".
+- Farben der Kategorien als Token-Namen mit CHECK (blue, teal, …); Hex-Werte
+  kommen erst mit der Oberfläche in globals.css.
+
 ### Abweichungen von der Spec
-- Es gibt keine globale Auth-Middleware (kein `middleware.ts`/`proxy.ts`).
-  Jede Seite und Route prüft selbst (`getAuthUser`, Modul-Guards). Für
-  Anzeige-Token und iCal-Abo ist deshalb keine Ausnahme einzutragen; die Routen
-  prüfen das Token selbst. `withFoodPublicScope` darf laut Regel nicht
-  wiederverwendet werden, es braucht einen eigenen, auf einen Plan begrenzten
-  Token-Scope.
-- Für das neue Schema `dienstplan` gibt es keine ALTER DEFAULT PRIVILEGES (nur
-  core, psa, fw_funk). Die Migration muss USAGE und Tabellenrechte für fw_app
-  selbst vergeben.
+- Zusätzliche Tabelle `dienstplan.organisationen` (Seed id 1) als Ziel der
+  Fremdschlüssel auf `organisation_id`. Die Spec nennt nur "eine Organisation
+  als Seed"; ohne Tabelle gäbe es nichts zu seeden. Bei einer späteren
+  `core.organisationen` werden nur diese Fremdschlüssel umgehängt.
+- Untergeordnete Tabellen (termine, termin_themen, termin_verantwortliche,
+  plan_versionen, export_laeufe, themenblock_positionen, erinnerungs_versand)
+  tragen keine `organisation_id` (wie im Code der Spec, anders als ihr Satz
+  "alle Tabellen"). RLS prüft die Organisation über den Elternsatz.
+- Zeitstempel mit Zeitzone (`timestamptz`) wie im übrigen Schema, die Spec
+  schreibt `timestamp`.
+- Zusätzliche CHECKs und Indizes: Farbe als Token, Wochentag 1–7, Regeltyp
+  passend zu den Feldern, Dauer > 0, Jahr 2000–2100, Anlass/Modus/Kodierung als
+  Liste, eindeutiger Termin je (Plan, Regel, Rhythmusdatum) für den
+  idempotenten Generator, Indizes für Termin- und Positionslisten.
+- Spec 6: "über `withScope`" → eigener `withDienstplanScope` (entschieden).
+- Spec 6: "Ausnahme bei einer globalen Auth-Middleware" → es gibt keine
+  Middleware; jede Route prüft selbst, abgesichert durch
+  `test-dienstplan-auth.mjs`.
+- Die Spec nennt `dienst_rolle` nur als Claim. Damit er entsteht, braucht es
+  die Spalte in core.kameraden, die Funktion set_kamerad_rollen, Rollen-Route,
+  Formular und Audit (wie bei den anderen Modulrollen).
+- Anzeige-Token (Phase 6) und iCal-Abo-Token (Phase 10) haben noch keine
+  Tabellen; sie kommen mit ihren Phasen in eigenen Migrationen.
 
 ### Offene Fragen
-- Keine (Rollenwerte, Standardrolle, Scope und Import-Testdaten geklärt, siehe
-  Entscheidungen hier und in Phase 4).
+- Keine für Phase 2.
+- Hinweis: Kategorien und Themen werden per Fremdschlüssel referenziert, ohne
+  Prüfung, dass sie zur selben Organisation gehören wie der Plan. Bei einer
+  Organisation unkritisch; bei Mehrmandantenfähigkeit nachziehen.
 
 ## Phase 4 – Importskript
 

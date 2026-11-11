@@ -37,6 +37,7 @@ export interface MitgliedRollen {
   food: string | null;
   fk: string | null;
   funk: string | null;
+  dienst: string | null;
 }
 
 export interface Mitglied {
@@ -109,6 +110,7 @@ function projiziere(user: JwtPayload, z: Zeile): Mitglied {
       food: z.k.foodRolle,
       fk: z.k.fkRolle,
       funk: z.k.funkRolle,
+      dienst: z.k.dienstRolle,
     };
   }
   return m;

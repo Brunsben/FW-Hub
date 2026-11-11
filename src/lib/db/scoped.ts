@@ -111,6 +111,36 @@ export async function withFunkScope<T>(
   });
 }
 
+export interface DienstplanScope {
+  kameradId: number;
+  /** Admin | Planer | Mitglied (lib/dienstplan/auth.ts, ohne Claim Mitglied). */
+  dienstRolle: string;
+  organisationId: number;
+}
+
+// Dienstplan-Scope: setzt app.kamerad_id, app.dienst_rolle und app.dienst_org.
+// Die Policies im Schema dienstplan (Migration 0018) werten genau diese drei
+// aus; ohne Scope sieht fw_app dort nichts. core.kameraden liest das Modul nicht
+// direkt, sondern über dienstplan.kameraden_namen().
+// Den Scope aus requireDienstplanSession() bilden, nie aus Request-Daten.
+export async function withDienstplanScope<T>(
+  scope: DienstplanScope,
+  fn: (tx: ScopedTx) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('app.kamerad_id', ${String(scope.kameradId)}, true)`,
+    );
+    await tx.execute(
+      sql`select set_config('app.dienst_rolle', ${scope.dienstRolle}, true)`,
+    );
+    await tx.execute(
+      sql`select set_config('app.dienst_org', ${String(scope.organisationId)}, true)`,
+    );
+    return fn(tx);
+  });
+}
+
 // Bewusst login-freier, aber als vertrauenswürdig markierter öffentlicher
 // Food-Zugriff (Kiosk/Mobile): setzt app.food_public='true' statt eines
 // personen-/rollenbezogenen Scopes.

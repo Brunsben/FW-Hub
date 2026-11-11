@@ -19,6 +19,7 @@ export function buildJwtPayload(
     foodRolle: string | null;
     fkRolle: string | null;
     funkRolle: string | null;
+    dienstRolle: string | null;
   },
 ): JwtPayload {
   return {
@@ -33,5 +34,6 @@ export function buildJwtPayload(
     food_rolle: kamerad.foodRolle,
     fk_rolle: kamerad.fkRolle,
     funk_rolle: kamerad.funkRolle,
+    dienst_rolle: kamerad.dienstRolle,
   };
 }

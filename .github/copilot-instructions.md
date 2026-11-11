@@ -12,7 +12,7 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
   (kein PostgREST)
 - Auth: eigenes JWT-System (KEIN Auth.js/NextAuth), ein Login für alle
   Module, pro-Modul-Rollen-Claims im Payload (psa_rolle, food_rolle,
-  fk_rolle, funk_rolle), jedes Modul liest nur seinen eigenen Claim
+  fk_rolle, funk_rolle, dienst_rolle), jedes Modul liest nur seinen eigenen Claim
 - Rollenscoped Postgres-Verbindungen + Row-Level-Security als zusätzliche
   Absicherung
 - shadcn/ui + Tailwind als gemeinsame Komponentenbibliothek
@@ -22,7 +22,8 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
 
 ## Datenbank
 - Gemeinsame Postgres-Instanz, Schema core (kameraden, benutzer,
-  login_attempts) plus ein Schema pro Modul (psa, fw_food, fk, fw_funk)
+  login_attempts) plus ein Schema pro Modul (psa, fw_food, fk, fw_funk,
+  dienstplan)
 - Schema pv_monitoring (PV-Anlagen-Daten) wird NICHT angefasst
 
 ### Rollen und Verbindungen
@@ -47,6 +48,9 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
 - Neue Tabellen in core, psa oder fw_funk bekommen über ALTER DEFAULT
   PRIVILEGES automatisch Rechte für fw_app. Tabellen, die nur fw_auth gehören,
   danach mit REVOKE bereinigen (siehe drizzle/manual/create-fw-app-role.sql).
+- Schema dienstplan hat KEINE Default Privileges: Jede Migration vergibt die
+  Rechte für ihre neuen Tabellen selbst (GRANT, siehe 0018).
+  create-fw-app-role.sql fasst dienstplan nicht an.
 
 ### RLS-Scopes (src/lib/db/scoped.ts)
 Jeder Zugriff auf RLS-Tabellen (core.kameraden, core.benutzer,
@@ -87,6 +91,12 @@ Scopes:
   einem ungeprüften Benutzer
 - withGlobalAdminPsaScope(user): wie oben plus app.psa_rolle='Admin'. Nur für
   globale Admin-Aktionen auf PSA-Tabellen (Stück-Löschen)
+- withDienstplanScope({ kameradId, dienstRolle, organisationId }): setzt
+  app.kamerad_id, app.dienst_rolle und app.dienst_org für alle Tabellen in
+  dienstplan (Migration 0018). Immer aus requireDienstplanSession()
+  (lib/dienstplan/auth.ts) bilden. Ohne dienst_rolle gilt eine angemeldete
+  Person als Mitglied. Namen von Kameraden liest das Modul nur über
+  dienstplan.kameraden_namen() (Namensfelder und aktiv), nie core.kameraden
 - Schreibende Transaktionen auf RLS-Tabellen prüfen die Zahl der
   betroffenen Zeilen (expectRows). 0 Zeilen bedeutet Abbruch, kein stiller
   Erfolg
@@ -100,7 +110,8 @@ Scopes:
 - token_version erhöhen bei Deaktivierung, PIN-Änderung (eigene oder
   Admin-Reset), Rollenänderung (App-Rolle oder Modulrollen) und "überall
   abmelden". Alte Tokens sind damit beim nächsten Request ungültig
-- Modulrollen-Spalten in core.kameraden schreibt NUR
+- Modulrollen-Spalten in core.kameraden (psa_rolle, food_rolle, fk_rolle,
+  funk_rolle, dienst_rolle) schreibt NUR
   /api/admin/rollen/[kameradId] (globaler Admin) über die SECURITY-DEFINER-
   Funktion core.set_kamerad_rollen (prüft app.app_rolle='Admin', erhöht
   token_version der Benutzer). fw_app hat auf diese Spalten kein INSERT/UPDATE
@@ -454,7 +465,9 @@ Alle Skripte, die Daten schreiben oder löschen, rufen `schutz()` aus
 scripts/lib/schutz.mjs auf: Jede benutzte Verbindungs-URL (DATABASE_URL,
 AUTH_DATABASE_URL, MIGRATE_DATABASE_URL, TEST_BASE) muss gesetzt und lokal sein,
 sonst Exit 2 vor dem ersten Verbindungsaufbau (nur Namen in der Meldung, nie
-Werte). Neue Testskripte binden den Helfer ein. Sie legen Testdaten mit Zeitstempel-Präfix an und räumen nur
+Werte). Neue Testskripte binden den Helfer ein. Skripte, die selbst einen Server
+starten, nutzen scripts/lib/prozess.mjs (beendet den ganzen Prozessbaum, unter
+Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Zeitstempel-Präfix an und räumen nur
 über gemerkte IDs auf. "Dev-Server" heißt `npx next dev --webpack -p 3100`.
 | Skript | Prüft | Dev-Server |
 |---|---|---|
@@ -467,6 +480,8 @@ Werte). Neue Testskripte binden den Helfer ein. Sie legen Testdaten mit Zeitstem
 | test-login-sperre.mjs, test-login-deaktiviert.mjs, test-client-ip.mjs | Login-Sperre, deaktivierte Konten, Client-IP | ja / ja / nein |
 | test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
 | test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
+| test-dienstplan-rls.mjs | RLS aller Tabellen in dienstplan je Rolle und Organisation, Trigger (Version, Freigabeschutz), kameraden_namen(), dienst_rolle in core | nein |
+| test-dienstplan-auth.mjs | Alle Routen unter /api/dienstplan ohne Login → 401 (findet die Routen selbst; Token-Routen: 401/403), Claim dienst_rolle, Rollenvergabe | ja |
 | test-setup.mjs | Erst-Einrichtung /setup in einer Wegwerf-Kopie von fwhub_dev mit leerem core.benutzer (eigener Dev-Server auf 3101; den Dev-Server auf 3100 vorher beenden) | eigener |
 | test-startschutz.mjs | Datenbank-Startschutz: `next start` bricht bei fehlender/falscher Rolle ab, `next dev` warnt nur, keine URLs oder Passwörter in der Ausgabe (Ports 3102/3103, braucht `npm run build`, Dev-Server auf 3100 vorher beenden) | eigener |
 Der Letzte-Admin-Schutz ist auf Datenbankebene in test-haertung (1e/1f) geprüft.
@@ -553,6 +568,7 @@ Frontend-Formulare) — siehe invariant-checker.agent.md für das Vorgehen.
 | PSA-Verwaltung | /psa | psa-verwaltung (Vue 3 + PostgREST) | Migration ausstehend |
 | Küche/FoodBot | /food | FoodBot (Flask/SQLite) | Migration ausstehend, RFID auf HID-Tastatur-Emulation |
 | Führerscheinkontrolle | /fk | FK-App | Struktur bereits übernommen, Business-Logik-Migration ausstehend |
+| Dienstplan | /dienstplan | Neu, siehe docs/dienstplan/DIENSTPLAN_SPEC.md | In Arbeit auf feature/dienstplan, Stand in docs/dienstplan/PROGRESS.md. Für Nutzer erst nach Release 1 sichtbar |
 | Funktechnik | /funk | Neu, siehe FUNK_APP_SPEC.md | Datenmodell spezifiziert, Implementierung ausstehend. Referenz für Auth-Pattern: Funk-App/lib/funk-auth.ts (dort korrekt gegen Kameraden.id gebaut) — Funk-App selbst NICHT weiterverwenden, nur als Vorlage lesen |
 
 ## Mitgliederverwaltung (/mitglieder)

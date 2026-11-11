@@ -27,7 +27,7 @@ check("anlegen: ungültige E-Mail", st({ vorname: "A", name: "B", email: "keine 
 check("anlegen: aktiv muss boolean sein", st({ vorname: "A", name: "B", aktiv: "ja" }).ok, false);
 
 // Abgelehnte Felder: Rollen und Karten-ID (mit Hinweis auf den richtigen Ort)
-for (const feld of ["psaRolle", "foodRolle", "fkRolle", "funkRolle", "psa_rolle", "food_rolle", "fk_rolle", "funk_rolle", "rollen"]) {
+for (const feld of ["psaRolle", "foodRolle", "fkRolle", "funkRolle", "dienstRolle", "psa_rolle", "food_rolle", "fk_rolle", "funk_rolle", "dienst_rolle", "rollen"]) {
   check(`Feld ${feld} wird abgelehnt (anlegen)`, st({ vorname: "A", name: "B", [feld]: "Admin" }), { ok: false, fehler: FEHLER_ROLLEN });
 }
 check("Rollen im Body werden auch beim Ändern abgelehnt", st({ dienstgrad: "X", psaRolle: "Admin" }, "aendern"), { ok: false, fehler: FEHLER_ROLLEN });

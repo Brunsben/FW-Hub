@@ -33,6 +33,7 @@ const feldLabel = (feld: string) =>
     food_rolle: "Küche-Rolle",
     fk_rolle: "Führerschein-Rolle",
     funk_rolle: "Funk-Rolle",
+    dienst_rolle: "Dienstplan-Rolle",
     benutzername: "Benutzername",
     rolle: "App-Rolle",
     pin: "PIN",

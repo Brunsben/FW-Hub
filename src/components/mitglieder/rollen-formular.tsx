@@ -13,13 +13,14 @@ import {
 } from "@/components/ui/select";
 import { ABMELDE_HINWEIS, apiCall, type Meldung } from "./api-client";
 
-type RollenSpalte = "psaRolle" | "foodRolle" | "fkRolle" | "funkRolle";
+type RollenSpalte = "psaRolle" | "foodRolle" | "fkRolle" | "funkRolle" | "dienstRolle";
 
 const SPALTEN: { key: RollenSpalte; label: string }[] = [
   { key: "psaRolle", label: "PSA" },
   { key: "foodRolle", label: "Küche" },
   { key: "fkRolle", label: "Führerschein" },
   { key: "funkRolle", label: "Funk" },
+  { key: "dienstRolle", label: "Dienstplan" },
 ];
 const KEINE = "__keine__"; // Radix-Select erlaubt keinen leeren Wert
 
@@ -38,6 +39,7 @@ export function RollenFormular({
     foodRolle: rollen.foodRolle ?? KEINE,
     fkRolle: rollen.fkRolle ?? KEINE,
     funkRolle: rollen.funkRolle ?? KEINE,
+    dienstRolle: rollen.dienstRolle ?? KEINE,
   });
   const [meldung, setMeldung] = useState<Meldung | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,7 +60,7 @@ export function RollenFormular({
 
   return (
     <form onSubmit={speichern} className="grid gap-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {SPALTEN.map((s) => (
           <div key={s.key} className="grid gap-2">
             <Label htmlFor={`rolle-${s.key}`}>{s.label}</Label>
@@ -74,7 +76,9 @@ export function RollenFormular({
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" loading={busy} disabled={geaendert.length === 0}>Rollen speichern</Button>
-        <span className="text-xs text-muted-foreground">{ABMELDE_HINWEIS}</span>
+        <span className="text-xs text-muted-foreground">
+          {ABMELDE_HINWEIS} Dienstplan ohne Rolle: Mitglied (liest freigegebene Pläne).
+        </span>
       </div>
       {meldung && (
         <p role={meldung.ok ? "status" : "alert"} className={meldung.ok ? "text-sm text-success" : "text-sm text-destructive"}>

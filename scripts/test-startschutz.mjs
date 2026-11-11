@@ -13,7 +13,7 @@
 //   Entwicklung: dieselben Fehler → nur Warnung, Server läuft weiter; korrekte Umgebung → keine Warnung.
 //   Immer: In der Ausgabe stehen weder Datenbank-URLs noch Passwörter.
 // Bricht ab (Exit 2), wenn eine der Datenbank-URLs nicht lokal ist.
-import { execSync, spawn } from "node:child_process";
+import { beendeProzess, starteProzess } from "./lib/prozess.mjs";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,9 +39,9 @@ function lauf(modus, port, ueberschreiben, bereitPfad, warteMs = 120000) {
     const env = { ...process.env, ...ueberschreiben };
     delete env.NODE_ENV;   // next start setzt production, next dev development
     const args = modus === "start" ? ["start", "-p", String(port)] : ["dev", "--webpack", "-p", String(port)];
-    const kind = spawn(process.execPath, [NEXT, ...args], { cwd: P, env, stdio: ["ignore", "pipe", "pipe"] });
+    const kind = starteProzess(process.execPath, [NEXT, ...args], { cwd: P, env, stdio: ["ignore", "pipe", "pipe"] });
     let out = "", beendet = false;
-    const ende = (r) => { if (beendet) return; beendet = true; try { execSync(`taskkill /PID ${kind.pid} /T /F`, { stdio: "ignore" }); } catch { /* schon beendet */ } setTimeout(() => fertig({ out, ...r }), 800); };
+    const ende = (r) => { if (beendet) return; beendet = true; beendeProzess(kind); setTimeout(() => fertig({ out, ...r }), 800); };
     kind.stdout.on("data", (d) => (out += d)); kind.stderr.on("data", (d) => (out += d));
     kind.on("exit", (code) => ende({ exited: true, code, ready: false }));
     const start = Date.now();

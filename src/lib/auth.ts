@@ -26,6 +26,7 @@ export interface JwtPayload {
   food_rolle?: string | null;
   fk_rolle?: string | null;
   funk_rolle?: string | null;
+  dienst_rolle?: string | null;
 }
 
 export async function signJwt(payload: JwtPayload): Promise<string> {
@@ -59,6 +60,7 @@ export async function verifyJwt(token: string): Promise<JwtPayload | null> {
       food_rolle: payload.food_rolle as string | null | undefined,
       fk_rolle: payload.fk_rolle as string | null | undefined,
       funk_rolle: payload.funk_rolle as string | null | undefined,
+      dienst_rolle: payload.dienst_rolle as string | null | undefined,
     };
   } catch {
     return null;

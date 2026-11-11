@@ -27,8 +27,8 @@ export interface LoginEingabe {
 export type Pruefung<T> = { ok: true; daten: T } | { ok: false; fehler: string };
 
 const ROLLEN_FELDER = [
-  "psaRolle", "foodRolle", "fkRolle", "funkRolle",
-  "psa_rolle", "food_rolle", "fk_rolle", "funk_rolle", "rollen",
+  "psaRolle", "foodRolle", "fkRolle", "funkRolle", "dienstRolle",
+  "psa_rolle", "food_rolle", "fk_rolle", "funk_rolle", "dienst_rolle", "rollen",
 ];
 const KARTEN_FELDER = ["kartenId", "karten_id"];
 
