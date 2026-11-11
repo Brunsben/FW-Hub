@@ -358,7 +358,7 @@ function ausgabe(a, bericht, { berichtPfad, vorlagePfad, blockierend, testKamera
   console.log(`Datei: ${rel(opt.datei)}  Jahre: ${jahre.join(", ")}${existsSync(zuordnungsPfad) ? `  Zuordnung: ${rel(zuordnungsPfad)}` : ""}`);
   console.log(`Termine: ${a.termine.length} (davon ausgefallen ${a.termine.filter((t) => t.ausgefallen).length})`);
   console.log(`Themenkatalog: ${a.themen.size} Themen, ${a.themenVorschlaege.length} Vorschläge zum Zusammenführen`);
-  console.log(`Blöcke: ${a.bloecke.filter((b) => b.bestaetigt).length} bestätigt, ${a.bloecke.filter((b) => !b.bestaetigt).length} Vorschläge`);
+  console.log(`Blöcke: ${a.bloecke.length} erkannt (${a.bloecke.map((b) => `${b.name}: ${b.anzahl}×`).join(", ")}), ${a.blockVorschlaege.length} Titel mit "/" mehrfach als ein Thema`);
   console.log(`Personen: ${personen.length} (Schreibvarianten zusammengefasst), zugeordnet ${anz("zugeordnet")}, unbekannt ${anz("unbekannt")}, mehrdeutig ${anz("mehrdeutig")}, Fehler ${anz("fehler")}`);
   if (testKameraden.length) console.log(`Testdaten: ${testKameraden.length} Kameraden ${opt.dryRun ? "würden angelegt" : "angelegt"}`);
 

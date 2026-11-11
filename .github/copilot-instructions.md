@@ -488,6 +488,8 @@ Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Ze
 `scripts/dienstplan-import.mjs` ist kein Testskript, sondern das Werkzeug für den
 einmaligen Excel-Import (auch gegen Produktion) und ruft darum `schutz()` nicht auf.
 Nur sein Modus `--testdaten` (legt Kameraden an) bricht ohne lokale DATABASE_URL ab.
+Auf dem Server läuft es über `scripts/server-import.sh` (Dockerfile-Stage `import`,
+Excel und zuordnung.json nur read-only gemountet; `data/` steht in .dockerignore).
 Ablauf und Klärung: docs/dienstplan/PROGRESS.md, Phase 4 und Deployment-Checkliste.
 Der Letzte-Admin-Schutz ist auf Datenbankebene in test-haertung (1e/1f) geprüft.
 Über die API ist er seit 0015 nicht mehr erreichbar: Kameraden deaktivieren darf nur

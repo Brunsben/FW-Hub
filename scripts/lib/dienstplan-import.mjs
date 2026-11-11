@@ -9,13 +9,16 @@
 //   ausgefallen, Grund in bemerkung). D ohne Uhrzeit und ohne Ausbilder gilt
 //   ebenfalls als ausgefallen (Feiertage im Blatt 2023). Fehlt der Typ, wird er
 //   aus dem Titel abgeleitet (Hinweis im Bericht).
-// - Themen werden an "/" getrennt, nicht in Klammern und nicht vor "-"
-//   ("Einsatzstellenbeleuchtung/-absicherung" bleibt ein Thema). "\" gilt als "/".
+// - Ein "/" im Thema bedeutet NICHT automatisch mehrere Themen (Entscheidung Ben,
+//   11.11.2026). Aufgeteilt wird nur ein Titel, der als Themenblock erkannt wird:
+//   STANDARD_BLOECKE und die in der Zuordnungsdatei bestätigten Blöcke, auch in
+//   Schreibvarianten ("AT-Unterweisung" = "AT") und anderer Reihenfolge. Alle
+//   anderen Titel sind ein Thema mit allen Ausbildern.
+// - Teile eines Blocks: Trennung an "/", nicht in Klammern und nicht vor "-".
 // - Ausbilder: Gruppen an "/", innerhalb einer Gruppe Personen an ",", außer es
-//   folgt ein Initial ("Name, J." bleibt eine Person). Gruppen sind
-//   positionsgleich zu den Themen. Ein Thema: alle Personen daran. Eine Gruppe für
-//   mehrere Themen: die Gruppe an jedem Thema. Sonst alle am ersten Thema und ein
-//   Hinweis im Bericht.
+//   folgt ein Initial ("Name, J." bleibt eine Person). Bei einem Block sind die
+//   Gruppen positionsgleich zu den Themen; eine Gruppe gilt für jedes Thema; bei
+//   ungleicher Anzahl alle am ersten Thema und ein Hinweis im Bericht.
 // - "GF"/"Gruppenführer" → Platzhalter alle_gf, "n.n."/"???" → offen, bekannte
 //   Organisationen → externe Person ohne Namen.
 // - Personen werden über Nachname, Initiale, Vorname oder Spitzname gegen die
@@ -132,6 +135,7 @@ export function zuordnungsBezug(wert, kameradenById) {
     return { art: "kamerad", kameradId: id };
   }
   if (wert === "alle_gf" || wert === "offen") return { art: "platzhalter", wert };
+  if (wert === "ort") return { art: "ort" };
   if (typeof wert === "object" && wert.extern) {
     const e = wert.extern;
     const name = e.name ? norm(e.name) : null;
@@ -141,6 +145,46 @@ export function zuordnungsBezug(wert, kameradenById) {
   }
   return { fehler: `unbekannter Zuordnungswert ${JSON.stringify(wert)}` };
 }
+
+// ── Blöcke ──────────────────────────────────────────────────────────────────
+
+/** Blöcke, die der Import immer erkennt (Entscheidung Ben, 11.11.2026). */
+export const STANDARD_BLOECKE = [["AT", "ELW-Gruppe", "FwDv3", "Maschinisten"]];
+
+const woerter = (s) => [...new Set(vergleich(s).split(/[^\p{L}\p{N}]+/u).filter((w) => w && !STOPPWOERTER.has(w)))];
+
+/** Schreibvariante eines Blockthemas: gleiches erstes Wort und alle Wörter des Blockthemas enthalten. */
+function passtZu(teil, blockThema) {
+  if (vergleich(teil) === vergleich(blockThema)) return true;
+  const wt = woerter(teil), wb = woerter(blockThema);
+  return wt.length > 0 && wb.length > 0 && wt[0] === wb[0] && wb.every((w) => wt.includes(w));
+}
+
+/**
+ * Erkennt einen Themenblock: gleiche Zahl von Teilen, jeder Teil passt zu einem
+ * anderen Blockthema (exakte Treffer vor Schreibvarianten). Liefert die
+ * Blockthemen in der Reihenfolge des Titels, sonst null.
+ */
+export function erkenneBlock(teile, bloecke) {
+  if (teile.length < 2) return null;
+  for (const block of bloecke) {
+    if (block.length !== teile.length) continue;
+    const frei = new Set(block.keys());
+    const titel = [];
+    for (const teil of teile) {
+      let i = [...frei].find((j) => vergleich(teil) === vergleich(block[j]));
+      if (i == null) i = [...frei].find((j) => passtZu(teil, block[j]));
+      if (i == null) break;
+      frei.delete(i);
+      titel.push(block[i]);
+    }
+    if (titel.length === teile.length) return { block, titel };
+  }
+  return null;
+}
+
+/** Ganzer Titel als ein Thema: führende und abschließende "/" entfernt. */
+export const einzelTitel = (text) => norm(text).replace(/^[\s/\\]+|[\s/\\]+$/g, "");
 
 // ── Analyse ─────────────────────────────────────────────────────────────────
 
@@ -159,9 +203,14 @@ export function analysiere({ zeilen, gruppenfuehrer = [], kameraden, kategorien,
   const zPersonen = new Map(Object.entries(zuordnung.personen ?? {}).map(([k, v]) => [vergleich(k), v]));
   const zThemen = new Map(Object.entries(zuordnung.themen ?? {})
     .filter(([, v]) => v != null && norm(v)).map(([k, v]) => [vergleich(k), norm(v)]));
+  const ziel = (titel) => zThemen.get(vergleich(titel)) ?? norm(titel);
+  const blockListe = [...STANDARD_BLOECKE, ...(zuordnung.bloecke ?? [])].map((b) => b.map(ziel));
+  const blockKey = (block) => block.map((t) => vergleich(t)).sort().join("|");
 
-  const personen = new Map(); // vergleich(token) → Eintrag
+  const personen = new Map(); // identitaet(token) → Eintrag
   const themen = new Map();   // vergleich(titel) → { varianten: Map<titel, {anzahl, jahr}>, fundstellen, anzahl }
+  const bloeckeMap = new Map(); // blockKey → erkannter Block
+  const nichtAufgeteilt = new Map(); // vergleich(titel) → Titel mit "/" ohne Block
   const terminHinweise = [];
   const termine = [];
 
@@ -175,14 +224,14 @@ export function analysiere({ zeilen, gruppenfuehrer = [], kameraden, kategorien,
     return key;
   };
   const thema = (titel, jahr, fundstelle) => {
-    const ziel = zThemen.get(vergleich(titel)) ?? norm(titel);
-    const key = vergleich(ziel);
+    const zielTitel = ziel(titel);
+    const key = vergleich(zielTitel);
     let t = themen.get(key);
     if (!t) { t = { varianten: new Map(), anzahl: 0, fundstellen: [], zusammengefuehrt: [] }; themen.set(key, t); }
     if (zThemen.has(vergleich(titel)) && vergleich(titel) !== key) t.zusammengefuehrt.push(norm(titel));
-    const v = t.varianten.get(ziel) ?? { anzahl: 0, jahr: 0 };
+    const v = t.varianten.get(zielTitel) ?? { anzahl: 0, jahr: 0 };
     v.anzahl++; v.jahr = Math.max(v.jahr, jahr);
-    t.varianten.set(ziel, v);
+    t.varianten.set(zielTitel, v);
     t.anzahl++;
     t.fundstellen.push(fundstelle);
     return key;
@@ -218,31 +267,48 @@ export function analysiere({ zeilen, gruppenfuehrer = [], kameraden, kategorien,
     const termin = {
       jahr: z.jahr, datum, uhrzeit: z.uhrzeit || null, kategorieId: kat.id, kuerzel,
       ausgefallen, ort: norm(z.ort) || null, bemerkung: ausgefallen ? norm(z.thema) || null : null,
-      themen: [], fundstelle: fund,
+      themen: [], fundstelle: fund, blockKey: null,
     };
     termine.push(termin);
     if (ausgefallen) continue;
 
-    let teile = splitThemen(z.thema);
+    // Zusammenführung des ganzen Titels (Zuordnungsdatei) vor der Blockerkennung
+    const ganz = ziel(einzelTitel(z.thema));
+    const roh = splitThemen(ganz);
+    const erkannt = erkenneBlock(roh.map(ziel), blockListe);
+    let teile = erkannt ? erkannt.titel : ganz ? [ganz] : [];
+    if (!erkannt && roh.length > 1) {
+      const k = vergleich(ganz);
+      const n = nichtAufgeteilt.get(k) ?? { titel: ganz, teile: roh, anzahl: 0, fundstellen: [] };
+      n.anzahl++; n.fundstellen.push(fund);
+      nichtAufgeteilt.set(k, n);
+    }
     if (!teile.length && gruppen.length) teile = [kat.name];
     const nurKategorie = teile.length === 1 && vergleich(teile[0]) === vergleich(kat.name);
     if (nurKategorie && !gruppen.length) continue;
     const katalog = (kuerzel === "D" || kuerzel === "Z") && !nurKategorie;
 
     let zuteilung;
-    if (gruppen.length === teile.length) zuteilung = gruppen;
-    else if (teile.length === 1) zuteilung = [gruppen.flat()];
+    if (!erkannt) zuteilung = [gruppen.flat()];
+    else if (gruppen.length === teile.length) zuteilung = gruppen;
     else if (gruppen.length === 0) zuteilung = teile.map(() => []);
     else if (gruppen.length === 1) zuteilung = teile.map(() => gruppen[0]);
     else {
       zuteilung = teile.map((_, i) => (i === 0 ? gruppen.flat() : []));
-      hinweis("hinweis", `${teile.length} Themen, ${gruppen.length} Ausbilder-Gruppen: alle Ausbilder am ersten Thema, bitte prüfen`);
+      hinweis("hinweis", `Block mit ${teile.length} Themen, ${gruppen.length} Ausbilder-Gruppen: alle Ausbilder am ersten Thema, bitte prüfen`);
     }
     termin.themen = teile.map((titel, i) => ({
       themaKey: katalog ? thema(titel, z.jahr, fund) : null,
       freitext: katalog ? null : titel,
       personen: (zuteilung[i] ?? []).map((t) => person(t, fund)),
     }));
+    if (erkannt && katalog) {
+      const k = blockKey(erkannt.block);
+      const b = bloeckeMap.get(k) ?? { key: k, keys: erkannt.block.map((t) => vergleich(t)), anzahl: 0, fundstellen: [] };
+      b.anzahl++; b.fundstellen.push(fund);
+      bloeckeMap.set(k, b);
+      termin.blockKey = k;
+    }
   }
 
   const ausgleich = gruppenfuehrer.map((name) => person(name, "Blatt Gruppenführer"));
@@ -273,6 +339,19 @@ export function analysiere({ zeilen, gruppenfuehrer = [], kameraden, kategorien,
     else p.status = "mehrdeutig";
   }
 
+  // Einträge der Ausbilder-Spalte, die als Ort zugeordnet sind, wandern in termine.ort
+  for (const t of termine) {
+    for (const th of t.themen) {
+      const orte = th.personen.filter((k) => personen.get(k).bezug?.art === "ort");
+      if (!orte.length) continue;
+      th.personen = th.personen.filter((k) => !orte.includes(k));
+      for (const k of new Set(orte)) {
+        const o = personen.get(k).schreibweise;
+        if (!t.ort?.split(" / ").includes(o)) t.ort = t.ort ? `${t.ort} / ${o}` : o;
+      }
+    }
+  }
+
   // Themen: Anzeigetitel = häufigste Schreibweise, bei Gleichstand die jüngste
   for (const t of themen.values()) {
     const [titel] = [...t.varianten].sort((a, b) => b[1].anzahl - a[1].anzahl || b[1].jahr - a[1].jahr);
@@ -280,58 +359,33 @@ export function analysiere({ zeilen, gruppenfuehrer = [], kameraden, kategorien,
   }
 
   // Themenvorschläge: gleiche Wortmenge oder eine Wortmenge enthält die andere
-  const woerter = (s) => new Set(vergleich(s).split(/[^\p{L}\p{N}]+/u).filter((w) => w && !STOPPWOERTER.has(w)));
   const liste = [...themen.entries()];
   const themenVorschlaege = [];
   for (let i = 0; i < liste.length; i++) {
     for (let j = i + 1; j < liste.length; j++) {
       const [ka, a] = liste[i]; const [kb, b] = liste[j];
-      const wa = woerter(a.titel), wb = woerter(b.titel);
+      const wa = new Set(woerter(a.titel)), wb = new Set(woerter(b.titel));
       if (!wa.size || !wb.size) continue;
       const [klein, gross] = wa.size <= wb.size ? [wa, wb] : [wb, wa];
       const enthalten = [...klein].every((w) => gross.has(w));
       const erstesGleich = [...wa][0] === [...wb][0];
-      if (!enthalten || !erstesGleich) continue;
+      if (!enthalten || (!erstesGleich && wa.size !== wb.size)) continue;
       const [von, nach] = a.anzahl < b.anzahl || (a.anzahl === b.anzahl && wa.size > wb.size) ? [ka, kb] : [kb, ka];
       themenVorschlaege.push({ von: themen.get(von).titel, nach: themen.get(nach).titel, grund: wa.size === wb.size ? "gleiche Wörter" : "ein Titel enthält den anderen" });
     }
   }
 
-  // Blöcke: gleiche Themenmenge (≥ 2) an mindestens zwei Terminen
-  const bloeckeMap = new Map();
-  for (const t of termine) {
-    const keys = t.themen.filter((x) => x.themaKey).map((x) => x.themaKey);
-    if (keys.length < 2) continue;
-    const k = [...new Set(keys)].sort().join("|");
-    let b = bloeckeMap.get(k);
-    if (!b) { b = { keys, anzahl: 0, fundstellen: [], datum: "" }; bloeckeMap.set(k, b); }
-    b.anzahl++; b.fundstellen.push(t.fundstelle);
-    if (t.datum > b.datum) { b.datum = t.datum; b.keys = keys; } // Reihenfolge des jüngsten Vorkommens
+  // Erkannte Blöcke werden angelegt; Titel mit "/", die mehrfach vorkommen, sind nur Vorschläge
+  const bloecke = [...bloeckeMap.values()].map((b) => ({ ...b, name: b.keys.map((k) => themen.get(k).titel).join(" / "), bestaetigt: true }));
+  for (const b of zuordnung.bloecke ?? []) {
+    if (!bloeckeMap.has(blockKey(b.map(ziel)))) terminHinweise.push({ status: "hinweis", schreibweise: b.join(" / "), fundstelle: "Zuordnungsdatei", text: "Block kommt im Import nicht vor" });
   }
-  const bestaetigt = new Map();
-  for (const titelListe of zuordnung.bloecke ?? []) {
-    const keys = titelListe.map((x) => vergleich(zThemen.get(vergleich(x)) ?? x));
-    const fehlend = keys.filter((k) => !themen.has(k));
-    const k = [...new Set(keys)].sort().join("|");
-    bestaetigt.set(k, { keys, fehlend: fehlend.length ? titelListe : null });
-  }
-  const bloecke = [...bloeckeMap.entries()]
-    .filter(([k, b]) => b.anzahl >= 2 || bestaetigt.has(k))
-    .map(([k, b]) => ({ key: k, name: b.keys.map((x) => themen.get(x).titel).join(" / "), keys: b.keys, anzahl: b.anzahl, fundstellen: b.fundstellen, bestaetigt: bestaetigt.has(k) }));
-  for (const [k, b] of bestaetigt) {
-    if (b.fehlend) { terminHinweise.push({ status: "fehler", schreibweise: b.fehlend.join(" / "), fundstelle: "Zuordnungsdatei", text: "Block enthält ein Thema, das im Import nicht vorkommt" }); continue; }
-    if (!bloecke.some((x) => x.key === k)) bloecke.push({ key: k, name: b.keys.map((x) => themen.get(x).titel).join(" / "), keys: b.keys, anzahl: 0, fundstellen: [], bestaetigt: true });
-  }
-  for (const t of termine) {
-    const keys = t.themen.filter((x) => x.themaKey).map((x) => x.themaKey);
-    const k = [...new Set(keys)].sort().join("|");
-    t.blockKey = keys.length >= 2 && bestaetigt.has(k) ? k : null;
-  }
+  const blockVorschlaege = [...nichtAufgeteilt.values()].filter((n) => n.anzahl >= 2);
 
   const blockierend = [...personen.values()].filter((p) => p.status !== "zugeordnet").length
     + terminHinweise.filter((h) => h.status === "fehler").length;
 
-  return { termine, personen, themen, themenVorschlaege, bloecke, terminHinweise, ausgleich, blockierend };
+  return { termine, personen, themen, themenVorschlaege, bloecke, blockVorschlaege, terminHinweise, ausgleich, blockierend };
 }
 
 // ── Bericht ─────────────────────────────────────────────────────────────────
@@ -342,6 +396,7 @@ function bezugText(b) {
   if (!b) return "";
   if (b.art === "kamerad") return `Kamerad ${b.kameradId}`;
   if (b.art === "platzhalter") return `Platzhalter ${b.wert}`;
+  if (b.art === "ort") return "Ort des Termins";
   return `extern: ${[b.organisation, b.name].filter(Boolean).join(" / ")}`;
 }
 
@@ -370,7 +425,8 @@ export function berichtZeilen(a, kameraden) {
       kandidaten: t.varianten.size > 1 ? [...t.varianten].map(([n, v]) => `${n} (${v.anzahl})`).join(" | ") : "",
     });
   }
-  for (const b of a.bloecke) zeilen.push({ art: "block", status: b.bestaetigt ? "bestaetigt" : "vorschlag", schreibweise: b.name, anzahl: b.anzahl, fundstellen: fundText(b.fundstellen), vorschlag: b.bestaetigt ? "" : "zur Bestätigung in zuordnung.json unter bloecke eintragen", kandidaten: "" });
+  for (const b of a.bloecke) zeilen.push({ art: "block", status: "erkannt", schreibweise: b.name, anzahl: b.anzahl, fundstellen: fundText(b.fundstellen), vorschlag: "wird aufgeteilt und als Themenblock angelegt", kandidaten: "" });
+  for (const n of a.blockVorschlaege) zeilen.push({ art: "block", status: "vorschlag", schreibweise: n.titel, anzahl: n.anzahl, fundstellen: fundText(n.fundstellen), vorschlag: "bleibt ein Thema; zum Aufteilen als Block in zuordnung.json unter bloecke eintragen", kandidaten: n.teile.join(" | ") });
   return zeilen;
 }
 
@@ -389,12 +445,13 @@ export function zuordnungsVorlage(a, bisher = {}) {
   const themenVorschlaege = {};
   for (const v of a.themenVorschlaege) themenVorschlaege[v.von] = v.nach;
   return {
-    _hinweis: "Personen: Kamerad-ID (Zahl), \"alle_gf\", \"offen\" oder {\"extern\": {\"organisation\": \"…\", \"name\": \"…\"}}. " +
-      "themen und bloecke wirken, *_vorschlaege nicht: bestätigte Einträge von dort nach themen bzw. bloecke übernehmen.",
+    _hinweis: "Personen: Kamerad-ID (Zahl), \"alle_gf\", \"offen\", \"ort\" (Eintrag ist ein Ort, kommt nach termine.ort) " +
+      "oder {\"extern\": {\"organisation\": \"…\", \"name\": \"…\"}}. themen und bloecke wirken, *_vorschlaege nicht: " +
+      "bestätigte Einträge von dort nach themen bzw. bloecke übernehmen. Der Block AT / ELW-Gruppe / FwDv3 / Maschinisten ist fest eingebaut.",
     personen,
     themen: { ...(bisher.themen ?? {}) },
     themen_vorschlaege: themenVorschlaege,
     bloecke: [...(bisher.bloecke ?? [])],
-    bloecke_vorschlaege: a.bloecke.filter((b) => !b.bestaetigt).map((b) => b.keys.map((k) => a.themen.get(k).titel)),
+    bloecke_vorschlaege: a.blockVorschlaege.map((n) => n.teile),
   };
 }

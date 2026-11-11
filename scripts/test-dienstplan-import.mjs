@@ -66,7 +66,7 @@ async function excel() {
   ]);
   blatt(2092, [
     [tag(2092, 1, 8), "D", zeit(19, 0), `${S} Knoten / ${S} Leitern`, null, `${S}Alpha, J. / n.n.`],
-    [tag(2092, 1, 15), "K", zeit(14, 0), "Grillen", null, `${S}Omega`],
+    [tag(2092, 1, 15), "K", zeit(14, 0), "Grillen", null, `${S}Omega / ${S}Platz`],
   ]);
   const gf = wb.addWorksheet("Gruppenführer");
   gf.addRow([]); gf.addRow([null, null, "GF", "Anzahl"]);
@@ -103,8 +103,8 @@ try {
   check("Bericht: Gamma mehrdeutig mit beiden Kandidaten", new RegExp(`person;mehrdeutig;${S}Gamma;`).test(b1) && b1.includes(`${gamma1}: ${S}Gamma, Anna`) && b1.includes(`${gamma2}: ${S}Gamma, Tom`));
   check("Bericht: Omega unbekannt", new RegExp(`person;unbekannt;${S}Omega;`).test(b1));
   check("Bericht: Alpha zugeordnet, Schreibvarianten zusammengefasst", b1.includes(`person;zugeordnet;${S}Alpha, J. (auch: ${S}Alpha, J)`));
-  check("Bericht: Blockvorschlag und Themenvorschlag", b1.includes(`block;vorschlag;${S} Knoten / ${S} Leitern;3`) && b1.includes(`thema;vorschlag;${S} knoten-übung`));
-  check("Konsole nennt offene Klärungen", r.out.includes("Import wäre so NICHT möglich: 2 offene Klärung(en)"));
+  check("Bericht: Titel mit \"/\" ohne Block bleibt ein Thema, mit Blockvorschlag", b1.includes(`block;vorschlag;${S} Knoten / ${S} Leitern;3`) && b1.includes(`thema;katalog;${S} Knoten / ${S} Leitern;3`));
+  check("Konsole nennt offene Klärungen", r.out.includes("Import wäre so NICHT möglich: 3 offene Klärung(en)"));
   const vorlage = JSON.parse(readFileSync(join(tmp, readdirSync(tmp).find((x) => x.startsWith("zuordnung-vorlage-"))), "utf8"));
   check("Vorlage enthält offene Personen mit null", vorlage.personen[`${S}Gamma`] === null && vorlage.personen[`${S}Omega`] === null);
 
@@ -114,7 +114,7 @@ try {
 
   // ── Zuordnung, dann Import ──
   writeFileSync(zuordnung, JSON.stringify({
-    personen: { [`${S}Gamma`]: gamma2, [`${S}omega`]: { extern: { organisation: `${S} Verein`, name: "Frau Omega" } } },
+    personen: { [`${S}Gamma`]: gamma2, [`${S}omega`]: { extern: { organisation: `${S} Verein`, name: "Frau Omega" } }, [`${S}Platz`]: "ort" },
     themen: { [`${S} knoten-übung`]: `${S} Knoten` },
     bloecke: [[`${S} Knoten`, `${S} Leitern`]],
   }));
@@ -155,6 +155,7 @@ try {
   check("Mehrdeutiger Name über Zuordnung", vam("2091-01-30")[0]?.kamerad_id === gamma2);
   check("GF → alle_gf, n.n. → offen", vam("2091-02-06")[0]?.platzhalter === "alle_gf" && vam("2092-01-08")[1]?.platzhalter === "offen");
   check("Externe Person aus der Zuordnung", vam("2092-01-15")[0]?.organisation === `${S} Verein` && vam("2092-01-15")[0]?.name === "Frau Omega");
+  check("Zuordnung \"ort\": Eintrag steht im Ort, nicht unter den Verantwortlichen", tm("2092-01-15")?.ort === `${S}Platz` && vam("2092-01-15").length === 1);
   const extern = await owner`select count(*)::int as n from dienstplan.externe_personen where organisation in (${`OF ${S}`}, ${`${S} Verein`})`;
   check("Externe Personen nur einmal angelegt", extern[0].n === 2, String(extern[0].n));
   const ausgleich = await owner`select kamerad_id from dienstplan.ausgleich_personen where kamerad_id in ${owner(ids.kam)} order by kamerad_id`;
@@ -174,8 +175,9 @@ try {
   // ── Testdaten-Modus (lokal) ──
   writeFileSync(zuordnung, "{}");
   r = lauf(["--als", String(importeur), "--ersetzen", "--testdaten"]);
-  const test = await owner`select id, name, vorname, personalnummer from core.kameraden where name = ${S + "Omega"}`;
-  ids.kam.push(...test.map((x) => x.id));
+  const alleTest = await owner`select id, name, vorname, personalnummer from core.kameraden where name like ${S + "%"} and personalnummer like 'TEST-DP-%'`;
+  ids.kam.push(...alleTest.map((x) => x.id));
+  const test = alleTest.filter((x) => x.name === S + "Omega");
   check("Testdaten: fehlender Kamerad angelegt, markiert mit TEST-DP-", r.code === 0 && test.length === 1 && test[0].personalnummer.startsWith("TEST-DP-") && test[0].vorname === "Test", `${r.code} ${JSON.stringify(test)}`);
   check("Testdaten: mehrdeutiger Name → erster Kandidat", (await owner`select v.kamerad_id from dienstplan.termin_verantwortliche v join dienstplan.termin_themen tt on tt.id = v.termin_thema_id join dienstplan.termine t on t.id = tt.termin_id where t.datum = '2091-01-30'`)[0]?.kamerad_id === gamma1);
 } finally {

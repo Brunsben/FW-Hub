@@ -2,8 +2,8 @@
 // Datenbank und ohne Excel. Erfundene Namen, keine Daten aus data/import/.
 // Aufruf: node scripts/test-dienstplan-import-lib.mjs
 import {
-  analysiere, berichtZeilen, csv, findeKameraden, identitaet, kategorieAusTitel, klassifiziere,
-  parsePerson, splitAusbilder, splitThemen, zuordnungsVorlage,
+  analysiere, berichtZeilen, csv, einzelTitel, erkenneBlock, findeKameraden, identitaet, kategorieAusTitel,
+  klassifiziere, parsePerson, splitAusbilder, splitThemen, STANDARD_BLOECKE, zuordnungsVorlage,
 } from "./lib/dienstplan-import.mjs";
 
 let fail = 0, ok = 0;
@@ -68,6 +68,17 @@ gleich("Abgleich ss/ß", ids("Weisser"), [6]);
 gleich("Abgleich Vorname", ids("Ines Beta"), [2]);
 gleich("Abgleich unbekannt", ids("Omega"), []);
 
+// ── Blockerkennung ──
+const AT = STANDARD_BLOECKE[0];
+gleich("Standardblock", AT, ["AT", "ELW-Gruppe", "FwDv3", "Maschinisten"]);
+gleich("Block exakt", erkenneBlock(splitThemen("AT / ELW-Gruppe / FwDv3 / Maschinisten "), [AT])?.titel, AT);
+gleich("Block in anderer Reihenfolge", erkenneBlock(splitThemen("AT / Maschinisten / ELW-Gruppe / FwDv3"), [AT])?.titel, ["AT", "Maschinisten", "ELW-Gruppe", "FwDv3"]);
+gleich("Block mit Schreibvariante", erkenneBlock(splitThemen("AT-Unterweisung / ELW-Gruppe / FwDv3 / Maschinisten"), [AT])?.titel, AT);
+check("Kein Block bei anderer Teilezahl", erkenneBlock(splitThemen("AT / Pumpenkunde"), [AT]) === null);
+check("Kein Block bei fremdem Teil", erkenneBlock(splitThemen("AT / ELW-Gruppe / FwDv3 / Funk"), [AT]) === null);
+check("Kein Block bei einem Teil", erkenneBlock(["AT"], [AT]) === null);
+gleich("Ganzer Titel ohne Rand-Schrägstriche", einzelTitel("WBK / Lüfter / "), "WBK / Lüfter");
+
 // ── Analyse ──
 const KAT = [
   { id: 11, kuerzel: "D", name: "Dienstabend" }, { id: 12, kuerzel: "Z", name: "Zwischendienst" },
@@ -76,59 +87,73 @@ const KAT = [
 let nr = 1;
 const Z = (datum, typ, uhrzeit, thema, ausbilder = "", ort = "") => ({ jahr: 2090, zeile: ++nr, datum, typ, uhrzeit, thema, ausbilder, ort });
 const zeilen = [
-  Z("2090-01-02", "D", "19:30", "Knoten / Leitern / Funk", "Alpha, J. / Beta, I / XYZ"),        // positionsgleich
+  Z("2090-01-02", "D", "19:30", "AT / ELW-Gruppe / FwDv3 / Maschinisten", "Alpha, J. / Beta, I / XYZ / Ort Nord"), // Block positionsgleich
   Z("2090-01-09", "z", "19:30", "Zwischendienst"),                                              // nur Kategorie → kein Thema
-  Z("2090-01-16", "D", "19:30", "Knoten / Leitern / Funk", "OF Nachbarort"),                     // eine Gruppe → an jedem Thema
+  Z("2090-01-16", "D", "19:30", "AT-Unterweisung / Maschinisten / ELW-Gruppe / FwDv3", "OF Nachbarort"), // Variante, eine Gruppe → jedes Thema
   Z("2090-01-23", "D", "19:30", "Pumpen", "Alpha / n.n. / DRK"),                                 // ein Thema, alle Personen
-  Z("2090-01-30", "D", "19:30", "Leitern / Knoten / Funk", "Alpha, J. / Beta / Omega / Gamma"),  // 3 Themen, 4 Gruppen → Hinweis
+  Z("2090-01-30", "D", "19:30", "AT / ELW-Gruppe / FwDv3 / Maschinisten", "Alpha, J. / Beta, I"), // Block, 2 Gruppen → Hinweis
   Z("2090-02-06", "F", null, "Heiligabend"),                                                    // F → ausgefallen
   Z("2090-02-13", "D", null, "Feiertag"),                                                       // D ohne Zeit/Ausbilder → ausgefallen
   Z("2090-02-20", "", null, "Kreisübung"),                                                      // ohne Typ → D, nicht ausgefallen
   Z("2089-02-27", "G", "19:30", "Gruppenführerrunde", "GF", "Halle"),                            // Jahr korrigiert, Freitext, Ort
   Z("2090-03-06", "X", "19:30", "Unbekannt"),                                                   // unbekannter Typ → Fehler
   Z("2090-03-13", "K", "14:00", "Grillen"),                                                     // Freitext ohne Personen
-  Z("2090-03-20", "D", "19:30", "knoten"),                                                      // Schreibvariante von Knoten
-  Z("2090-03-27", "D", "19:30", "Knoten-Übung"),                                               // Vorschlag zum Zusammenführen
+  Z("2090-03-20", "D", "19:30", "Knoten / Leitern", "Alpha / Beta, I"),                          // kein Block: ein Thema
+  Z("2090-03-27", "D", "19:30", "knoten / leitern", "Gamma"),                                    // Schreibvariante, wiederholt
+  Z("2090-04-03", "D", "19:30", "Knoten-Übung / Leitern"),                                       // Vorschlag zum Zusammenführen
 ];
 const a = analysiere({ zeilen, gruppenfuehrer: ["Alpha, J.", "Gamma, Mar"], kameraden: K, kategorien: KAT, zuordnung: {} });
 const t = (datum) => a.termine.find((x) => x.datum === datum);
 const tp = (datum, i) => t(datum).themen[i].personen.map((k) => a.personen.get(k).schreibweise);
 
 check("Unbekannter Typ wird nicht übernommen", !a.termine.some((x) => x.fundstelle.includes("Zeile 11")) && a.terminHinweise.some((h) => h.status === "fehler" && h.text.includes("Unbekannter Typ")));
-gleich("Positionsgleiche Zuordnung", [tp("2090-01-02", 0), tp("2090-01-02", 1), tp("2090-01-02", 2)], [["Alpha, J."], ["Beta, I"], ["XYZ"]]);
+gleich("Block: Themen und Ausbilder positionsgleich", t("2090-01-02").themen.map((x, i) => [a.themen.get(x.themaKey).titel, tp("2090-01-02", i)]),
+  [["AT", ["Alpha, J."]], ["ELW-Gruppe", ["Beta, I"]], ["FwDv3", ["XYZ"]], ["Maschinisten", ["Ort Nord"]]]);
+check("Block am Termin vermerkt", t("2090-01-02").blockKey !== null && t("2090-01-16").blockKey === t("2090-01-02").blockKey);
 check("Zwischendienst ohne Thema", t("2090-01-09").themen.length === 0 && t("2090-01-09").kuerzel === "Z");
-gleich("Eine Gruppe an jedem Thema", t("2090-01-16").themen.map((x) => x.personen.length), [1, 1, 1]);
+gleich("Blockvariante: Reihenfolge des Titels, Variante wird Blockthema, eine Gruppe an jedem Thema",
+  t("2090-01-16").themen.map((x) => [a.themen.get(x.themaKey).titel, x.personen.length]), [["AT", 1], ["Maschinisten", 1], ["ELW-Gruppe", 1], ["FwDv3", 1]]);
+check("Variante nicht als eigenes Katalogthema", !a.themen.has("at-unterweisung") && a.themen.get("at").anzahl === 3);
 gleich("Ein Thema, alle Personen", tp("2090-01-23", 0), ["Alpha", "n.n.", "DRK"]);
-gleich("Ungleiche Anzahl: alle am ersten Thema", t("2090-01-30").themen.map((x) => x.personen.length), [4, 0, 0]);
-check("Ungleiche Anzahl erzeugt Hinweis", a.terminHinweise.some((h) => h.status === "hinweis" && h.fundstelle.startsWith("2090-01-30")));
+gleich("Block mit ungleicher Gruppenzahl: alle am ersten Thema", t("2090-01-30").themen.map((x) => x.personen.length), [2, 0, 0, 0]);
+check("… und Hinweis im Bericht", a.terminHinweise.some((h) => h.status === "hinweis" && h.fundstelle.startsWith("2090-01-30") && h.text.startsWith("Block mit")));
+check("Kein Block: \"/\" bleibt ein Thema mit allen Ausbildern", t("2090-03-20").themen.length === 1 && a.themen.get(t("2090-03-20").themen[0].themaKey).titel === "Knoten / Leitern" && tp("2090-03-20", 0).length === 2);
+check("Kein Block: keine Hinweise wegen ungleicher Anzahl", !a.terminHinweise.some((h) => h.fundstelle.startsWith("2090-03-20")));
+check("Schreibvariante (Groß/klein) desselben Titels: ein Katalogthema", a.themen.get("knoten / leitern").anzahl === 2);
+check("Titel mit \"/\" mehrfach: Blockvorschlag, nicht aufgeteilt", a.blockVorschlaege.length === 1 && a.blockVorschlaege[0].anzahl === 2 && JSON.stringify(a.blockVorschlaege[0].teile) === JSON.stringify(["Knoten", "Leitern"]));
+check("Erkannte Blöcke: nur der Standardblock", a.bloecke.length === 1 && a.bloecke[0].name === "AT / ELW-Gruppe / FwDv3 / Maschinisten" && a.bloecke[0].anzahl === 3);
 check("F → D, ausgefallen, Grund in bemerkung, keine Themen", t("2090-02-06").kuerzel === "D" && t("2090-02-06").ausgefallen && t("2090-02-06").bemerkung === "Heiligabend" && !t("2090-02-06").themen.length);
 check("D ohne Uhrzeit und Ausbilder → ausgefallen", t("2090-02-13").ausgefallen);
 check("Ohne Typ → abgeleitet, nicht ausgefallen", t("2090-02-20").kuerzel === "D" && !t("2090-02-20").ausgefallen && a.terminHinweise.some((h) => h.text.includes("Typ fehlt")));
 check("Datum außerhalb des Planjahrs korrigiert", t("2090-02-27") && a.terminHinweise.some((h) => h.text.includes("übernommen als 2090-02-27")));
 check("G: Freitext statt Katalog, Ort übernommen", t("2090-02-27").themen[0].freitext === "Gruppenführerrunde" && t("2090-02-27").themen[0].themaKey === null && t("2090-02-27").ort === "Halle");
 check("K ohne Personen: Freitext-Thema", t("2090-03-13").themen[0].freitext === "Grillen");
-check("Schreibvarianten (Groß/klein) ergeben ein Katalogthema", a.themen.get("knoten").anzahl === 4 && a.themen.get("knoten").titel === "Knoten");
-check("Vorschlag zum Zusammenführen", a.themenVorschlaege.some((v) => v.von === "Knoten-Übung" && v.nach === "Knoten"));
-check("Blockvorschlag (gleiche Themenmenge, 3×)", a.bloecke.length === 1 && a.bloecke[0].anzahl === 3 && !a.bloecke[0].bestaetigt && a.bloecke[0].name === "Leitern / Knoten / Funk");
-check("Ohne Bestätigung kein Block am Termin", a.termine.every((x) => x.blockKey === null));
+check("Vorschlag zum Zusammenführen", a.themenVorschlaege.some((v) => v.von === "Knoten-Übung / Leitern" && v.nach === "Knoten / Leitern"));
 
 const st = (s) => a.personen.get(identitaet(s))?.status;
-check("Personen: zugeordnet / mehrdeutig / unbekannt", st("Alpha, J.") === "zugeordnet" && st("Beta") === "mehrdeutig" && st("Omega") === "unbekannt" && st("XYZ") === "zugeordnet");
+check("Personen: zugeordnet / mehrdeutig / unbekannt", st("Alpha, J.") === "zugeordnet" && st("Gamma") === "mehrdeutig" && st("Ort Nord") === "unbekannt" && st("XYZ") === "zugeordnet");
 check("Platzhalter und Organisationen sind zugeordnet", st("GF") === "zugeordnet" && st("n.n.") === "zugeordnet" && st("DRK") === "zugeordnet" && st("OF Nachbarort") === "zugeordnet");
 check("Blatt Gruppenführer: Personen im Abgleich", a.ausgleich.length === 2 && a.personen.get(a.ausgleich[1]).bezug?.kameradId === 4);
-check("Blockierend: Fehler + offene Personen", a.blockierend === 4 /* Typ X, Beta und Gamma mehrdeutig, Omega unbekannt */, String(a.blockierend));
+check("Blockierend: Fehler + offene Personen", a.blockierend === 3 /* Typ X, Gamma mehrdeutig, Ort Nord unbekannt */, String(a.blockierend));
 
 // Zuordnungsdatei
 const zu = {
-  personen: { "Beta": 2, "Gamma": 5, "omega": { extern: { organisation: "Nachbarverein", name: "Frau Omega" } } },
-  themen: { "Knoten-Übung": "Knoten" },
-  bloecke: [["Leitern", "Knoten", "Funk"]],
+  personen: { "Gamma": 5, "ort nord": "ort", "Alpha": { extern: { organisation: "Nachbarverein", name: "Frau Alpha" } } },
+  themen: { "Knoten-Übung / Leitern": "Knoten / Leitern" },
+  bloecke: [["Knoten", "Leitern"]],
 };
 const b = analysiere({ zeilen: zeilen.filter((z) => z.typ !== "X"), gruppenfuehrer: [], kameraden: K, kategorien: KAT, zuordnung: zu });
-check("Zuordnung Kamerad (Schlüssel ohne Groß/klein)", b.personen.get(identitaet("Beta")).bezug?.kameradId === 2 && b.personen.get(identitaet("Beta")).quelle === "Zuordnungsdatei");
-gleich("Zuordnung extern", b.personen.get(identitaet("Omega")).bezug, { art: "extern", name: "Frau Omega", organisation: "Nachbarverein", funktion: null });
-check("Themen zusammengeführt", b.themen.get("knoten").anzahl === 5 && !b.themen.has("knoten-übung"));
-check("Bestätigter Block hängt an den Terminen", b.bloecke.some((x) => x.bestaetigt) && b.termine.filter((x) => x.blockKey).length === 3);
+const tb = (datum) => b.termine.find((x) => x.datum === datum);
+check("Zuordnung Kamerad (Schlüssel ohne Groß/klein)", b.personen.get(identitaet("Gamma")).bezug?.kameradId === 5 && b.personen.get(identitaet("Gamma")).quelle === "Zuordnungsdatei");
+gleich("Zuordnung extern", b.personen.get(identitaet("Alpha")).bezug, { art: "extern", name: "Frau Alpha", organisation: "Nachbarverein", funktion: null });
+check("Zuordnung \"ort\": Eintrag wandert in termine.ort, nicht unter die Verantwortlichen",
+  tb("2090-01-02").ort === "Ort Nord" && tb("2090-01-02").themen[3].personen.length === 0);
+check("Bestätigter Block wird aufgeteilt, positionsgleich", JSON.stringify(tb("2090-03-20").themen.map((x) => [b.themen.get(x.themaKey).titel, x.personen.length])) === JSON.stringify([["Knoten", 1], ["Leitern", 1]]));
+check("Bestätigter Block: Groß/klein-Variante ebenfalls, Block vermerkt", tb("2090-03-27").themen.length === 2 && tb("2090-03-27").blockKey && b.bloecke.length === 2);
+check("Ganzer Titel über Zuordnung zusammengeführt, dann als Block aufgeteilt", JSON.stringify(tb("2090-04-03").themen.map((x) => b.themen.get(x.themaKey).titel)) === JSON.stringify(["Knoten", "Leitern"]) && !b.themen.has("knoten-übung"));
+const g = analysiere({ zeilen: [Z("2090-01-02", "D", "19:30", "Alt / Titel", "Alpha")], kameraden: K, kategorien: KAT, zuordnung: { themen: { "Alt / Titel": "Neuer Titel" } } });
+check("Ganzer Titel über Zuordnung zusammengeführt (ohne Block)", g.themen.has("neuer titel") && g.termine[0].themen.length === 1);
+check("Keine Blockvorschläge mehr", b.blockVorschlaege.length === 0);
 check("Nichts blockiert mehr", b.blockierend === 0, String(b.blockierend));
 
 const c = analysiere({ zeilen: [Z("2090-01-02", "D", "19:30", "X", "B. Alpha / B.Alpha")], kameraden: K, kategorien: KAT, zuordnung: { personen: { "B. Alpha": 1, "B.Alpha": 2 } } });
@@ -137,16 +162,18 @@ const d = analysiere({ zeilen: [Z("2090-01-02", "D", "19:30", "X", "Alpha")], ka
 check("Zuordnung auf nicht vorhandenen Kameraden → Fehler", [...d.personen.values()][0].status === "fehler");
 const e = analysiere({ zeilen: [Z("2090-01-02", "D", "19:30", "X", "Beta")], kameraden: K, kategorien: KAT, mehrdeutigErster: true });
 check("Testdaten-Option: mehrdeutig → erster Kandidat", [...e.personen.values()][0].bezug?.kameradId === 2);
+const f = analysiere({ zeilen: [Z("2090-01-02", "D", "19:30", "X")], kameraden: K, kategorien: KAT, zuordnung: { bloecke: [["Nie", "Da"]] } });
+check("Bestätigter Block, der nicht vorkommt → Hinweis", f.terminHinweise.some((h) => h.text === "Block kommt im Import nicht vor"));
 
 // Bericht und Vorlage
 const zeilenBericht = berichtZeilen(a, K);
-check("Bericht enthält offene Personen mit Kandidaten", zeilenBericht.some((z) => z.art === "person" && z.status === "mehrdeutig" && z.kandidaten.includes("3: Beta, Tom [inaktiv]")));
-check("Bericht enthält Termin-Fehler und Blockvorschlag", zeilenBericht.some((z) => z.art === "termin" && z.status === "fehler") && zeilenBericht.some((z) => z.art === "block"));
+check("Bericht enthält offene Personen mit Kandidaten", zeilenBericht.some((z) => z.art === "person" && z.status === "mehrdeutig" && z.kandidaten.includes("5: Gamma, Mathis")));
+check("Bericht: Termin-Fehler, erkannter Block, Blockvorschlag", zeilenBericht.some((z) => z.art === "termin" && z.status === "fehler") && zeilenBericht.some((z) => z.art === "block" && z.status === "erkannt") && zeilenBericht.some((z) => z.art === "block" && z.status === "vorschlag"));
 const text = csv([{ art: "a;b", status: 'x"y', schreibweise: "z" }]);
-check("CSV: BOM, Semikolon, Quoting", text.startsWith("﻿art;status;") && text.includes('"a;b";"x""y";z'));
+check("CSV: BOM, Semikolon, Quoting", text.startsWith("\uFEFFart;status;") && text.includes('"a;b";"x""y";z'));
 const v = zuordnungsVorlage(a, { personen: { Omega: 5 } });
-check("Vorlage: offene Personen mit null, vorhandene bleiben", v.personen.Beta === null && v.personen.Omega === 5 && !("Alpha, J." in v.personen));
-check("Vorlage: Vorschläge getrennt von wirksamen Einträgen", v.themen_vorschlaege["Knoten-Übung"] === "Knoten" && Object.keys(v.themen).length === 0 && v.bloecke.length === 0 && v.bloecke_vorschlaege.length === 1);
+check("Vorlage: offene Personen mit null, vorhandene bleiben", v.personen.Gamma === null && v.personen.Omega === 5 && !("Alpha, J." in v.personen));
+check("Vorlage: Vorschläge getrennt von wirksamen Einträgen", v.themen_vorschlaege["Knoten-Übung / Leitern"] === "Knoten / Leitern" && Object.keys(v.themen).length === 0 && v.bloecke.length === 0 && JSON.stringify(v.bloecke_vorschlaege) === JSON.stringify([["Knoten", "Leitern"]]));
 
 console.log(`\n${ok} OK, ${fail} Fehler`);
 process.exit(fail ? 1 : 0);
