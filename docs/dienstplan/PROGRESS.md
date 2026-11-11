@@ -15,7 +15,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | 4 | Importskript Excel (Themenkatalog, Blockvorschläge, Verantwortliche, Pläne) | fertig (lokal mit Testdaten importiert; echter Import wartet auf Klärung, siehe Phase 4) |
 | 5 | Eingabemaske (Klickbedienung), Verwaltung, Feiertagshinweise | fertig (Monatsraster folgt mit Phase 7) |
 | 6 | Präsentationsansicht mit Live-Aktualisierung und Anzeige-Token | fertig (Migration 0019 lokal angewendet, nicht auf dem Server) |
-| 7 | Drag and Drop, Rückgängig, Vorjahresanzeige | offen |
+| 7 | Drag and Drop, Rückgängig, Vorjahresanzeige | fertig (Migration 0020 lokal angewendet, nicht auf dem Server) |
 | 8 | Themenpool, Pflichtthemen-Hinweis, Ausgleichsanzeige, Mitgliederansicht | offen |
 | 9 | Versionen (Freigabe, manuell, Vergleich, Wiederherstellen) | offen |
 | 10 | Exporte: CSV-Profile inkl. DIVERA, .ics, Excel | offen |
@@ -112,7 +112,7 @@ Vor dem Ausrollen
    `node scripts/test-dienstplan-import-lib.mjs`, `node scripts/test-dienstplan-import.mjs`,
    `node scripts/test-dienstplan-kalender.mjs`, `node scripts/test-dienstplan-eingabe.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-api.mjs`, `node scripts/test-dienstplan-verwaltung.mjs`,
-   `node scripts/test-dienstplan-anzeige.mjs`,
+   `node scripts/test-dienstplan-anzeige.mjs`, `node scripts/test-dienstplan-rueckgaengig.mjs`,
    `node scripts/kontrast.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
@@ -134,6 +134,7 @@ Migrationen, Reihenfolge
 | 0016_kameraden_spitzname | additiv | vor der App | Spalten, Spaltenrechte fw_app, Audit-Funktion ersetzt |
 | 0017_kameraden_dienst_rolle | additiv | **vor der App (Pflicht)** | Spalte dienst_rolle, set_kamerad_rollen und Audit-Funktion ersetzt |
 | 0018_dienstplan_schema | additiv | vor der App | Schema dienstplan (19 Tabellen, 39 Policies, Trigger, kameraden_namen()), Rechte fw_app, Seeds (Organisation 1, 7 Kategorien, 3 Regeln) |
+| 0020_dienstplan_vorjahr | additiv | **vor der App (Pflicht)** | Funktion vorjahr_themen() (SECURITY DEFINER, nur Titel); die App ruft sie bei jedem Laden eines Plans |
 | 0019_dienstplan_anzeige | additiv | **vor der App (Pflicht)** | Tabelle anzeige_tokens, Spalte plaene.fokus_termin_id, 6 Policies (Anzeige-Scope), Trigger anzeige_tokens_plan, kameraden_namen() ersetzt |
 
 **Reihenfolge: erst alle Migrationen, dann die App.** Die neue App liest
@@ -144,10 +145,11 @@ drei Migrationen unverändert weiter (nur neue Spalten, Funktionen nehmen eine
 Obermenge an, neues Schema).
 
 Alle ausstehenden Migrationen in einem Lauf: in `~/fw/FW-Hub` nach `git pull`
-`scripts/server-migrate.sh`. Erwartet bei 0016–0019: `Migrationen eingetragen:
-16 -> 20`, `Policies in core` unverändert (keine neuen Policies in core).
-0019 muss vor der neuen App laufen: Die App liest `plaene.fokus_termin_id` bei
-jedem Laden eines Plans.
+`scripts/server-migrate.sh`. Erwartet bei 0016–0020: `Migrationen eingetragen:
+16 -> 21`, `Policies in core` unverändert (keine neuen Policies in core).
+0019 und 0020 müssen vor der neuen App laufen: Die App liest
+`plaene.fokus_termin_id` und ruft `dienstplan.vorjahr_themen()` bei jedem Laden
+eines Plans.
 
 Manuelle Schritte auf dem Server
 - Nach 0016: `drizzle/manual/create-fw-app-role.sql` nur noch in der neuen
@@ -165,6 +167,7 @@ Manuelle Schritte auf dem Server
          has_column_privilege('fw_app','core.kameraden','dienst_rolle','UPDATE'),       -- f
          has_schema_privilege('fw_app','dienstplan','USAGE');                           -- t
   select count(*) from pg_policies where schemaname = 'dienstplan';                    -- 45 (39 aus 0018, 6 aus 0019)
+  select has_function_privilege('fw_app', 'dienstplan.vorjahr_themen(integer)', 'EXECUTE');  -- t
   select count(*) from pg_tables where schemaname = 'dienstplan' and not rowsecurity;  -- 0
   select string_agg(kuerzel, ',' order by sortierung) from dienstplan.kategorien;      -- D,Z,G,O,J,K,B
   ```
@@ -183,10 +186,46 @@ Smoke-Test nach dem Ausrollen
   per QR-Code auf dem Handy öffnen: Plan erscheint ohne Anmeldung. Termin in der
   Eingabe anklicken: Rahmen springt in der Präsentation mit (2 s). „Alle
   Anzeige-Links beenden“: Präsentation zeigt den Hinweis auf einen neuen Link.
-- Präsentation hinter Cloudflare: Das Polling läuft alle 2 Sekunden je
-  geöffneter Anzeige (304 ohne Inhalt, wenn sich nichts ändert). Prüfen, dass
-  Cloudflare `/api/dienstplan/*` nicht zwischenspeichert (die Antworten tragen
-  `Cache-Control: private, no-cache`) und keine Rate-Limit-Regel greift.
+- Phase 7, als Planer in `/dienstplan/<jahr>/bearbeiten` (Testplan, nicht der
+  echte): Thema aus der Seitenleiste auf einen Termin ziehen, Person auf das
+  Thema ziehen, Thema mit gedrückter Alt-Taste in einen anderen Termin ziehen
+  (Kopie), Strg+Z zweimal (beides zurück), Strg+Y. Monatsraster: Termin auf
+  einen anderen Tag ziehen, Strg+Z. Vorjahreszeile erscheint, wenn der Vorjahres-
+  plan freigegeben ist (Präsentation: `?vorjahr=1` oder Taste V).
+- Präsentation und Rate-Limits (geprüft am 11.11.2026 gegen die Repo-Dateien):
+  Last: je Fernseher 30 Anfragen/Minute auf `/api/dienstplan/anzeige/<jahr>`
+  (0,5 r/s, fast immer 304 ohne Inhalt), dazu die Eingabemaske vom selben
+  Standort (gleiche öffentliche IP hinter dem Router) mit einigen Anfragen pro
+  Aktion.
+  - `nginx-ratelimit.conf` definiert nur die Zone `api` (30 r/s je IP).
+    `nginx.conf` wendet sie ausschließlich in `location ^~ /api/auth/` an
+    (`burst=10 nodelay`). `/api/dienstplan/*` läuft über `location /` ohne
+    `limit_req`. **Das Polling fällt unter kein Limit; im Repo ist keine
+    Änderung nötig.** Selbst unter der Zone `api` lägen zwei Fernseher plus
+    Eingabe weit unter 30 r/s.
+  - Die nginx-Konfiguration auf dem Server ist von Hand angepasst und nur mit
+    dem Repo abgeglichen. Vor der Sitzung prüfen:
+    `docker exec fw_nginx nginx -T | grep -n "limit_req"`. Erwartet: nur die
+    Zone-Definition und die Zeile im Block `/api/auth/`. Taucht `limit_req` in
+    `location /` oder einem `/api/`-Block auf, für die Anzeige einen eigenen
+    Block vor `location /` ergänzen (Vorschlag, gleiche Proxy-Zeilen wie
+    `location /`):
+    ```nginx
+    # nginx-ratelimit.conf
+    limit_req_zone $binary_remote_addr zone=anzeige:1m rate=5r/s;
+    # nginx.conf, im server-Block
+    location ^~ /api/dienstplan/anzeige/ {
+        limit_req zone=anzeige burst=20 nodelay;
+        # … proxy_pass/proxy_set_header wie in location / …
+    }
+    ```
+    5 r/s je IP reichen für 10 Fernseher am selben Standort; das Token
+    schützt die Route, das Limit bremst nur Durchprobieren.
+  - Cloudflare: Unter Security → WAF → Rate limiting rules prüfen, dass keine
+    Regel `/api/*` oder den ganzen Host unter etwa 60 Anfragen/Minute je IP
+    begrenzt. Falls doch, `/api/dienstplan/anzeige/` ausnehmen oder die Regel
+    auf `/api/auth/` beschränken. Cache: Die Antworten tragen
+    `Cache-Control: private, no-cache`; keine Cache-Rule darf `/api/*` cachen.
 
 Import der Excel-Pläne 2023–2026 (Phase 4, nach Migrationen und App)
 - Voraussetzung: 0018 ist angewendet, die App läuft (das Skript liest
@@ -880,9 +919,82 @@ Geprüft (11.11.2026, Mac)
 
 ## Phase 7 – Drag and Drop, Rückgängig, Vorjahr
 
+### Lokal ausprobieren
+Wie Phase 6 (Eingabe und Präsentation in zwei Fenstern), z. B. mit
+http://localhost:3100/dienstplan/2026/bearbeiten (Vorjahr 2025 ist importiert und
+freigegeben). Präsentation mit Vorjahr: `…/praesentation?vorjahr=1` oder Taste V.
+Achtung: Änderungen am Plan 2026 bleiben in der lokalen Datenbank; mit
+Rückgängig zurücknehmen.
+
 ### Entscheidungen
+- **Drag and Drop mit dnd-kit** (`@dnd-kit/core` 6.3.1, ohne weitere Pakete).
+  Gezogen wird mit Maus oder Finger ab 6 px Bewegung; darunter bleibt es ein
+  Klick, die Knöpfe in den Zeilen funktionieren weiter. Alle Wege der Spec-Tabelle:
+  | Quelle | Ziel | Wirkung |
+  |---|---|---|
+  | Thema (Seitenleiste) | Termin oder Thema im Termin | neue Position am Ende |
+  | Block | Termin | alle Themen des Blocks |
+  | Themenposition | anderer Termin | verschieben samt Verantwortlichen; mit Alt (Mac: Option) kopieren |
+  | Themenposition | Thema in anderem Termin | verschieben/kopieren an diese Stelle |
+  | Themenposition | Thema im gleichen Termin | Reihenfolge |
+  | Person | Thema | als Verantwortliche; auf einen Termin nur, wenn er genau ein Thema hat |
+  | Termin (Monatsraster) | anderer Tag | Datum ändern (nur im Planjahr) |
+  Vorschläge aus dem Pool kommen mit Phase 8.
+- **Kein Ziehen per Tastatur.** Der Tastatursensor von dnd-kit würde mit den
+  Knöpfen in denselben Zeilen kollidieren. Jede Aktion hat stattdessen einen
+  Klickweg (Spec: „zusätzlich vollständig per Klick bedienbar“): „+“ in der
+  Seitenleiste, Pfeile für die Reihenfolge, „In anderen Termin verschieben“ jetzt
+  mit Schalter „Kopieren statt verschieben“, Datum über „Termin bearbeiten“.
+- **Kopieren:** neue Route `POST /api/dienstplan/termin-themen/[id]/kopie`
+  `{ terminId, position? }` (Planer, nur im selben Plan).
+- **Monatsraster:** Umschalter „Liste / Monatsraster“. Im Raster steht der
+  gewählte Termin als Karte darüber (fest beim Scrollen), damit Themen und
+  Personen auch dort per Ziehen oder Klick bearbeitet werden können.
+- **Rückgängig/Wiederholen:** Knöpfe und Strg+Z / Strg+Y (Mac: Cmd+Z,
+  Cmd+Shift+Z; nicht in Eingabefeldern), bis 50 Schritte je Sitzung im Browser.
+  Prinzip: Vor jeder Aktion merkt sich die Maske alle Termine, danach vergleicht
+  sie mit dem neu geladenen Plan (`aktualisiert_am`). Ein Eintrag enthält für
+  jeden betroffenen Termin den vollständigen Zustand vorher und nachher.
+  Wiederhergestellt wird über die neue Route `PUT /api/dienstplan/termine/[id]/zustand`
+  (ersetzt Felder, Themen und Verantwortliche in einer Transaktion). Angelegte
+  Termine werden beim Rückgängig gelöscht, gelöschte neu angelegt (neue id, die
+  Einträge werden umgeschrieben). Plan-Aktionen (Freigabe, „Rhythmus ergänzen“)
+  landen bewusst nicht auf dem Stapel.
+- **Schutz vor fremden Änderungen:** Die Zustand-Route nimmt `erwartet` (den
+  `aktualisiert_am`-Stand nach der eigenen Aktion). Hat jemand anderes den Termin
+  inzwischen geändert, antwortet sie 409 statt zu überschreiben; die Maske meldet
+  „Rückgängig nicht möglich“. Nach jedem Rückgängig/Wiederholen zieht die Maske
+  die Stände aller Einträge für die selbst geänderten Termine nach (sonst würde
+  das zweite Rückgängig am selben Termin an der eigenen Änderung scheitern; im
+  Browser-Test gefunden und behoben).
+- **Vorjahresanzeige:** Zuordnung nach Spec (gleiche Kategorie am Datum minus
+  364 Tage, sonst der nächste gleicher Kategorie im Abstand von höchstens 14 Tagen,
+  bei Gleichstand der frühere), reine Funktion `vorjahrZuordnen` in kalender.ts.
+  Anzeige blass kursiv „2025: Pumpenkunde, Wasserförderung“, „2025: entfallen“
+  oder „2025: ohne Thema“. Eingabemaske: Schalter „Vorjahr“, Standard an.
+  Präsentation: Standard aus, `?vorjahr=1` oder Taste V; im Anzeige-Dialog
+  Häkchen „Vorjahresthemen anzeigen“ (setzt den Parameter in Link und QR-Code).
+- **Vorjahr in der Datenbank (Migration 0020):** `dienstplan.vorjahr_themen(jahr)`
+  liefert nur Datum, Kürzel, ausgefallen und Thementitel des Vorjahresplans, keine
+  Namen und Notizen. Planer sehen das Vorjahr in jedem Status, Mitglieder und der
+  Anzeige-Scope nur freigegeben. So bleibt beim Anzeige-Token der eine Plan der
+  einzige, dessen Zeilen lesbar sind (Vorgabe Phase 6). SECURITY DEFINER wie
+  `kameraden_namen()`; die Funktion setzt für ihre Abfrage die Rolle Mitglied
+  (bzw. die eigene) und die Organisation und stellt sie danach wieder her, damit
+  sie auch mit einem Eigentümer ohne RLS-Bypass dieselben Policies durchläuft.
+- Getestet: test-dienstplan-rueckgaengig.mjs (29), RLS Abschnitt 7, reine
+  Funktionen in -kalender und -eingabe, Browser-Durchlauf (Ziehen in alle
+  Richtungen, Alt-Kopie, sechsmal Rückgängig bis zum Ausgangszustand, Raster,
+  Vorjahr in Eingabe und Präsentation).
+
 ### Abweichungen von der Spec
+- Kein Ziehen mit der Tastatur (siehe oben); alle Aktionen sind per Klick möglich.
+- Rückgängig ist nicht atomar über mehrere Termine: Betrifft ein Schritt zwei
+  Termine (Verschieben), sind es zwei Aufrufe. Scheitert der zweite (409), meldet
+  die Maske das; der erste bleibt zurückgenommen.
+
 ### Offene Fragen
+- Keine.
 
 ## Phase 8 – Pool, Pflichtthemen, Ausgleich, Mitgliederansicht
 

@@ -340,6 +340,37 @@ try {
     const u = await tx`update dienstplan.plaene set fokus_termin_id = ${tFrei} where id = ${FREI} returning id`;
     check("6 Mitglied: Fokus setzen wirkt nicht", u.length === 0);
   });
+
+  // ── 7. Vorjahresanzeige: vorjahr_themen() (Migration 0020) ─────────────────
+  // FREI = 2098 freigegeben, ENTWURF = 2099 Entwurf (Vorjahr von 2100), HG = Token für 2099
+  const [{ id: thFrei }] = await owner`insert into dienstplan.termin_themen (termin_id, position, titel_freitext) values (${tFrei}, 1, ${stamp + "-vj"}) returning id`;
+  await owner`insert into dienstplan.termin_verantwortliche (termin_thema_id, position, kamerad_id) values (${thFrei}, 1, ${MIT})`;
+  const vj = (tx, jahr) => tx`select datum::text as datum, kuerzel, ausgefallen, titel from dienstplan.vorjahr_themen(${jahr}::integer)`;
+  await als(A(HG), async (tx) => {
+    const r = await vj(tx, 2099);
+    check("7 Anzeige: Vorjahr (freigegeben) mit Thementitel", r.length === 1 && r[0].datum === "2098-01-06" && r[0].titel[0] === stamp + "-vj", JSON.stringify(r));
+    check("7 Anzeige: nur Titel, keine Namen", !JSON.stringify(r).includes(stamp + "-mit"));
+    check("7 Anzeige: Scope danach unverändert (nur Token-Plan sichtbar)", (await anzahl(tx, "plaene")) === 1 && (await tx`select current_setting('app.dienst_rolle') r`)[0].r === "Anzeige");
+    const e = await fehler(tx, "42501", (sp) => vj(sp, 2100));
+    check("7 Anzeige: anderes Jahr als der Token-Plan → 42501", e.ok, e.got);
+  });
+  await als(A(HA), async (tx) => {
+    const e = await fehler(tx, "42501", (sp) => vj(sp, 2098));
+    check("7 Anzeige abgelaufen: vorjahr_themen → 42501", e.ok, e.got);
+  });
+  await als(mit, async (tx) => {
+    check("7 Mitglied: Vorjahr freigegeben sichtbar", (await vj(tx, 2099)).length === 1);
+    check("7 Mitglied: Vorjahr im Entwurf nicht sichtbar", (await vj(tx, 2100)).length === 0);
+    check("7 Mitglied: Scope danach unverändert", (await tx`select current_setting('app.dienst_org') o`)[0].o === "1");
+  });
+  await als(pln, async (tx) => {
+    check("7 Planer: Vorjahr im Entwurf sichtbar", (await vj(tx, 2100)).length === 1);
+    check("7 Planer: fremde Organisation nicht", (await vj(tx, 2100)).every((x) => x.datum === "2099-01-06"));
+  });
+  await als({}, async (tx) => {
+    const e = await fehler(tx, "42501", (sp) => vj(sp, 2099));
+    check("7 Ohne Scope: vorjahr_themen → 42501", e.ok, e.got);
+  });
 } finally {
   try {
     if (ids.plan.length) await owner`delete from dienstplan.plaene where id in ${owner(ids.plan)}`;

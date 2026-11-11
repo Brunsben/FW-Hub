@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, MoveRight, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { ArrowDown, ArrowUp, GripVertical, LayoutGrid, List, MoveRight, Pencil, Plus, Redo2, RotateCcw, Trash2, Undo2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,9 +16,22 @@ import type { DpHinweis, DpTermin, DpTerminThema } from "@/lib/dienstplan/hinwei
 import type { DpKategorie, DpPlan } from "@/lib/dienstplan/plan";
 import { dpApi } from "@/components/dienstplan/api";
 import { AnzeigeLink } from "@/components/dienstplan/anzeige-link";
+import { kollision, useBeides, useZiehbar, useZiel, type ZiehDaten, type ZielDaten } from "@/components/dienstplan/dnd";
+import { Monatsraster } from "@/components/dienstplan/monatsraster";
+import { ersetzeId, STAPEL_MAX, unterschiede, type Eintrag, type Zustand } from "@/lib/dienstplan/rueckgaengig";
+import type { VorjahrTermin } from "@/lib/dienstplan/kalender";
+import { vorjahrText } from "@/lib/dienstplan/praesentation";
 import { datumKurz, klassenFuer, MONATE } from "@/components/dienstplan/farben";
 
-interface PlanDaten { plan: DpPlan; kategorien: DpKategorie[]; termine: DpTermin[]; hinweise: DpHinweis[] }
+interface PlanDaten {
+  plan: DpPlan; kategorien: DpKategorie[]; termine: DpTermin[]; hinweise: DpHinweis[];
+  vorjahr: { jahr: number; termine: Record<number, VorjahrTermin> };
+}
+
+const felderVon = (z: Zustand) => ({
+  datum: z.datum, kategorieId: z.kategorieId, uhrzeit: z.uhrzeit, dauerMinuten: z.dauerMinuten,
+  ausgefallen: z.ausgefallen, ort: z.ort, bemerkung: z.bemerkung, notizen: z.notizen,
+});
 interface Thema { id: number; titel: string; aktiv: boolean; zuletzt: string | null; pflichtJaehrlich: boolean }
 interface Block { id: number; name: string; aktiv: boolean; themen: { themaId: number; titel: string }[] }
 interface Personen { kameraden: { id: number; anzeige: string }[]; externe: { id: number; anzeige: string }[] }
@@ -47,6 +61,7 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
   const [busy, setBusy] = useState(false);
   const [bearbeiten, setBearbeiten] = useState<DpTermin | "neu" | null>(null);
   const [verschieben, setVerschieben] = useState<DpTerminThema | null>(null);
+  const [kopie, setKopie] = useState(false);
   // Schalter „Fokus“ (Spec 7.2): der gewählte Termin wird in der Präsentation markiert.
   const [fokus, setFokus] = useState(true);
   useEffect(() => {
@@ -61,7 +76,11 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
     if (k.b.ok) setBloecke(k.b.data.bloecke);
     if (k.p.ok) setPersonen(k.p.data);
   }, []);
-  const laden = useCallback(async () => uebernehmePlan(await holePlan(jahr)), [jahr, uebernehmePlan]);
+  const laden = useCallback(async (): Promise<PlanDaten | null> => {
+    const r = await holePlan(jahr);
+    uebernehmePlan(r);
+    return r.ok ? r.data : null;
+  }, [jahr, uebernehmePlan]);
   const katalogeLaden = useCallback(async () => uebernehmeKataloge(await holeKataloge()), [uebernehmeKataloge]);
   useEffect(() => {
     let aktiv = true;
@@ -73,15 +92,117 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
     return () => { aktiv = false; };
   }, [jahr, uebernehmePlan, uebernehmeKataloge]);
 
-  /** Aktion ausführen, Meldung setzen, Plan neu laden. */
-  const aktion = useCallback(async (method: string, pfad: string, body?: unknown, erfolg?: string) => {
+  // Rückgängig/Wiederholen (Spec 7.2): Einträge mit dem Zustand der betroffenen
+  // Termine vorher/nachher (lib/dienstplan/rueckgaengig.ts).
+  const [zurueck, setZurueck] = useState<Eintrag[]>([]);
+  const [vor, setVor] = useState<Eintrag[]>([]);
+
+  /**
+   * Aktion ausführen, Plan neu laden, Meldung setzen. Mit `merken` (Standard)
+   * landen die geänderten Termine auf dem Rückgängig-Stapel.
+   */
+  const aktion = useCallback(async (method: string, pfad: string, body?: unknown, erfolg?: string, merken = true) => {
+    const vorher = daten?.termine ?? [];
     setBusy(true);
     const r = await dpApi(method, pfad, body);
+    const neu = r.ok ? await laden() : null; // Meldung erst nach dem Neuladen, damit sie zum angezeigten Stand passt
     setBusy(false);
-    if (r.ok) await laden(); // Meldung erst nach dem Neuladen, damit sie zum angezeigten Stand passt
+    if (neu && merken) {
+      const aenderungen = unterschiede(vorher, neu.termine);
+      if (aenderungen.length) {
+        setZurueck((z) => [...z, { text: erfolg ?? "Änderung", aenderungen }].slice(-STAPEL_MAX));
+        setVor([]);
+      }
+    }
     setMeldung(r.ok ? (erfolg ? { ok: true, text: erfolg } : null) : { ok: false, text: r.message });
     return r;
-  }, [laden]);
+  }, [laden, daten]);
+
+  /** Einen Eintrag rückgängig machen (richtung "zurueck") oder wiederholen ("vor"). */
+  const anwenden = useCallback(async (richtung: "zurueck" | "vor") => {
+    const stapel = richtung === "zurueck" ? zurueck : vor;
+    const e = stapel.at(-1);
+    if (!e || busy) return;
+    setBusy(true);
+    let fehler: string | null = null;
+    const neueIds = new Map<number, number>();
+    for (const a of e.aenderungen) {
+      const ziel = richtung === "zurueck" ? a.vorher : a.nachher;
+      const jetzt = richtung === "zurueck" ? a.nachher : a.vorher;
+      let r: { ok: boolean; message?: string } = { ok: true };
+      if (ziel && jetzt) r = await dpApi("PUT", `/termine/${a.terminId}/zustand`, { zustand: ziel, erwartet: a.stempel });
+      else if (!ziel && jetzt) r = await dpApi("DELETE", `/termine/${a.terminId}`);
+      else if (ziel && !jetzt) {
+        const n = await dpApi<{ id: number }>("POST", `/plaene/${jahr}/termine`, felderVon(ziel));
+        r = n;
+        if (n.ok) {
+          neueIds.set(a.terminId, n.data.id);
+          r = await dpApi("PUT", `/termine/${n.data.id}/zustand`, { zustand: ziel });
+        }
+      }
+      if (!r.ok) { fehler = r.message ?? "Fehler"; break; }
+    }
+    const neu = await laden();
+    setBusy(false);
+    const stempel = new Map((neu?.termine ?? []).map((t) => [t.id, t.aktualisiertAm]));
+    // Ids neu angelegter Termine übernehmen und die Zeitstempel der eben selbst
+    // geänderten Termine in ALLEN Einträgen nachziehen (sonst scheitert ein
+    // späteres Rückgängig desselben Termins an der Prüfung auf fremde Änderungen).
+    const betroffen = new Set(e.aenderungen.map((a) => neueIds.get(a.terminId) ?? a.terminId));
+    const umbenennen = (liste: Eintrag[]) => [...neueIds].reduce((l, [alt, n]) => ersetzeId(l, alt, n), liste)
+      .map((x) => ({ ...x, aenderungen: x.aenderungen.map((a) => (betroffen.has(a.terminId) ? { ...a, stempel: stempel.get(a.terminId) ?? null } : a)) }));
+    const gegen: Eintrag = {
+      ...e,
+      aenderungen: e.aenderungen.map((a) => {
+        const id = neueIds.get(a.terminId) ?? a.terminId;
+        return { ...a, terminId: id, stempel: stempel.get(id) ?? null };
+      }),
+    };
+    if (richtung === "zurueck") {
+      setZurueck((z) => umbenennen(z.slice(0, -1)));
+      setVor((v) => (fehler ? umbenennen(v) : umbenennen([...v, gegen])));
+    } else {
+      setVor((v) => umbenennen(v.slice(0, -1)));
+      setZurueck((z) => (fehler ? umbenennen(z) : umbenennen([...z, gegen])));
+    }
+    setMeldung(fehler
+      ? { ok: false, text: `${richtung === "zurueck" ? "Rückgängig" : "Wiederholen"} nicht möglich: ${fehler}` }
+      : { ok: true, text: `${richtung === "zurueck" ? "Rückgängig" : "Wiederholt"}: ${e.text}` });
+  }, [zurueck, vor, busy, jahr, laden]);
+
+  // Strg+Z / Strg+Y (Mac: Cmd+Z, Cmd+Shift+Z), nicht in Eingabefeldern.
+  const anwendenRef = useRef(anwenden);
+  useEffect(() => { anwendenRef.current = anwenden; });
+  useEffect(() => {
+    const taste = (ev: KeyboardEvent) => {
+      if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+      const ziel = ev.target as HTMLElement | null;
+      if (ziel && (ziel.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(ziel.tagName))) return;
+      const k = ev.key.toLowerCase();
+      if (k === "z" && !ev.shiftKey) { ev.preventDefault(); void anwendenRef.current("zurueck"); }
+      else if (k === "y" || (k === "z" && ev.shiftKey)) { ev.preventDefault(); void anwendenRef.current("vor"); }
+    };
+    window.addEventListener("keydown", taste);
+    return () => window.removeEventListener("keydown", taste);
+  }, []);
+
+  // Ansicht, Vorjahr, Drag and Drop
+  const [ansicht, setAnsicht] = useState<"liste" | "raster">("liste");
+  const [zeigeVorjahr, setZeigeVorjahr] = useState(true);
+  const [gezogen, setGezogen] = useState<ZiehDaten | null>(null);
+  const alt = useRef(false); // Alt/Option beim Loslassen = kopieren
+  useEffect(() => {
+    const merke = (ev: KeyboardEvent | PointerEvent) => { alt.current = ev.altKey; };
+    window.addEventListener("keydown", merke);
+    window.addEventListener("keyup", merke);
+    window.addEventListener("pointermove", merke);
+    return () => {
+      window.removeEventListener("keydown", merke);
+      window.removeEventListener("keyup", merke);
+      window.removeEventListener("pointermove", merke);
+    };
+  }, []);
+  const sensoren = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const kategorien = useMemo(() => new Map((daten?.kategorien ?? []).map((k) => [k.id, k])), [daten]);
   const termin = daten?.termine.find((t) => t.id === terminId) ?? null;
@@ -92,6 +213,58 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
   const { plan, termine, hinweise } = daten;
   const entwurf = plan.status === "entwurf";
 
+  async function ablegen(ev: DragEndEvent) {
+    setGezogen(null);
+    const q = ev.active.data.current as ZiehDaten | undefined;
+    const z = ev.over?.data.current as ZielDaten | undefined;
+    if (!q || !z || busy) return;
+    const kopieren = alt.current;
+    if (q.art === "thema" || q.art === "block") {
+      if (z.ziel === "tag") return;
+      setTerminId(z.terminId);
+      await aktion("POST", `/termine/${z.terminId}/themen`, q.art === "thema" ? { themaId: q.themaId } : { blockId: q.blockId },
+        q.art === "thema" ? `„${q.titel}“ hinzugefügt` : `Block „${q.titel}“ hinzugefügt`);
+    } else if (q.art === "person") {
+      let ziel = z.ziel === "position" ? z.id : null;
+      if (z.ziel === "termin") {
+        const t = termine.find((x) => x.id === z.terminId);
+        if (t?.themen.length === 1) ziel = t.themen[0].id;
+        else { setMeldung({ ok: false, text: "Person auf ein Thema im Termin ziehen" }); return; }
+      }
+      if (ziel) await aktion("POST", `/termin-themen/${ziel}/verantwortliche`, q.body, `${q.titel} eingetragen`);
+    } else if (q.art === "position") {
+      if (z.ziel === "tag" || (z.ziel === "position" && z.id === q.id)) return;
+      const position = z.ziel === "position" ? z.position : undefined;
+      if (kopieren) {
+        await aktion("POST", `/termin-themen/${q.id}/kopie`, { terminId: z.terminId, ...(position ? { position } : {}) }, `„${q.titel}“ kopiert`);
+      } else if (z.terminId === q.terminId) {
+        if (position) await aktion("PATCH", `/termin-themen/${q.id}`, { position }, "Reihenfolge geändert");
+      } else {
+        await aktion("PATCH", `/termin-themen/${q.id}`, { terminId: z.terminId, ...(position ? { position } : {}) }, `„${q.titel}“ verschoben`);
+      }
+    } else if (q.art === "termin" && z.ziel === "tag") {
+      const t = termine.find((x) => x.id === q.id);
+      if (t && t.datum !== z.datum) await aktion("PATCH", `/termine/${q.id}`, { datum: z.datum }, `Termin auf ${datumKurz(z.datum)} verschoben`);
+    }
+  }
+
+  const karte = (t: DpTermin) => (
+    <TerminKarte
+      key={t.id}
+      t={t}
+      kategorie={kategorien.get(t.kategorieId)}
+      gewaehlt={t.id === terminId}
+      positionId={positionId}
+      busy={busy}
+      vorjahr={zeigeVorjahr ? vorjahrText(daten.vorjahr.termine[t.id], daten.vorjahr.jahr) : null}
+      waehle={() => { setTerminId(t.id); if (t.id !== terminId) setPositionId(null); }}
+      waehlePosition={(id) => { setTerminId(t.id); setPositionId(id); }}
+      bearbeiten={() => setBearbeiten(t)}
+      verschieben={setVerschieben}
+      aktion={aktion}
+    />
+  );
+
   const monate = new Map<number, DpTermin[]>();
   for (const t of termine) {
     const m = Number(t.datum.slice(5, 7)) - 1;
@@ -99,6 +272,13 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
   }
 
   return (
+    <DndContext
+      sensors={sensoren}
+      collisionDetection={kollision}
+      onDragStart={(ev: DragStartEvent) => setGezogen((ev.active.data.current as ZiehDaten | undefined) ?? null)}
+      onDragCancel={() => setGezogen(null)}
+      onDragEnd={(ev) => void ablegen(ev)}
+    >
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -117,17 +297,42 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
           </label>
           {entwurf && (
             <Button variant="outline" size="sm" loading={busy} onClick={async () => {
-              const r = await aktion("POST", `/plaene/${jahr}/generieren`);
+              const r = await aktion("POST", `/plaene/${jahr}/generieren`, undefined, undefined, false);
               if (r.ok) setMeldung({ ok: true, text: `${(r.data as { generiert: { neu: number } }).generiert.neu} Rhythmus-Termine ergänzt` });
             }}>Rhythmus ergänzen</Button>
           )}
           <Button size="sm" onClick={() => setBearbeiten("neu")}><Plus /> Termin</Button>
           {istAdmin && (
             <Button size="sm" variant={entwurf ? "default" : "outline"} loading={busy}
-              onClick={() => aktion("PATCH", `/plaene/${jahr}`, { status: entwurf ? "freigegeben" : "entwurf" }, entwurf ? "Plan freigegeben" : "Freigabe zurückgenommen")}>
+              onClick={() => aktion("PATCH", `/plaene/${jahr}`, { status: entwurf ? "freigegeben" : "entwurf" }, entwurf ? "Plan freigegeben" : "Freigabe zurückgenommen", false)}>
               {entwurf ? "Freigeben" : "Zurück auf Entwurf"}
             </Button>
           )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div role="group" aria-label="Ansicht" className="flex gap-1 rounded-lg bg-muted p-1">
+          {(["liste", "raster"] as const).map((a) => (
+            <button key={a} type="button" aria-pressed={ansicht === a} onClick={() => setAnsicht(a)}
+              className={cn("inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm", ansicht === a ? "bg-card font-medium shadow-xs" : "text-muted-foreground")}>
+              {a === "liste" ? <List className="size-4" /> : <LayoutGrid className="size-4" />}{a === "liste" ? "Liste" : "Monatsraster"}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-sm">
+          <input type="checkbox" checked={zeigeVorjahr} onChange={(e) => setZeigeVorjahr(e.target.checked)} />
+          Vorjahr {daten.vorjahr.jahr}
+        </label>
+        <div className="ml-auto flex gap-1">
+          <Button size="sm" variant="outline" disabled={busy || !zurueck.length} onClick={() => void anwenden("zurueck")}
+            title={zurueck.length ? `Rückgängig: ${zurueck.at(-1)!.text} (Strg+Z)` : "Nichts rückgängig zu machen"} aria-label="Rückgängig">
+            <Undo2 /> Rückgängig
+          </Button>
+          <Button size="sm" variant="outline" disabled={busy || !vor.length} onClick={() => void anwenden("vor")}
+            title={vor.length ? `Wiederholen: ${vor.at(-1)!.text} (Strg+Y)` : "Nichts zu wiederholen"} aria-label="Wiederholen">
+            <Redo2 /> Wiederholen
+          </Button>
         </div>
       </div>
 
@@ -141,24 +346,17 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-6">
-          {[...monate.entries()].map(([m, liste]) => (
+          {ansicht === "raster" && (
+            <>
+              {termin && <div className="sticky top-16 z-10 rounded-xl bg-background shadow-md">{karte(termin)}</div>}
+              <Monatsraster jahr={jahr} termine={termine} kategorien={kategorien} terminId={terminId} busy={busy}
+                waehle={(id) => { setTerminId(id); if (id !== terminId) setPositionId(null); }} />
+            </>
+          )}
+          {ansicht === "liste" && [...monate.entries()].map(([m, liste]) => (
             <section key={m} aria-labelledby={`monat-${m}`} className="flex flex-col gap-3">
               <h2 id={`monat-${m}`} className="text-lg font-semibold tracking-tight">{MONATE[m]}</h2>
-              {liste.map((t) => (
-                <TerminKarte
-                  key={t.id}
-                  t={t}
-                  kategorie={kategorien.get(t.kategorieId)}
-                  gewaehlt={t.id === terminId}
-                  positionId={positionId}
-                  busy={busy}
-                  waehle={() => { setTerminId(t.id); if (t.id !== terminId) setPositionId(null); }}
-                  waehlePosition={(id) => { setTerminId(t.id); setPositionId(id); }}
-                  bearbeiten={() => setBearbeiten(t)}
-                  verschieben={setVerschieben}
-                  aktion={aktion}
-                />
-              ))}
+              {liste.map(karte)}
             </section>
           ))}
           {termine.length === 0 && <p className="py-10 text-center text-muted-foreground">Noch keine Termine. „Rhythmus ergänzen“ oder „Termin“ anlegen.</p>}
@@ -195,9 +393,13 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
       <Sheet open={verschieben !== null} onOpenChange={(o) => !o && setVerschieben(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>Thema verschieben</SheetTitle>
+            <SheetTitle>Thema {kopie ? "kopieren" : "verschieben"}</SheetTitle>
             <SheetDescription>„{verschieben?.titel}“ samt Verantwortlichen in einen anderen Termin, dort ans Ende.</SheetDescription>
           </SheetHeader>
+          <label className="mx-4 flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={kopie} onChange={(e) => setKopie(e.target.checked)} />
+            Kopieren statt verschieben (beim Ziehen: Alt-Taste)
+          </label>
           <ul className="grid gap-1 px-4 pb-6">
             {termine.filter((t) => !t.ausgefallen && !t.themen.some((p) => p.id === verschieben?.id)).map((t) => (
               <li key={t.id}>
@@ -205,7 +407,9 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
                   type="button"
                   className="w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
                   onClick={async () => {
-                    const r = await aktion("PATCH", `/termin-themen/${verschieben!.id}`, { terminId: t.id }, "Thema verschoben");
+                    const r = kopie
+                      ? await aktion("POST", `/termin-themen/${verschieben!.id}/kopie`, { terminId: t.id }, "Thema kopiert")
+                      : await aktion("PATCH", `/termin-themen/${verschieben!.id}`, { terminId: t.id }, "Thema verschoben");
                     if (r.ok) setVerschieben(null);
                   }}
                 >
@@ -218,10 +422,16 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
         </SheetContent>
       </Sheet>
     </div>
+    <DragOverlay dropAnimation={null}>
+      {gezogen && (
+        <div className="max-w-64 truncate rounded-md border border-primary bg-card px-2 py-1 text-sm font-medium shadow-lg">{gezogen.titel}</div>
+      )}
+    </DragOverlay>
+    </DndContext>
   );
 }
 
-type AktionFn = (method: string, pfad: string, body?: unknown, erfolg?: string) => Promise<{ ok: boolean }>;
+type AktionFn = (method: string, pfad: string, body?: unknown, erfolg?: string, merken?: boolean) => Promise<{ ok: boolean }>;
 
 function Hinweise({ hinweise, waehle }: { hinweise: DpHinweis[]; waehle: (terminId: number) => void }) {
   const [alle, setAlle] = useState(false);
@@ -249,14 +459,16 @@ function Hinweise({ hinweise, waehle }: { hinweise: DpHinweis[]; waehle: (termin
   );
 }
 
-function TerminKarte({ t, kategorie, gewaehlt, positionId, busy, waehle, waehlePosition, bearbeiten, verschieben, aktion }: {
-  t: DpTermin; kategorie?: DpKategorie; gewaehlt: boolean; positionId: number | null; busy: boolean;
+function TerminKarte({ t, kategorie, gewaehlt, positionId, busy, vorjahr, waehle, waehlePosition, bearbeiten, verschieben, aktion }: {
+  t: DpTermin; kategorie?: DpKategorie; gewaehlt: boolean; positionId: number | null; busy: boolean; vorjahr: string | null;
   waehle: () => void; waehlePosition: (id: number) => void; bearbeiten: () => void;
   verschieben: (p: DpTerminThema) => void; aktion: AktionFn;
 }) {
   const k = klassenFuer(kategorie?.farbe, t.ausgefallen);
+  const { knoten, ueber } = useZiel(`termin-${t.id}`, { ziel: "termin", terminId: t.id });
   return (
-    <article id={`termin-${t.id}`} className={cn("rounded-xl border border-l-4 p-3 shadow-xs", k.streifen, k.flaeche, gewaehlt && "ring-2 ring-ring")}>
+    <article ref={knoten} id={`termin-${t.id}`} data-termin={t.id}
+      className={cn("rounded-xl border border-l-4 p-3 shadow-xs", k.streifen, k.flaeche, gewaehlt && "ring-2 ring-ring", ueber && "ring-2 ring-primary")}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <button type="button" onClick={waehle} aria-pressed={gewaehlt} className="flex flex-wrap items-baseline gap-x-2 text-left">
           <span className="font-semibold tabular-nums">{datumKurz(t.datum)}</span>
@@ -284,12 +496,14 @@ function TerminKarte({ t, kategorie, gewaehlt, positionId, busy, waehle, waehleP
       </div>
       {t.ausgefallen && <p className="mt-1 text-sm text-muted-foreground">entfällt{t.bemerkung ? `: ${t.bemerkung}` : ""}</p>}
       {!t.ausgefallen && t.bemerkung && <p className="mt-1 text-sm text-muted-foreground">{t.bemerkung}</p>}
+      {vorjahr && <p className="mt-1 text-xs italic text-muted-foreground" data-vorjahr>{vorjahr}</p>}
       {t.themen.length > 0 && (
         <ol className="mt-2 grid gap-1.5">
           {t.themen.map((p, i) => (
-            <li key={p.id} className={cn("rounded-lg bg-card/70 px-2 py-1.5", positionId === p.id && "ring-2 ring-ring")}>
+            <PositionZeile key={p.id} p={p} terminId={t.id} gewaehlt={positionId === p.id} busy={busy}>
               <div className="flex items-start justify-between gap-2">
-                <button type="button" onClick={() => waehlePosition(p.id)} aria-pressed={positionId === p.id} className={cn("text-left text-sm font-medium", t.ausgefallen && "line-through")}>
+                <GripVertical aria-hidden className="mt-0.5 size-4 shrink-0 cursor-grab text-muted-foreground" />
+                <button type="button" onClick={() => waehlePosition(p.id)} aria-pressed={positionId === p.id} className={cn("min-w-0 flex-1 text-left text-sm font-medium", t.ausgefallen && "line-through")}>
                   {p.titel}{p.freitext && <span className="font-normal text-muted-foreground"> (Freitext)</span>}
                   {p.ausBlockId && <span className="font-normal text-muted-foreground"> · Block</span>}
                 </button>
@@ -313,12 +527,34 @@ function TerminKarte({ t, kategorie, gewaehlt, positionId, busy, waehle, waehleP
                 ))}
                 {!p.verantwortliche.length && <span className="text-xs text-muted-foreground">ohne Verantwortliche</span>}
               </div>
-            </li>
+            </PositionZeile>
           ))}
         </ol>
       )}
       {gewaehlt && <FreitextZeile terminId={t.id} aktion={aktion} busy={busy} />}
     </article>
+  );
+}
+
+/** Themenposition: ziehbar (verschieben, mit Alt kopieren) und Ablageziel (Person, Reihenfolge). */
+function PositionZeile({ p, terminId, gewaehlt, busy, children }: { p: DpTerminThema; terminId: number; gewaehlt: boolean; busy: boolean; children: React.ReactNode }) {
+  const { knoten, onPointerDown, ueber, zieht } = useBeides(`pos-${p.id}`, { art: "position", id: p.id, terminId, titel: p.titel }, { ziel: "position", id: p.id, terminId, position: p.position }, busy);
+  return (
+    <li ref={knoten} onPointerDown={onPointerDown} data-position={p.id}
+      className={cn("rounded-lg bg-card/70 px-2 py-1.5", gewaehlt && "ring-2 ring-ring", ueber && !zieht && "ring-2 ring-primary", zieht && "opacity-40")}>
+      {children}
+    </li>
+  );
+}
+
+/** Eintrag der Seitenleiste, der auf Termine bzw. Themen gezogen werden kann. */
+function ZiehZeile({ id, daten, busy, children }: { id: string; daten: ZiehDaten; busy: boolean; children: React.ReactNode }) {
+  const { knoten, onPointerDown, zieht } = useZiehbar(id, daten, busy);
+  return (
+    <li ref={knoten} onPointerDown={onPointerDown} data-zieh={id}
+      className={cn("flex cursor-grab items-center justify-between gap-2 rounded-md px-1 py-1 hover:bg-accent", zieht && "opacity-40")}>
+      {children}
+    </li>
   );
 }
 
@@ -368,7 +604,7 @@ function Seitenleiste({ termine, termin, position, themen, bloecke, personen, bu
       <Card className="flex min-h-0 flex-col">
         <CardHeader className="gap-2 pb-2">
           <p className="text-sm text-muted-foreground">
-            {termin ? <>Termin: <span className="font-medium text-foreground">{datumKurz(termin.datum)} {termin.kuerzel}</span></> : "Erst einen Termin anklicken."}
+            {termin ? <>Termin: <span className="font-medium text-foreground">{datumKurz(termin.datum)} {termin.kuerzel}</span></> : "Termin anklicken oder Einträge direkt auf einen Termin ziehen."}
             {position && <><br />Thema: <span className="font-medium text-foreground">{position.titel}</span></>}
           </p>
           <div role="tablist" aria-label="Seitenleiste" className="flex gap-1 rounded-lg bg-muted p-1">
@@ -390,7 +626,7 @@ function Seitenleiste({ termine, termin, position, themen, bloecke, personen, bu
               </label>
               <ul className="grid gap-0.5">
                 {themen.filter((t) => t.aktiv && passt(t.titel) && (!nurUnverplant || !themaAnzahl.get(t.id))).map((t) => (
-                  <li key={t.id} className="flex items-center justify-between gap-2 rounded-md px-1 py-1 hover:bg-accent">
+                  <ZiehZeile key={t.id} id={`thema-${t.id}`} daten={{ art: "thema", themaId: t.id, titel: t.titel }} busy={busy}>
                     <span className="min-w-0 text-sm">
                       <span className="block truncate">{t.titel}{t.pflichtJaehrlich && <span className="text-muted-foreground"> · Pflicht</span>}</span>
                       <span className="block text-xs text-muted-foreground">
@@ -399,7 +635,7 @@ function Seitenleiste({ termine, termin, position, themen, bloecke, personen, bu
                     </span>
                     <Button size="icon-sm" variant="outline" aria-label={`${t.titel} zum Termin`} disabled={busy || !termin}
                       onClick={() => zuTermin({ themaId: t.id }, "Thema hinzugefügt")}><Plus /></Button>
-                  </li>
+                  </ZiehZeile>
                 ))}
               </ul>
               <form className="flex gap-2 border-t pt-2" onSubmit={async (e) => {
@@ -418,34 +654,34 @@ function Seitenleiste({ termine, termin, position, themen, bloecke, personen, bu
           {reiter === "bloecke" && (
             <ul className="grid gap-1">
               {bloecke.filter((b) => b.aktiv).map((b) => (
-                <li key={b.id} className="flex items-center justify-between gap-2 rounded-md px-1 py-1 hover:bg-accent">
+                <ZiehZeile key={b.id} id={`block-${b.id}`} daten={{ art: "block", blockId: b.id, titel: b.name }} busy={busy}>
                   <span className="min-w-0 text-sm">
                     <span className="block font-medium">{b.name}</span>
                     <span className="block text-xs text-muted-foreground">{b.themen.map((t) => t.titel).join(" · ")}</span>
                   </span>
                   <Button size="icon-sm" variant="outline" aria-label={`Block ${b.name} zum Termin`} disabled={busy || !termin}
                     onClick={() => zuTermin({ blockId: b.id }, "Block hinzugefügt")}><Plus /></Button>
-                </li>
+                </ZiehZeile>
               ))}
               {!bloecke.some((b) => b.aktiv) && <li className="py-6 text-center text-sm text-muted-foreground">Keine Blöcke. Anlegen in der Verwaltung.</li>}
             </ul>
           )}
           {reiter === "personen" && (
             <div className="grid gap-2">
-              {!position && <p className="text-sm text-muted-foreground">Für Verantwortliche ein Thema im Termin anklicken.</p>}
+              {!position && <p className="text-sm text-muted-foreground">Person auf ein Thema ziehen oder ein Thema im Termin anklicken und „+“ wählen.</p>}
               <ul className="grid gap-0.5">
                 {[...personen.kameraden.map((k) => ({ ...k, schluessel: `k${k.id}`, body: { kameradId: k.id } })),
                   ...personen.externe.map((e) => ({ ...e, schluessel: `e${e.id}`, body: { externePersonId: e.id } }))]
                   .filter((p) => passt(p.anzeige))
                   .map((p) => (
-                    <li key={p.schluessel} className="flex items-center justify-between gap-2 rounded-md px-1 py-1 hover:bg-accent">
+                    <ZiehZeile key={p.schluessel} id={`person-${p.schluessel}`} daten={{ art: "person", body: p.body, titel: p.anzeige }} busy={busy}>
                       <span className="text-sm">
                         {p.anzeige}{p.schluessel.startsWith("e") && <span className="text-muted-foreground"> · extern</span>}
                         <span className="text-xs text-muted-foreground"> · {personAnzahl.get(p.schluessel) ?? 0}×</span>
                       </span>
                       <Button size="icon-sm" variant="outline" aria-label={`${p.anzeige} als Verantwortliche`} disabled={busy || !position}
                         onClick={() => zuPosition(p.body)}><Plus /></Button>
-                    </li>
+                    </ZiehZeile>
                   ))}
               </ul>
               <form className="grid gap-2 border-t pt-2" onSubmit={async (e) => {

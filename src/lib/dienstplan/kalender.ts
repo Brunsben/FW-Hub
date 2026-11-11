@@ -190,3 +190,38 @@ export function regelnMitVersatz(regeln: RhythmusRegel[], jahr: number, kuerzel:
   }
   return { regeln: ergebnis, aenderungen, fehler };
 }
+
+// ── Vorjahresanzeige (Spec 7.2) ──────────────────────────────────────────────
+
+export type VorjahrTermin = { datum: string; kuerzel: string; ausgefallen: boolean; titel: string[] };
+
+/**
+ * Ordnet jedem Termin den Termin des Vorjahres zu: gleiche Kategorie am Datum
+ * minus 364 Tage (52 Wochen = 13 × 4, gleicher Platz im Rhythmus, gleicher
+ * Wochentag). Ohne Treffer der nächste Termin gleicher Kategorie im Abstand von
+ * höchstens 14 Tagen zu diesem Datum; bei Gleichstand der frühere.
+ */
+export function vorjahrZuordnen(
+  termine: { id: number; datum: string; kuerzel: string }[],
+  vorjahr: VorjahrTermin[],
+): Record<number, VorjahrTermin> {
+  const proKuerzel = new Map<string, { nr: number; t: VorjahrTermin }[]>();
+  for (const v of vorjahr) {
+    const k = v.kuerzel.toUpperCase();
+    proKuerzel.set(k, [...(proKuerzel.get(k) ?? []), { nr: tagNr(v.datum), t: v }]);
+  }
+  const out: Record<number, VorjahrTermin> = {};
+  for (const t of termine) {
+    const kandidaten = proKuerzel.get(t.kuerzel.toUpperCase());
+    if (!kandidaten) continue;
+    const ziel = tagNr(t.datum) - 364;
+    let best: { nr: number; t: VorjahrTermin } | null = null;
+    for (const c of kandidaten) {
+      const abstand = Math.abs(c.nr - ziel);
+      if (abstand > 14) continue;
+      if (!best || abstand < Math.abs(best.nr - ziel) || (abstand === Math.abs(best.nr - ziel) && c.nr < best.nr)) best = c;
+    }
+    if (best) out[t.id] = best.t;
+  }
+  return out;
+}

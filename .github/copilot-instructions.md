@@ -485,12 +485,13 @@ Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Ze
 | test-login-sperre.mjs, test-login-deaktiviert.mjs, test-client-ip.mjs | Login-Sperre, deaktivierte Konten, Client-IP | ja / ja / nein |
 | test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
 | test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
-| test-dienstplan-rls.mjs | RLS aller Tabellen in dienstplan je Rolle und Organisation, Trigger (Version, Freigabeschutz), kameraden_namen(), dienst_rolle in core, Anzeige-Scope (Token gültig, abgelaufen, unbekannt) | nein |
+| test-dienstplan-rls.mjs | RLS aller Tabellen in dienstplan je Rolle und Organisation, Trigger (Version, Freigabeschutz), kameraden_namen(), dienst_rolle in core, Anzeige-Scope (Token gültig, abgelaufen, unbekannt), vorjahr_themen() je Rolle | nein |
 | test-dienstplan-auth.mjs | Alle Routen unter /api/dienstplan ohne Login → 401 (findet die Routen selbst; Token-Routen: 401/403), Claim dienst_rolle, Rollenvergabe | ja |
 | test-dienstplan-kalender.mjs, test-dienstplan-eingabe.mjs | Rhythmus, Feiertage Niedersachsen, Akzeptanztest 2026 (Regeln aus der DB, nur lesend); Eingabeprüfung und Hinweise der API | nein / nein |
 | test-dienstplan-verwaltung.mjs | Neues Jahr mit Vorschau und Zwischendienst-Versatz (Regel wird aufgeteilt, danach wiederhergestellt), Kategorien, Rhythmusregeln, Bereiche je Rolle, Dienstplan-Seiten je Rolle | ja |
 | test-dienstplan-api.mjs | Dienstplan-API: Pläne, Generator (idempotent), Termine, Themen am Termin, Verantwortliche, Kataloge, Rechte je Rolle, ETag/304, Hinweise | ja |
 | test-dienstplan-anzeige.mjs | Präsentation: Anzeige-Links (12 h, nur Hash gespeichert), Token-Route ohne/falsch/abgelaufen 401, anderer Plan 403, ohne Notizen, Fokus und ETag/304, Beenden | ja |
+| test-dienstplan-rueckgaengig.mjs | Phase 7: Termin-Zustand (Rückgängig, 409 bei fremder Änderung), Kopie einer Themenposition, Verschieben an Position, Datum ändern, Vorjahr in Plan- und Token-Route je Status | ja |
 | test-dienstplan-import-lib.mjs, test-dienstplan-import.mjs | Excel-Import Dienstplan: Analyse-Regeln (ohne DB) bzw. Ende zu Ende als fw_app mit erzeugter Excel (Jahre 2091/2092), Localhost-Sperre von `--testdaten` | nein / nein |
 | test-setup.mjs | Erst-Einrichtung /setup in einer Wegwerf-Kopie von fwhub_dev mit leerem core.benutzer (eigener Dev-Server auf 3101; den Dev-Server auf 3100 vorher beenden) | eigener |
 | test-startschutz.mjs | Datenbank-Startschutz: `next start` bricht bei fehlender/falscher Rolle ab, `next dev` warnt nur, keine URLs oder Passwörter in der Ausgabe (Ports 3102/3103, braucht `npm run build`, Dev-Server auf 3100 vorher beenden) | eigener |

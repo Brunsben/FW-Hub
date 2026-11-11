@@ -12,8 +12,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { schutz } from "./lib/schutz.mjs";
 import {
   feiertageNiedersachsen, istIsoDatum, nterWochentag, ostersonntag, plusTage, regelnMitVersatz, regelTreffer,
-  rhythmusTreffer, tagNr, versetzeMuster, wochentag, zyklusKuerzel,
+  rhythmusTreffer, tagNr, versetzeMuster, vorjahrZuordnen, wochentag, zyklusKuerzel,
 } from "../src/lib/dienstplan/kalender.ts";
+import { vorjahrText } from "../src/lib/dienstplan/praesentation.ts";
 
 const P = resolve(fileURLToPath(new URL("..", import.meta.url)));
 if (existsSync(`${P}/.env.local`)) process.loadEnvFile(`${P}/.env.local`);
@@ -105,6 +106,32 @@ schutz({ db: ["MIGRATE_DATABASE_URL"] });
 const req = createRequire(`${P}/package.json`);
 const postgres = (await import(pathToFileURL(req.resolve("postgres")).href)).default;
 const sql = postgres(process.env.MIGRATE_DATABASE_URL, { max: 1, onnotice: () => {} });
+// ── Vorjahresanzeige (Spec 7.2) ──
+{
+  const V = (datum, kuerzel, titel = [], ausgefallen = false) => ({ datum, kuerzel, titel, ausgefallen });
+  const vj = [V("2026-01-06", "D", ["Knoten"]), V("2026-01-13", "Z"), V("2026-01-20", "D", ["Funk", "Karte"]),
+    V("2026-03-03", "J", ["JHV"]), V("2026-12-24", "D", [], true), V("2026-05-19", "D", ["früh"]), V("2026-05-27", "D", ["spät"])];
+  const z = vorjahrZuordnen([
+    { id: 1, datum: "2027-01-05", kuerzel: "D" },  // 2027-01-05 - 364 = 2026-01-06 (gleicher Wochentag)
+    { id: 2, datum: "2027-01-12", kuerzel: "Z" },
+    { id: 3, datum: "2027-01-19", kuerzel: "d" },  // Kleinschreibung egal
+    { id: 4, datum: "2027-03-12", kuerzel: "J" },  // Sondertermin ohne exakten Treffer: 2026-03-13 → 03.03. (10 Tage)
+    { id: 5, datum: "2027-04-02", kuerzel: "J" },  // > 14 Tage → nichts
+    { id: 6, datum: "2027-12-23", kuerzel: "D" },  // ausgefallen im Vorjahr
+    { id: 7, datum: "2027-05-24", kuerzel: "D" },  // Ziel 2026-05-25: 19.05. (6) vs. 27.05. (2) → näher gewinnt
+    { id: 8, datum: "2027-01-05", kuerzel: "K" },  // keine Kategorie im Vorjahr
+  ], vj);
+  check("Vorjahr: gleicher Platz 52 Wochen vorher", z[1]?.datum === "2026-01-06" && z[2]?.datum === "2026-01-13" && z[3]?.datum === "2026-01-20");
+  check("Vorjahr: Sondertermin, nächster gleicher Kategorie innerhalb 14 Tagen", z[4]?.datum === "2026-03-03");
+  check("Vorjahr: mehr als 14 Tage → keine Zuordnung", z[5] === undefined && z[8] === undefined);
+  check("Vorjahr: näherer Kandidat gewinnt", z[7]?.datum === "2026-05-27");
+  const gleich = vorjahrZuordnen([{ id: 1, datum: "2027-05-24", kuerzel: "D" }], [V("2026-05-21", "D", ["a"]), V("2026-05-29", "D", ["b"])]);
+  check("Vorjahr: Gleichstand → früherer Termin", gleich[1]?.datum === "2026-05-21");
+  check("Vorjahr: Text mit Themen", vorjahrText(z[3], 2026) === "2026: Funk, Karte");
+  check("Vorjahr: Text ohne Thema / entfallen / ohne Treffer",
+    vorjahrText(z[2], 2026) === "2026: ohne Thema" && vorjahrText(z[6], 2026) === "2026: entfallen" && vorjahrText(undefined, 2026) === null);
+}
+
 try {
   const regeln = (await sql`select id, name, typ, wochentag, uhrzeit::text as uhrzeit, anker_datum::text as "ankerDatum", muster,
       nter_wochentag as "nterWochentag", monate, kategorie_kuerzel as "kategorieKuerzel", gueltig_ab::text as "gueltigAb",

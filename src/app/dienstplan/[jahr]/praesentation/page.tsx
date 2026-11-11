@@ -18,10 +18,10 @@ export const metadata: Metadata = {
 // Routen prüfen selbst (401/403).
 export default async function PraesentationPage({ params, searchParams }: {
   params: Promise<{ jahr: string }>;
-  searchParams: Promise<{ ansicht?: string }>;
+  searchParams: Promise<{ ansicht?: string; vorjahr?: string }>;
 }) {
   const jahr = Number((await params).jahr);
   if (!Number.isInteger(jahr) || jahr < 2000 || jahr > 2100) notFound();
-  const { ansicht } = await searchParams;
-  return <Praesentation jahr={jahr} ansichtParam={ansicht ?? null} />;
+  const { ansicht, vorjahr } = await searchParams;
+  return <Praesentation jahr={jahr} ansichtParam={ansicht ?? null} vorjahrParam={vorjahr === "1"} />;
 }

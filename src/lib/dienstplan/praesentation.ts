@@ -34,3 +34,10 @@ export function geaenderteTermine(vorher: Stand[] | null, nachher: Stand[]): num
   const alt = new Map(vorher.map((t) => [t.id, t.aktualisiertAm]));
   return nachher.filter((t) => alt.get(t.id) !== t.aktualisiertAm).map((t) => t.id);
 }
+
+/** "2026: Pumpenkunde, Wasserförderung" (Vorjahresanzeige, Spec 7.2); null ohne Vorjahrestermin. */
+export function vorjahrText(v: { ausgefallen: boolean; titel: string[] } | undefined, jahr: number): string | null {
+  if (!v) return null;
+  if (v.ausgefallen) return `${jahr}: entfallen`;
+  return `${jahr}: ${v.titel.length ? v.titel.join(", ") : "ohne Thema"}`;
+}

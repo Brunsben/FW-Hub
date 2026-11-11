@@ -406,3 +406,64 @@ export function pruefeBereich(b: Body, modus: Modus): Pruefung<{ name?: string; 
     return t;
   });
 }
+
+// ── Termin-Zustand (Rückgängig/Wiederholen, Phase 7) ────────────────────────
+// Vollständiges Abbild eines Termins: Felder, Themen in Reihenfolge und deren
+// Verantwortliche. PUT /termine/[id]/zustand ersetzt den Termin damit komplett.
+
+export interface TerminZustandThema {
+  themaId: number | null;
+  titelFreitext: string | null;
+  ausBlockId: number | null;
+  verantwortliche: { kameradId: number | null; externePersonId: number | null; platzhalter: "alle_gf" | "offen" | null }[];
+}
+
+export interface TerminZustand {
+  datum: string;
+  uhrzeit: string | null;
+  dauerMinuten: number | null;
+  kategorieId: number;
+  ausgefallen: boolean;
+  ort: string | null;
+  bemerkung: string | null;
+  notizen: string | null;
+  themen: TerminZustandThema[];
+}
+
+export function pruefeTerminZustand(b: Body): Pruefung<TerminZustand> {
+  return lauf(() => {
+    const t = pruefeTermin({ uhrzeit: null, dauerMinuten: null, ausgefallen: false, ort: null, bemerkung: null, notizen: null, ...b }, "neu");
+    if (!t.ok) raus(t.ok ? "" : t.fehler);
+    const f = (t as { ok: true; daten: TerminEingabe }).daten;
+    if (!Array.isArray(b.themen)) raus("themen muss eine Liste sein");
+    const roh = b.themen as unknown[];
+    if (roh.length > 30) raus("Höchstens 30 Themen je Termin");
+    const themen = roh.map((x, i): TerminZustandThema => {
+      if (!x || typeof x !== "object") raus(`themen[${i}] ungültig`);
+      const o = x as Body;
+      const themaId = o.themaId === undefined ? null : optId(o.themaId, `themen[${i}].themaId`);
+      const titelFreitext = optText(o.titelFreitext, `themen[${i}].titelFreitext`, 200);
+      if ((themaId === null) === (titelFreitext === null)) raus(`themen[${i}]: genau eins von themaId oder titelFreitext`);
+      const ausBlockId = o.ausBlockId === undefined ? null : optId(o.ausBlockId, `themen[${i}].ausBlockId`);
+      if (!Array.isArray(o.verantwortliche)) raus(`themen[${i}].verantwortliche muss eine Liste sein`);
+      const vs = o.verantwortliche as unknown[];
+      if (vs.length > 20) raus(`themen[${i}]: höchstens 20 Verantwortliche`);
+      const verantwortliche = vs.map((y, j) => {
+        const v = (y && typeof y === "object" ? y : raus(`themen[${i}].verantwortliche[${j}] ungültig`)) as Body;
+        const kameradId = v.kameradId === undefined ? null : optId(v.kameradId, "kameradId");
+        const externePersonId = v.externePersonId === undefined ? null : optId(v.externePersonId, "externePersonId");
+        const p = v.platzhalter ?? null;
+        if (p !== null && p !== "alle_gf" && p !== "offen") raus("platzhalter muss alle_gf oder offen sein");
+        if ([kameradId, externePersonId, p].filter((z) => z !== null).length !== 1) {
+          raus(`themen[${i}].verantwortliche[${j}]: genau eins von kameradId, externePersonId, platzhalter`);
+        }
+        return { kameradId, externePersonId, platzhalter: p as "alle_gf" | "offen" | null };
+      });
+      return { themaId, titelFreitext, ausBlockId, verantwortliche };
+    });
+    return {
+      datum: f.datum!, uhrzeit: f.uhrzeit ?? null, dauerMinuten: f.dauerMinuten ?? null, kategorieId: f.kategorieId!,
+      ausgefallen: f.ausgefallen ?? false, ort: f.ort ?? null, bemerkung: f.bemerkung ?? null, notizen: f.notizen ?? null, themen,
+    };
+  });
+}

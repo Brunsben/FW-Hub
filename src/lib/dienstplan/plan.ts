@@ -3,7 +3,7 @@ import type { ScopedTx } from "@/lib/db/scoped";
 import { expectRows } from "@/lib/db/rows";
 import { anzeigenamen, anzeigenameExtern } from "@/lib/mitglieder/anzeigename";
 import {
-  feiertageNiedersachsen, plusTage, regelnMitVersatz, rhythmusTreffer, type RhythmusRegel,
+  feiertageNiedersachsen, plusTage, regelnMitVersatz, rhythmusTreffer, vorjahrZuordnen, type RhythmusRegel, type VorjahrTermin,
 } from "@/lib/dienstplan/kalender";
 import {
   berechneHinweise, type DpHinweis, type DpTermin, type DpTerminThema, type DpVerantwortlicher,
@@ -136,7 +136,11 @@ export async function ladePlan(tx: ScopedTx, plan: DpPlan, organisationId: numbe
   const feiertage = feiertageNiedersachsen(plan.jahr);
   const termine: DpTermin[] = roh.map((t) => ({ ...t, feiertag: feiertage.get(t.datum) ?? null, themen: thProTermin.get(t.id) ?? [] }));
   const hinweise: DpHinweis[] = berechneHinweise(termine, pflicht);
-  return { plan, kategorien, termine, hinweise };
+  // Vorjahresanzeige (Spec 7.2): nur Titel, über vorjahr_themen() (Migration 0020)
+  const vj = [...await tx.execute<VorjahrTermin>(sql`
+    select datum::text as datum, kuerzel, ausgefallen, titel from dienstplan.vorjahr_themen(${plan.jahr}::integer)`)];
+  const vorjahr = { jahr: plan.jahr - 1, termine: vorjahrZuordnen(termine, vj) };
+  return { plan, kategorien, termine, hinweise, vorjahr };
 }
 
 // ── Generator (Spec 5.3) ─────────────────────────────────────────────────────

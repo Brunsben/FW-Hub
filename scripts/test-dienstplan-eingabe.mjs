@@ -3,8 +3,9 @@
 // Aufruf: node scripts/test-dienstplan-eingabe.mjs
 import {
   pruefeBereich, pruefeBlock, pruefeExternePerson, pruefeKategorie, pruefePlanNeu, pruefeRegel, pruefeRegelVollstaendig, pruefePlanStatus, pruefeTermin, pruefeTerminThema,
-  pruefeTerminThemaAendern, pruefeThema, pruefeVerantwortlicher,
+  pruefeTerminThemaAendern, pruefeTerminZustand, pruefeThema, pruefeVerantwortlicher,
 } from "../src/lib/dienstplan/eingabe.ts";
+import { ersetzeId, unterschiede, zustandVon } from "../src/lib/dienstplan/rueckgaengig.ts";
 import { berechneHinweise } from "../src/lib/dienstplan/hinweise.ts";
 
 let fail = 0, ok = 0;
@@ -79,6 +80,37 @@ check("Vollständig: bis vor ab", pruefeRegelVollstaendig({ typ: "wochen_zyklus"
 check("Vollständig: gültige Monats-Regel", pruefeRegelVollstaendig({ typ: "monats_wochentag", nterWochentag: -1, monate: [12], kategorieKuerzel: "K" }) === null);
 gut("Bereich neu", pruefeBereich({ name: "Technische Hilfe" }, "neu"), { name: "Technische Hilfe" });
 schlecht("Bereich ändern ohne Felder", pruefeBereich({}, "aendern"));
+
+// Termin-Zustand (Rückgängig/Wiederholen)
+const Z = { datum: "2027-01-05", kategorieId: 1, themen: [] };
+gut("Zustand minimal: fehlende Felder → null/false", pruefeTerminZustand(Z),
+  { datum: "2027-01-05", uhrzeit: null, dauerMinuten: null, kategorieId: 1, ausgefallen: false, ort: null, bemerkung: null, notizen: null, themen: [] });
+check("Zustand mit Thema, Freitext, Block und drei Arten Verantwortlicher", pruefeTerminZustand({ ...Z, uhrzeit: "19:30", themen: [
+  { themaId: 3, ausBlockId: 2, verantwortliche: [{ kameradId: 5 }, { externePersonId: 1 }, { platzhalter: "offen" }] },
+  { titelFreitext: " Grillen ", verantwortliche: [] }] }).ok);
+schlecht("Zustand: Thema mit themaId und Freitext", pruefeTerminZustand({ ...Z, themen: [{ themaId: 1, titelFreitext: "x", verantwortliche: [] }] }), "genau eins");
+schlecht("Zustand: Verantwortlicher mit zwei Bezügen", pruefeTerminZustand({ ...Z, themen: [{ themaId: 1, verantwortliche: [{ kameradId: 1, externePersonId: 2 }] }] }), "genau eins");
+schlecht("Zustand: unbekannter Platzhalter", pruefeTerminZustand({ ...Z, themen: [{ themaId: 1, verantwortliche: [{ platzhalter: "alle" }] }] }), "platzhalter");
+schlecht("Zustand: themen fehlt", pruefeTerminZustand({ datum: "2027-01-05", kategorieId: 1 }), "themen");
+schlecht("Zustand: ungültiges Datum", pruefeTerminZustand({ ...Z, datum: "2027-02-30" }), "datum");
+schlecht("Zustand: zu viele Themen", pruefeTerminZustand({ ...Z, themen: Array.from({ length: 31 }, () => ({ themaId: 1, verantwortliche: [] })) }), "30");
+
+const Q = (id, stempel, themen = [], extra = {}) => ({ id, datum: "2027-01-05", uhrzeit: "19:30", dauerMinuten: null, kategorieId: 1, ausgefallen: false,
+  ort: null, bemerkung: null, notizen: null, aktualisiertAm: stempel, quelle: "rhythmus", themen, ...extra });
+const P = (titel, themaId, verantwortliche = [], freitext = false) => ({ id: 99, position: 1, themaId, titel, freitext, ausBlockId: null, verantwortliche });
+const zv = zustandVon(Q(1, "a", [P("Knoten", 7, [{ id: 1, kameradId: 5, externePersonId: null, platzhalter: null, name: "x" }]), P("Grillen", null, [], true)]));
+check("zustandVon: Katalogthema mit themaId, Freitext mit Titel, Verantwortliche ohne Namen und ids",
+  JSON.stringify(zv.themen) === JSON.stringify([
+    { themaId: 7, titelFreitext: null, ausBlockId: null, verantwortliche: [{ kameradId: 5, externePersonId: null, platzhalter: null }] },
+    { themaId: null, titelFreitext: "Grillen", ausBlockId: null, verantwortliche: [] }]));
+check("zustandVon besteht die Prüfung der Zustand-Route", pruefeTerminZustand(zv).ok);
+const u = unterschiede([Q(1, "a"), Q(2, "b"), Q(3, "c", [], { quelle: "manuell" })], [Q(1, "a"), Q(2, "b2", [P("Funk", 8)]), Q(4, "d", [], { quelle: "manuell" })]);
+check("unterschiede: geändert, angelegt, gelöscht; unverändert nicht",
+  u.length === 3 && u.find((a) => a.terminId === 2)?.vorher.themen.length === 0 && u.find((a) => a.terminId === 2)?.nachher.themen.length === 1
+  && u.find((a) => a.terminId === 2)?.stempel === "b2" && u.find((a) => a.terminId === 4)?.vorher === null && u.find((a) => a.terminId === 3)?.nachher === null
+  && !u.some((a) => a.terminId === 1));
+const e = ersetzeId([{ text: "x", aenderungen: [{ terminId: 3, vorher: null, nachher: null, stempel: null }] }, { text: "y", aenderungen: [{ terminId: 5, vorher: null, nachher: null, stempel: null }] }], 3, 30);
+check("ersetzeId: alte id in allen Einträgen ersetzt", e[0].aenderungen[0].terminId === 30 && e[1].aenderungen[0].terminId === 5);
 
 // Hinweise
 const T = (id, datum, kuerzel, themen = [], extra = {}) => ({ id, datum, kuerzel, ausgefallen: false, feiertag: null, themen, ...extra });

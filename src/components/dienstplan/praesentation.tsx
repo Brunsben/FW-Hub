@@ -4,20 +4,25 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { cn } from "@/lib/utils";
 import type { DpHinweis, DpTermin } from "@/lib/dienstplan/hinweise";
 import type { DpKategorie, DpPlan } from "@/lib/dienstplan/plan";
-import { ansichtAus, geaenderteTermine, halbjahrVon, monateDerAnsicht, type Ansicht, type Stand } from "@/lib/dienstplan/praesentation";
+import type { VorjahrTermin } from "@/lib/dienstplan/kalender";
+import { ansichtAus, geaenderteTermine, halbjahrVon, monateDerAnsicht, vorjahrText, type Ansicht, type Stand } from "@/lib/dienstplan/praesentation";
 import { datumKurz, klassenFuer, MONATE } from "@/components/dienstplan/farben";
 
 // Präsentationsansicht für den Fernseher (Spec 7.3). Nur Anzeige, keine
 // Bedienelemente. Optimiert für 1920×1080 (skaliert bis 3840×2160).
 // - Halbjahr als Standard (6 Monatsspalten); ?ansicht=h1|h2|jahr, dazu die
 //   Tasten 1, 2 und J, falls eine Tastatur angeschlossen ist.
+// - Vorjahresanzeige (Spec 7.2, Standard aus): ?vorjahr=1 oder Taste V.
 // - Polling alle 2 Sekunden mit If-None-Match; bei gleichem Stand 304 ohne Inhalt.
 // - Geänderte Karten 3 Sekunden hervorgehoben, Fokus-Termin dauerhaft; liegt ein
 //   neuer Fokus im anderen Halbjahr, wechselt die Ansicht dorthin.
 // - Zugang: Anzeige-Token im Fragment (#t=…, Header X-Dienstplan-Anzeige) oder
 //   die eigene Anmeldung (Planer sehen Entwürfe, Mitglieder nur Freigegebenes).
 
-interface PlanDaten { plan: DpPlan; kategorien: DpKategorie[]; termine: DpTermin[]; hinweise: DpHinweis[]; gueltigBis?: string }
+interface PlanDaten {
+  plan: DpPlan; kategorien: DpKategorie[]; termine: DpTermin[]; hinweise: DpHinweis[]; gueltigBis?: string;
+  vorjahr?: { jahr: number; termine: Record<number, VorjahrTermin> };
+}
 
 const POLL_MS = 2000;
 const HERVORHEBEN_MS = 3000;
@@ -28,7 +33,8 @@ type Zustand =
   | { art: "gesperrt"; text: string }
   | { art: "ok"; daten: PlanDaten };
 
-export function Praesentation({ jahr, ansichtParam }: { jahr: number; ansichtParam: string | null }) {
+export function Praesentation({ jahr, ansichtParam, vorjahrParam }: { jahr: number; ansichtParam: string | null; vorjahrParam: boolean }) {
+  const [vorjahrAn, setVorjahrAn] = useState(vorjahrParam);
   const [zustand, setZustand] = useState<Zustand>({ art: "laden" });
   const [ansicht, setAnsicht] = useState<Ansicht>(() => ansichtAus(ansichtParam, jahr, new Date().toISOString().slice(0, 10)));
   const [neu, setNeu] = useState<Set<number>>(new Set());
@@ -98,6 +104,15 @@ export function Praesentation({ jahr, ansichtParam }: { jahr: number; ansichtPar
   // Tasten 1, 2, J (ohne sichtbare Bedienelemente).
   useEffect(() => {
     const taste = (e: KeyboardEvent) => {
+      if (e.key === "v" || e.key === "V") {
+        setVorjahrAn((v) => {
+          const url = new URL(window.location.href);
+          if (v) url.searchParams.delete("vorjahr"); else url.searchParams.set("vorjahr", "1");
+          window.history.replaceState(null, "", url);
+          return !v;
+        });
+        return;
+      }
       const a = ({ "1": "h1", "2": "h2", j: "jahr", J: "jahr" } as Record<string, Ansicht>)[e.key];
       if (!a) return;
       setAnsicht(a);
@@ -111,7 +126,7 @@ export function Praesentation({ jahr, ansichtParam }: { jahr: number; ansichtPar
 
   if (zustand.art === "laden") return <Vollbild>Plan {jahr} wird geladen …</Vollbild>;
   if (zustand.art === "gesperrt") return <Vollbild><span role="alert">{zustand.text}</span></Vollbild>;
-  return <Tafel daten={zustand.daten} ansicht={ansicht} neu={neu} verbindung={verbindung} />;
+  return <Tafel daten={zustand.daten} ansicht={ansicht} neu={neu} verbindung={verbindung} vorjahrAn={vorjahrAn} />;
 }
 
 function Vollbild({ children }: { children: React.ReactNode }) {
@@ -122,7 +137,7 @@ function Vollbild({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Tafel({ daten, ansicht, neu, verbindung }: { daten: PlanDaten; ansicht: Ansicht; neu: Set<number>; verbindung: { ok: boolean; zeit: string } }) {
+function Tafel({ daten, ansicht, neu, verbindung, vorjahrAn }: { daten: PlanDaten; ansicht: Ansicht; neu: Set<number>; verbindung: { ok: boolean; zeit: string }; vorjahrAn: boolean }) {
   const { plan, kategorien, termine, hinweise } = daten;
   const farben = new Map(kategorien.map((k) => [k.id, k.farbe]));
   const monate = monateDerAnsicht(ansicht);
@@ -144,7 +159,7 @@ function Tafel({ daten, ansicht, neu, verbindung }: { daten: PlanDaten; ansicht:
       el.style.fontSize = `${vw}vw`;
     }
     if (plan.fokusTerminId) document.getElementById(`p-termin-${plan.fokusTerminId}`)?.scrollIntoView({ block: "nearest" });
-  }, [daten, ansicht, schrift, plan.fokusTerminId]);
+  }, [daten, ansicht, schrift, plan.fokusTerminId, vorjahrAn]);
 
   const titel = ansicht === "jahr" ? `Dienstplan ${plan.jahr}` : `Dienstplan ${plan.jahr} · ${ansicht === "h1" ? "1." : "2."} Halbjahr`;
   return (
@@ -174,7 +189,8 @@ function Tafel({ daten, ansicht, neu, verbindung }: { daten: PlanDaten; ansicht:
             <h2 className="border-b border-border pb-[0.1em] text-[1.15em] font-semibold">{MONATE[m]}</h2>
             <div data-spalte className="flex min-h-0 flex-1 flex-col gap-[0.4em] overflow-hidden">
               {termine.filter((t) => Number(t.datum.slice(5, 7)) - 1 === m).map((t) => (
-                <Karte key={t.id} t={t} farbe={farben.get(t.kategorieId)} fokus={t.id === plan.fokusTerminId} neu={neu.has(t.id)} />
+                <Karte key={t.id} t={t} farbe={farben.get(t.kategorieId)} fokus={t.id === plan.fokusTerminId} neu={neu.has(t.id)}
+                  vorjahr={vorjahrAn && daten.vorjahr ? vorjahrText(daten.vorjahr.termine[t.id], daten.vorjahr.jahr) : null} />
               ))}
             </div>
           </section>
@@ -184,7 +200,7 @@ function Tafel({ daten, ansicht, neu, verbindung }: { daten: PlanDaten; ansicht:
   );
 }
 
-function Karte({ t, farbe, fokus, neu }: { t: DpTermin; farbe: string | undefined; fokus: boolean; neu: boolean }) {
+function Karte({ t, farbe, fokus, neu, vorjahr }: { t: DpTermin; farbe: string | undefined; fokus: boolean; neu: boolean; vorjahr: string | null }) {
   const k = klassenFuer(farbe, t.ausgefallen);
   return (
     <article
@@ -222,6 +238,7 @@ function Karte({ t, farbe, fokus, neu }: { t: DpTermin; farbe: string | undefine
           {t.bemerkung && <p className="text-[0.8em] text-muted-foreground">{t.bemerkung}</p>}
         </>
       )}
+      {vorjahr && <p data-vorjahr className="text-[0.75em] italic leading-snug text-muted-foreground">{vorjahr}</p>}
     </article>
   );
 }
