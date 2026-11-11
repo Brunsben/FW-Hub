@@ -40,6 +40,11 @@ const paare = [
   ["Erfolgstext auf Karte", "success", "card"],
   ["Warnung-Text auf getönter Fläche (Text=foreground)", "foreground", { mix: ["warning", "background", 0.1] }],
   ["Erfolg-Kasten (Text=foreground)", "foreground", { mix: ["success", "background", 0.1] }],
+  // Dienstplan: Karten mit getöntem Hintergrund (12 %) über der Karte, Text = foreground
+  ...["blue", "teal", "orange", "indigo", "pink", "purple", "red", "yellow", "green", "gray"].map((f) =>
+    [`Dienstplan-Karte ${f} (Text=foreground, 12 %)`, "foreground", { mix: [`dp-${f}`, "card", 0.12] }]),
+  ...["blue", "teal", "orange", "indigo", "pink", "purple", "red", "yellow", "green", "gray"].map((f) =>
+    [`Dienstplan-Karte ${f} (gedämpfter Text, 12 %)`, "muted-foreground", { mix: [`dp-${f}`, "card", 0.12] }]),
 ];
 
 const UI = [

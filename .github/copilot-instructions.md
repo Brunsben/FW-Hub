@@ -483,6 +483,7 @@ Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Ze
 | test-dienstplan-rls.mjs | RLS aller Tabellen in dienstplan je Rolle und Organisation, Trigger (Version, Freigabeschutz), kameraden_namen(), dienst_rolle in core | nein |
 | test-dienstplan-auth.mjs | Alle Routen unter /api/dienstplan ohne Login → 401 (findet die Routen selbst; Token-Routen: 401/403), Claim dienst_rolle, Rollenvergabe | ja |
 | test-dienstplan-kalender.mjs, test-dienstplan-eingabe.mjs | Rhythmus, Feiertage Niedersachsen, Akzeptanztest 2026 (Regeln aus der DB, nur lesend); Eingabeprüfung und Hinweise der API | nein / nein |
+| test-dienstplan-verwaltung.mjs | Neues Jahr mit Vorschau und Zwischendienst-Versatz (Regel wird aufgeteilt, danach wiederhergestellt), Kategorien, Rhythmusregeln, Bereiche je Rolle, Dienstplan-Seiten je Rolle | ja |
 | test-dienstplan-api.mjs | Dienstplan-API: Pläne, Generator (idempotent), Termine, Themen am Termin, Verantwortliche, Kataloge, Rechte je Rolle, ETag/304, Hinweise | ja |
 | test-dienstplan-import-lib.mjs, test-dienstplan-import.mjs | Excel-Import Dienstplan: Analyse-Regeln (ohne DB) bzw. Ende zu Ende als fw_app mit erzeugter Excel (Jahre 2091/2092), Localhost-Sperre von `--testdaten` | nein / nein |
 | test-setup.mjs | Erst-Einrichtung /setup in einer Wegwerf-Kopie von fwhub_dev mit leerem core.benutzer (eigener Dev-Server auf 3101; den Dev-Server auf 3100 vorher beenden) | eigener |
@@ -519,6 +520,9 @@ ein globaler Admin, und der Selbstschutz greift davor (test-sitzungen).
   bg-destructive, bg-success, border-warning usw.). Keine festen Farbklassen
   (bg-white, text-gray-*, bg-green-600 …) und keine Hex-Werte in Komponenten.
   Einzige Ausnahme: die QR-Code-Ruhezone (bg-white, sonst nicht scanbar)
+- Dienstplan-Kategoriefarben: Tokens `--dp-<farbe>` (Spec 7.1), nur als Akzentstreifen
+  und 12-%-Tönung; Klassen nur über die Tabelle in components/dienstplan/farben.ts
+  (Tailwind erzeugt nur wörtlich vorkommende Klassen). Text darauf bleibt foreground
 - Hell- und Dunkelwerte stehen in `:root` und `.dark`. Neue Tokens in beiden
   Blöcken UND in `@theme inline` anlegen, Textkontrast mindestens 4,5:1
   (WCAG AA) in beiden Themes prüfen

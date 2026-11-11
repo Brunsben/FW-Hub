@@ -13,7 +13,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | 2 | Schema `dienstplan`, Migration, RLS, Claim `dienst_rolle`, Seeds | fertig (Migrationen 0017, 0018 lokal angewendet, nicht auf dem Server) |
 | 3 | API inkl. Generator und Akzeptanztest 2026 | fertig (Verwaltung Kategorien/Regeln folgt mit Phase 5, Versionen mit Phase 9) |
 | 4 | Importskript Excel (Themenkatalog, Blockvorschläge, Verantwortliche, Pläne) | fertig (lokal mit Testdaten importiert; echter Import wartet auf Klärung, siehe Phase 4) |
-| 5 | Eingabemaske (Klickbedienung), Verwaltung, Feiertagshinweise | offen |
+| 5 | Eingabemaske (Klickbedienung), Verwaltung, Feiertagshinweise | fertig (Monatsraster folgt mit Phase 7) |
 | 6 | Präsentationsansicht mit Live-Aktualisierung und Anzeige-Token | offen |
 | 7 | Drag and Drop, Rückgängig, Vorjahresanzeige | offen |
 | 8 | Themenpool, Pflichtthemen-Hinweis, Ausgleichsanzeige, Mitgliederansicht | offen |
@@ -111,7 +111,8 @@ Vor dem Ausrollen
    `node scripts/test-dienstplan-rls.mjs`, `node scripts/test-anzeigename.mjs`,
    `node scripts/test-dienstplan-import-lib.mjs`, `node scripts/test-dienstplan-import.mjs`,
    `node scripts/test-dienstplan-kalender.mjs`, `node scripts/test-dienstplan-eingabe.mjs`,
-   mit Dev-Server `node scripts/test-dienstplan-api.mjs`,
+   mit Dev-Server `node scripts/test-dienstplan-api.mjs`, `node scripts/test-dienstplan-verwaltung.mjs`,
+   `node scripts/kontrast.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-auth.mjs`,
@@ -676,9 +677,97 @@ Geprüft (11.11.2026, Mac)
 
 ## Phase 5 – Eingabemaske, Verwaltung, Feiertage
 
+### Lokal starten (Mac, mit den importierten Plänen 2023–2026)
+1. Postgres läuft (`brew services start postgresql@17`), die Testdaten aus Phase 4
+   sind in `fwhub_dev` (Pläne 2023–2026, Testkameraden `TEST-DP-…`).
+2. `npx next dev --webpack -p 3100`, dann http://localhost:3100/login, Anmeldung
+   als `devadmin` (PIN in `.env.local`, `DEV_ADMIN_PIN`).
+3. Einmalig die Dienstplan-Rolle geben: http://localhost:3100/mitglieder/11 →
+   Rollen → Dienstplan „Admin“ → Speichern. Danach ab- und wieder anmelden (die
+   Rollenänderung beendet die Sitzung, der neue Login trägt den Claim).
+4. Planung: http://localhost:3100/dienstplan/planung (Liste, „Neues Jahr
+   anlegen“), Eingabemaske z. B. http://localhost:3100/dienstplan/2026/bearbeiten,
+   Verwaltung http://localhost:3100/dienstplan/verwaltung. Das Modul steht bis
+   zur Freischaltung nicht in der Kopfzeile; die Adressen direkt aufrufen.
+5. Dev-Server beenden: `Ctrl+C`, sonst `lsof -ti tcp:3100 | xargs kill`.
+
 ### Entscheidungen
+- **Neues Jahr (Priorität Ben):** Dialog „Neues Jahr anlegen“ in
+  `/dienstplan/planung` (nur Dienstplan-Admin). Zwei Karten nebeneinander: „Wie
+  bisher“ und „Zwischendienst um 2 Wochen versetzen“, jeweils mit den ersten 8
+  Wochen des neuen Jahres und den letzten 6 Dienstabend-/Zwischendienst-Terminen
+  des Vorjahresplans (`GET /api/dienstplan/plaene/vorschau`). Anlegen schickt
+  `POST /plaene {jahr, generieren, zwischendienstVersatz}`; Versatz und Generator
+  laufen in einer Transaktion.
+- **Versatz technisch (Spec 5.2a):** `versetzeMuster` verschiebt jedes Z im
+  Muster um n Wochen (zyklisch); ist die Zielwoche belegt, ist der Versatz nicht
+  möglich (409 bzw. Hinweis in der Vorschau). Die betroffene Regel endet am 31.12.
+  des Vorjahres (`gueltig_bis`), eine Kopie mit versetztem Muster gilt ab 01.01.
+  Beginnt die Regel schon am 01.01., wird nur ihr Muster geändert. Anker und
+  D-Termine bleiben gleich. Für 2027 mit den Seeds: ohne Versatz Z am 26.01., mit
+  Versatz am 12.01.
+- **Verwaltungs-API:** `POST kategorien`, `PATCH kategorien/[id]` (Admin; Farbe nur
+  als Token, Kürzel F gesperrt), `GET regeln` (Planer), `POST regeln`,
+  `PATCH regeln/[id]` (Admin; Änderung wird mit dem gespeicherten Stand
+  zusammengeführt und je Typ auf Vollständigkeit geprüft),
+  `GET regeln/[id]/vorschau?anzahl=12` (nächste Treffer ab heute),
+  `GET/POST bereiche`, `PATCH bereiche/[id]` (Planer). Regeln und Kategorien
+  werden nicht gelöscht, sondern deaktiviert bzw. über gültig bis beendet.
+- **Oberfläche** (alle unter `src/app/(portal)/dienstplan/`, Seitenschutz
+  `requireDienstplanSeite`: ohne Login → /login, unter Planer → Startseite):
+  - `/dienstplan/planung`: Pläne mit Status und Terminzahl, Links.
+  - `/dienstplan/[jahr]/bearbeiten`: Eingabemaske. Termine nach Monaten als
+    Karten (getönter Hintergrund 12 %, Akzentstreifen links, Kürzel immer
+    sichtbar), Feiertag, „entfällt: Grund“, Ort. Klickbedienung: Termin
+    anklicken → rechts Thema/Block „+“ oder Freitext; Thema anklicken → Personen
+    „+“. Themen ↑/↓, in anderen Termin verschieben, entfernen; Verantwortliche ×.
+    Termin bearbeiten/anlegen im Seitenpanel (Datum, Uhrzeit, Kategorie, Dauer,
+    Ort, Bemerkung, Notizen, entfällt). Absagen/wieder aufnehmen, manuelle
+    Termine löschen. Hinweise oben (Pflichtthemen immer sichtbar, übrige
+    anklickbar → springt zum Termin). Seitenleiste: Themen mit Suche, „nur im
+    Jahr noch nicht verplant“, „n× im Plan“, „zuletzt am“; neues Thema direkt
+    anlegen; Blöcke; Personen mit Anzahl im Plan; externe Person anlegen.
+    Kopf: „Rhythmus ergänzen“ (Entwurf), „+ Termin“, Freigeben/Zurück auf
+    Entwurf (Admin).
+  - `/dienstplan/verwaltung`: Kategorien, Rhythmusregeln (mit „Nächste 12“),
+    Themenkatalog mit Bereichen, Blöcke (Reihenfolge per ↑/↓), externe
+    Personen. Kategorien/Regeln für Planer nur lesend.
+- **Kategoriefarben:** Tokens `--dp-<farbe>` hell/dunkel nach Spec 7.1 in
+  `globals.css` (`:root`, `.dark`, `@theme inline` als `--color-dp-*`), Klassen
+  über die feste Tabelle `components/dienstplan/farben.ts`. Text bleibt
+  `foreground`/`muted-foreground`; `scripts/kontrast.mjs` prüft alle zehn Farben
+  als 12-%-Tönung in beiden Themes (≥ 5,1:1).
+- Feiertagshinweise: im Plan je Termin (`feiertag`) und als Hinweis; die Vorschau
+  „Neues Jahr“ zeigt Feiertage ebenfalls.
+
+Geprüft (11.11.2026, Mac)
+- `scripts/test-dienstplan-verwaltung.mjs` 42/0 (Dev-Server): Vorschau = Generator
+  mit/ohne Versatz, Plan mit Versatz (Regel aufgeteilt, Z versetzt, D gleich,
+  Vorjahr unverändert), Kategorien/Regeln/Bereiche je Rolle, Seiten je Rolle.
+  Stellt die Rhythmusregeln danach wieder her (geprüft).
+- `test-dienstplan-kalender` 59/0 (Versatz), `test-dienstplan-eingabe` 57/0,
+  `test-dienstplan-auth` 82/0 (neue Routen automatisch), `test-dienstplan-api` 69/0.
+- Oberfläche im echten Chrome (puppeteer-core, nur im Scratchpad, nicht im
+  Repo): Neues Jahr mit Versatz anlegen, Thema und Person per Klick, Termin
+  über das Formular speichern, Verwaltung mit Regel-Vorschau, Mobil (390 px)
+  ohne horizontales Scrollen, hell und dunkel angesehen. Keine Fehler in der
+  Konsole außer `favicon.ico` 404 (App-weit, nicht Dienstplan).
+- tsc, eslint (0 Fehler, 7 alte Warnungen), `npm run build`, `kontrast.mjs`
+  grün; test-dienstplan-rls, test-haertung, test-mitglieder, test-sitzungen,
+  test-ui-a, test-food, test-psa, Import-Tests grün.
+
 ### Abweichungen von der Spec
+- Umschalter Liste/Monatsraster (Spec 7.2): nur die Liste. Das Monatsraster kommt
+  mit Drag and Drop in Phase 7 (Terminkarte auf anderes Datum ziehen).
+- Pool und Ausgleich in der Seitenleiste kommen mit Phase 8.
+- Schrift Inter (Spec 7.1): nicht eingeführt; das Modul nutzt die bestehende
+  FW-Hub-Schrift (Spec 7.1: "Nutzt das bestehende FW-Hub-Design"). Für PDF/Bild
+  in Phase 11 neu bewerten.
+- Planungsübersicht unter `/dienstplan/planung`, weil `/dienstplan` nach Spec
+  7.4 die Mitgliederansicht wird (Phase 8).
+
 ### Offene Fragen
+- keine
 
 ## Phase 6 – Präsentationsansicht
 

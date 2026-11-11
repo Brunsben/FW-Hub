@@ -79,11 +79,17 @@ function setze<T extends object>(ziel: T, b: Body, k: string, f: (v: unknown) =>
 
 // ── Pläne ────────────────────────────────────────────────────────────────────
 
-export function pruefePlanNeu(b: Body): Pruefung<{ jahr: number; generieren: boolean }> {
+export function pruefePlanNeu(b: Body): Pruefung<{ jahr: number; generieren: boolean; zwischendienstVersatz: number }> {
   return lauf(() => {
     const j = b.jahr;
     if (typeof j !== "number" || !Number.isInteger(j) || j < 2000 || j > 2100) raus("jahr muss zwischen 2000 und 2100 liegen");
-    return { jahr: j as number, generieren: hat(b, "generieren") ? bool(b.generieren, "generieren") : true };
+    const v = hat(b, "zwischendienstVersatz") ? b.zwischendienstVersatz : 0;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 3) raus("zwischendienstVersatz muss 0 bis 3 Wochen sein");
+    return {
+      jahr: j as number,
+      generieren: hat(b, "generieren") ? bool(b.generieren, "generieren") : true,
+      zwischendienstVersatz: v as number,
+    };
   });
 }
 
@@ -247,6 +253,155 @@ export function pruefeExternePerson(b: Body, modus: Modus): Pruefung<ExternePers
     });
     setze(t, b, "aktiv", (v) => bool(v, "aktiv"));
     if (modus === "neu" && !t.name && !t.organisation) raus("name oder organisation angeben");
+    if (modus === "aendern" && !Object.keys(t).length) raus("Keine änderbaren Felder im Body");
+    return t;
+  });
+}
+
+// ── Verwaltung (Kategorien, Rhythmusregeln, Bereiche) ───────────────────────
+
+export const FARBEN = ["blue", "teal", "orange", "indigo", "pink", "purple", "red", "yellow", "green", "gray"] as const;
+
+export interface KategorieEingabe {
+  kuerzel?: string;
+  name?: string;
+  farbe?: string;
+  standardUhrzeit?: string | null;
+  standardDauerMinuten?: number;
+  sortierung?: number;
+  aktiv?: boolean;
+}
+
+export function pruefeKategorie(b: Body, modus: Modus): Pruefung<KategorieEingabe> {
+  return lauf(() => {
+    const t: KategorieEingabe = {};
+    const kuerzel = (v: unknown) => {
+      const k = pflichtText(v, "kuerzel", 3).toUpperCase();
+      if (!/^[A-ZÄÖÜ]{1,3}$/.test(k)) raus("kuerzel: 1 bis 3 Buchstaben");
+      if (k === "F") raus("F ist kein Kürzel: ausgefallene Termine werden als ausgefallen markiert");
+      return k;
+    };
+    const farbe = (v: unknown) => {
+      if (typeof v !== "string" || !(FARBEN as readonly string[]).includes(v)) raus(`farbe muss eine von ${FARBEN.join(", ")} sein`);
+      return v as string;
+    };
+    if (modus === "neu") {
+      t.kuerzel = kuerzel(b.kuerzel);
+      t.name = pflichtText(b.name, "name", 60);
+      t.farbe = farbe(b.farbe);
+    } else {
+      setze(t, b, "kuerzel", kuerzel);
+      setze(t, b, "name", (v) => pflichtText(v, "name", 60));
+      setze(t, b, "farbe", farbe);
+    }
+    setze(t, b, "standardUhrzeit", uhrzeit);
+    setze(t, b, "standardDauerMinuten", (v) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 1440) raus("standardDauerMinuten muss zwischen 1 und 1440 liegen");
+      return v;
+    });
+    setze(t, b, "sortierung", (v) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 999) raus("sortierung muss zwischen 0 und 999 liegen");
+      return v;
+    });
+    setze(t, b, "aktiv", (v) => bool(v, "aktiv"));
+    if (modus === "aendern" && !Object.keys(t).length) raus("Keine änderbaren Felder im Body");
+    return t;
+  });
+}
+
+export interface RegelEingabe {
+  name?: string;
+  typ?: "wochen_zyklus" | "monats_wochentag";
+  wochentag?: number;
+  uhrzeit?: string;
+  ankerDatum?: string | null;
+  muster?: string[] | null;
+  nterWochentag?: number | null;
+  monate?: number[] | null;
+  kategorieKuerzel?: string | null;
+  gueltigAb?: string;
+  gueltigBis?: string | null;
+  aktiv?: boolean;
+}
+
+/** Felder einzeln prüfen; die Vollständigkeit je Typ prüft pruefeRegelVollstaendig nach dem Zusammenführen. */
+export function pruefeRegel(b: Body, modus: Modus): Pruefung<RegelEingabe> {
+  return lauf(() => {
+    const t: RegelEingabe = {};
+    const typ = (v: unknown) => {
+      if (v !== "wochen_zyklus" && v !== "monats_wochentag") raus("typ muss wochen_zyklus oder monats_wochentag sein");
+      return v;
+    };
+    const ganz = (feld: string, min: number, max: number) => (v: unknown) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < min || v > max) raus(`${feld} muss zwischen ${min} und ${max} liegen`);
+      return v;
+    };
+    if (modus === "neu") {
+      t.name = pflichtText(b.name, "name", 100);
+      t.typ = typ(b.typ) as RegelEingabe["typ"];
+      t.wochentag = ganz("wochentag", 1, 7)(b.wochentag) as number;
+      t.uhrzeit = uhrzeit(b.uhrzeit) ?? raus("uhrzeit fehlt");
+      t.gueltigAb = datum(b.gueltigAb, "gueltigAb");
+    } else {
+      setze(t, b, "name", (v) => pflichtText(v, "name", 100));
+      setze(t, b, "typ", typ);
+      setze(t, b, "wochentag", ganz("wochentag", 1, 7));
+      setze(t, b, "uhrzeit", (v) => uhrzeit(v) ?? raus("uhrzeit darf nicht leer sein"));
+      setze(t, b, "gueltigAb", (v) => datum(v, "gueltigAb"));
+    }
+    setze(t, b, "ankerDatum", (v) => (v === null ? null : datum(v, "ankerDatum")));
+    setze(t, b, "muster", (v) => {
+      if (v === null) return null;
+      if (!Array.isArray(v) || v.length < 1 || v.length > 26) raus("muster: 1 bis 26 Wochen");
+      return (v as unknown[]).map((x) => {
+        if (typeof x !== "string" || !/^[A-Za-zÄÖÜäöü]{0,3}$/.test(x.trim())) raus("muster: je Woche ein Kürzel oder leer");
+        return (x as string).trim().toUpperCase();
+      });
+    });
+    setze(t, b, "nterWochentag", (v) => {
+      if (v === null) return null;
+      if (![1, 2, 3, 4, 5, -1].includes(v as number)) raus("nterWochentag muss 1 bis 5 oder -1 (letzter) sein");
+      return v;
+    });
+    setze(t, b, "monate", (v) => {
+      if (v === null) return null;
+      if (!Array.isArray(v) || !v.length) raus("monate: mindestens ein Monat");
+      const m = (v as unknown[]).map((x) => ganz("monate[]", 1, 12)(x) as number);
+      if (new Set(m).size !== m.length) raus("monate enthält einen Monat doppelt");
+      return m.sort((x, y) => x - y);
+    });
+    setze(t, b, "kategorieKuerzel", (v) => (v === null ? null : pflichtText(v, "kategorieKuerzel", 3).toUpperCase()));
+    setze(t, b, "gueltigBis", (v) => (v === null ? null : datum(v, "gueltigBis")));
+    setze(t, b, "aktiv", (v) => bool(v, "aktiv"));
+    if (modus === "aendern" && !Object.keys(t).length) raus("Keine änderbaren Felder im Body");
+    return t;
+  });
+}
+
+/** Vollständigkeit einer Regel nach dem Zusammenführen mit dem gespeicherten Stand. */
+export function pruefeRegelVollstaendig(r: RegelEingabe): string | null {
+  if (r.gueltigBis && r.gueltigAb && r.gueltigBis < r.gueltigAb) return "gueltigBis liegt vor gueltigAb";
+  if (r.typ === "wochen_zyklus") {
+    if (!r.ankerDatum) return "wochen_zyklus braucht ankerDatum";
+    if (!r.muster?.length || !r.muster.some((m) => m)) return "wochen_zyklus braucht ein Muster mit mindestens einem Kürzel";
+  }
+  if (r.typ === "monats_wochentag") {
+    if (r.nterWochentag === null || r.nterWochentag === undefined) return "monats_wochentag braucht nterWochentag";
+    if (!r.monate?.length) return "monats_wochentag braucht monate";
+    if (!r.kategorieKuerzel) return "monats_wochentag braucht kategorieKuerzel";
+  }
+  return null;
+}
+
+export function pruefeBereich(b: Body, modus: Modus): Pruefung<{ name?: string; sortierung?: number }> {
+  return lauf(() => {
+    const t: { name?: string; sortierung?: number } = {};
+    if (modus === "neu") t.name = pflichtText(b.name, "name", 100);
+    else setze(t, b, "name", (v) => pflichtText(v, "name", 100));
+    setze(t, b, "sortierung", (v) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 999) raus("sortierung muss zwischen 0 und 999 liegen");
+      return v;
+    });
     if (modus === "aendern" && !Object.keys(t).length) raus("Keine änderbaren Felder im Body");
     return t;
   });

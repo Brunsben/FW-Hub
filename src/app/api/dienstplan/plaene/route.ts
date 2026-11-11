@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { expectRows } from "@/lib/db/rows";
 import { pruefePlanNeu } from "@/lib/dienstplan/eingabe";
 import { dienstplanRoute, DpFehler, leseBody } from "@/lib/dienstplan/route";
-import { findePlan, generiereTermine, type DpPlan } from "@/lib/dienstplan/plan";
+import { findePlan, generiereTermine, wendeVersatzAn, type DpPlan } from "@/lib/dienstplan/plan";
 
 // Pläne der eigenen Organisation. Mitglieder sehen nur freigegebene (RLS
 // plaene_lesen), Planer und Admin auch Entwürfe.
@@ -19,8 +19,10 @@ export async function GET() {
 }
 
 // Neuen Plan anlegen (nur Dienstplan-Admin, Policy plaene_anlegen). Body:
-// { jahr, generieren? = true }. Mit generieren legt der Generator gleich die
-// Rhythmus-Termine an (Spec 5.3). Ein Plan je Jahr: sonst 409.
+// { jahr, generieren? = true, zwischendienstVersatz? = 0 }. Mit generieren legt
+// der Generator gleich die Rhythmus-Termine an (Spec 5.3). zwischendienstVersatz
+// (Wochen) verschiebt den Zwischendienst ab dem 01.01. des Jahres (Spec 5.2a,
+// Regel wird aufgeteilt), alles in derselben Transaktion. Ein Plan je Jahr: 409.
 export async function POST(req: Request) {
   return dienstplanRoute("Admin", async ({ s, tx }) => {
     const e = pruefePlanNeu(await leseBody(req));
@@ -29,7 +31,10 @@ export async function POST(req: Request) {
     expectRows(await tx.execute(sql`
       insert into dienstplan.plaene (organisation_id, jahr) values (${s.organisationId}, ${e.daten.jahr}) returning id`), "Plan");
     const plan = (await findePlan(tx, s.organisationId, e.daten.jahr))!;
+    const versatz = e.daten.zwischendienstVersatz
+      ? await wendeVersatzAn(tx, s.organisationId, e.daten.jahr, "Z", e.daten.zwischendienstVersatz)
+      : null;
     const generiert = e.daten.generieren ? await generiereTermine(tx, plan, s.organisationId) : null;
-    return NextResponse.json({ plan: (await findePlan(tx, s.organisationId, e.daten.jahr))!, generiert }, { status: 201 });
+    return NextResponse.json({ plan: (await findePlan(tx, s.organisationId, e.daten.jahr))!, generiert, versatz }, { status: 201 });
   });
 }

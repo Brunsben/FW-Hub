@@ -2,7 +2,7 @@
 // hinweise.ts). Ohne Server und ohne Datenbank.
 // Aufruf: node scripts/test-dienstplan-eingabe.mjs
 import {
-  pruefeBlock, pruefeExternePerson, pruefePlanNeu, pruefePlanStatus, pruefeTermin, pruefeTerminThema,
+  pruefeBereich, pruefeBlock, pruefeExternePerson, pruefeKategorie, pruefePlanNeu, pruefeRegel, pruefeRegelVollstaendig, pruefePlanStatus, pruefeTermin, pruefeTerminThema,
   pruefeTerminThemaAendern, pruefeThema, pruefeVerantwortlicher,
 } from "../src/lib/dienstplan/eingabe.ts";
 import { berechneHinweise } from "../src/lib/dienstplan/hinweise.ts";
@@ -16,8 +16,10 @@ const gut = (name, r, soll) => check(name, r.ok && (soll === undefined || JSON.s
 const schlecht = (name, r, teil) => check(name, !r.ok && (!teil || r.fehler.includes(teil)), JSON.stringify(r));
 
 // Pläne
-gut("Plan neu, generieren Standard true", pruefePlanNeu({ jahr: 2027 }), { jahr: 2027, generieren: true });
-gut("Plan neu ohne Generator", pruefePlanNeu({ jahr: 2027, generieren: false }), { jahr: 2027, generieren: false });
+gut("Plan neu, generieren Standard true", pruefePlanNeu({ jahr: 2027 }), { jahr: 2027, generieren: true, zwischendienstVersatz: 0 });
+gut("Plan neu ohne Generator", pruefePlanNeu({ jahr: 2027, generieren: false }), { jahr: 2027, generieren: false, zwischendienstVersatz: 0 });
+gut("Plan neu mit Versatz 2", pruefePlanNeu({ jahr: 2027, zwischendienstVersatz: 2 }), { jahr: 2027, generieren: true, zwischendienstVersatz: 2 });
+schlecht("Plan neu: Versatz 4", pruefePlanNeu({ jahr: 2027, zwischendienstVersatz: 4 }), "zwischendienstVersatz");
 schlecht("Plan: Jahr als Text", pruefePlanNeu({ jahr: "2027" }));
 schlecht("Plan: Jahr außerhalb", pruefePlanNeu({ jahr: 2101 }));
 gut("Status freigegeben", pruefePlanStatus({ status: "freigegeben" }));
@@ -60,6 +62,23 @@ schlecht("Block mit doppeltem Thema", pruefeBlock({ name: "x", themaIds: [1, 1] 
 gut("Externe Person nur Organisation", pruefeExternePerson({ organisation: "DRK" }, "neu"), { organisation: "DRK" });
 schlecht("Externe Person ohne Name und Organisation", pruefeExternePerson({ funktion: "x" }, "neu"), "name oder organisation");
 schlecht("Externe Person: E-Mail ungültig", pruefeExternePerson({ name: "A", email: "kein-at" }, "neu"), "email");
+
+// Verwaltung
+gut("Kategorie neu", pruefeKategorie({ kuerzel: "ü", name: " Übung ", farbe: "green", standardUhrzeit: "18:00" }, "neu"), { kuerzel: "Ü", name: "Übung", farbe: "green", standardUhrzeit: "18:00" });
+schlecht("Kategorie: F ist kein Kürzel", pruefeKategorie({ kuerzel: "F", name: "Frei", farbe: "gray" }, "neu"), "ausgefallen");
+schlecht("Kategorie: Farbe ohne Token", pruefeKategorie({ kuerzel: "X", name: "x", farbe: "#ff0000" }, "neu"), "farbe");
+schlecht("Kategorie: Kürzel mit Ziffer", pruefeKategorie({ kuerzel: "D1", name: "x", farbe: "blue" }, "neu"), "kuerzel");
+gut("Regel neu (Zyklus)", pruefeRegel({ name: "DA", typ: "wochen_zyklus", wochentag: 2, uhrzeit: "19:30", gueltigAb: "2027-01-01", ankerDatum: "2026-04-28", muster: ["d", " ", "D", "z"] }, "neu"),
+  { name: "DA", typ: "wochen_zyklus", wochentag: 2, uhrzeit: "19:30", gueltigAb: "2027-01-01", ankerDatum: "2026-04-28", muster: ["D", "", "D", "Z"] });
+schlecht("Regel: Wochentag 8", pruefeRegel({ name: "x", typ: "wochen_zyklus", wochentag: 8, uhrzeit: "19:30", gueltigAb: "2027-01-01" }, "neu"), "wochentag");
+schlecht("Regel: n-ter 6", pruefeRegel({ nterWochentag: 6 }, "aendern"), "nterWochentag");
+gut("Regel: Monate sortiert", pruefeRegel({ monate: [11, 2, 8, 5] }, "aendern"), { monate: [2, 5, 8, 11] });
+check("Vollständig: Zyklus ohne Anker", pruefeRegelVollstaendig({ typ: "wochen_zyklus", muster: ["D"] }) === "wochen_zyklus braucht ankerDatum");
+check("Vollständig: Monats-Regel ohne Kürzel", pruefeRegelVollstaendig({ typ: "monats_wochentag", nterWochentag: 3, monate: [2] }) === "monats_wochentag braucht kategorieKuerzel");
+check("Vollständig: bis vor ab", pruefeRegelVollstaendig({ typ: "wochen_zyklus", ankerDatum: "2026-01-06", muster: ["D"], gueltigAb: "2027-01-01", gueltigBis: "2026-12-31" }) === "gueltigBis liegt vor gueltigAb");
+check("Vollständig: gültige Monats-Regel", pruefeRegelVollstaendig({ typ: "monats_wochentag", nterWochentag: -1, monate: [12], kategorieKuerzel: "K" }) === null);
+gut("Bereich neu", pruefeBereich({ name: "Technische Hilfe" }, "neu"), { name: "Technische Hilfe" });
+schlecht("Bereich ändern ohne Felder", pruefeBereich({}, "aendern"));
 
 // Hinweise
 const T = (id, datum, kuerzel, themen = [], extra = {}) => ({ id, datum, kuerzel, ausgefallen: false, feiertag: null, themen, ...extra });

@@ -11,8 +11,8 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { schutz } from "./lib/schutz.mjs";
 import {
-  feiertageNiedersachsen, istIsoDatum, nterWochentag, ostersonntag, plusTage, regelTreffer,
-  rhythmusTreffer, tagNr, wochentag, zyklusKuerzel,
+  feiertageNiedersachsen, istIsoDatum, nterWochentag, ostersonntag, plusTage, regelnMitVersatz, regelTreffer,
+  rhythmusTreffer, tagNr, versetzeMuster, wochentag, zyklusKuerzel,
 } from "../src/lib/dienstplan/kalender.ts";
 
 const P = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -76,6 +76,29 @@ check("Phasenwechsel: 2025 nur alte Regel, 2026 nur neue", t25.every((t) => t.re
 check("Inaktive Regel liefert nichts", regelTreffer({ ...neu, aktiv: false }, 2026).length === 0);
 check("Uhrzeit ohne Sekunden, Kürzel groß", t26[0].uhrzeit === "19:30" && regelTreffer({ ...neu, muster: ["d"] }, 2026)[0].kuerzel === "D");
 check("Nur der Regel-Wochentag", t26.every((t) => wochentag(t.datum) === 2));
+
+// ── Zwischendienst versetzen (Spec 5.2a) ──
+gleich("Muster: Z um 2 Wochen", versetzeMuster(["D", "", "D", "Z"], "Z", 2), ["D", "Z", "D", ""]);
+gleich("Muster: zurück um 2 Wochen", versetzeMuster(["D", "Z", "D", ""], "Z", 2), ["D", "", "D", "Z"]);
+check("Muster: Ziel belegt → null", versetzeMuster(["D", "", "D", "Z"], "Z", 1) === null);
+gleich("Muster: Versatz 0 unverändert", versetzeMuster(["D", "", "D", "Z"], "Z", 0), ["D", "", "D", "Z"]);
+{
+  const r26 = { ...neu, id: 7, gueltigAb: "2026-01-01" };
+  const { regeln, aenderungen, fehler } = regelnMitVersatz([r26], 2027, "Z", 2);
+  check("Versatz 2027: alte Regel endet 31.12.2026, neue ab 01.01.2027", aenderungen.length === 1 && fehler.length === 0
+    && regeln.length === 2 && regeln[0].gueltigBis === "2026-12-31" && regeln[1].gueltigAb === "2027-01-01" && regeln[1].muster.join() === "D,Z,D,");
+  const vorher = rhythmusTreffer([r26], 2027).slice(0, 4).map((t) => `${t.datum.slice(5)} ${t.kuerzel}`);
+  const nachher = rhythmusTreffer(regeln, 2027).slice(0, 4).map((t) => `${t.datum.slice(5)} ${t.kuerzel}`);
+  gleich("2027 ohne Versatz: D, D, Z …", vorher, ["01-05 D", "01-19 D", "01-26 Z", "02-02 D"]);
+  gleich("2027 mit Versatz: D, Z, D …", nachher, ["01-05 D", "01-12 Z", "01-19 D", "02-02 D"]);
+  check("Versatz ändert die D-Termine nicht", JSON.stringify(rhythmusTreffer([r26], 2027).filter((t) => t.kuerzel === "D").map((t) => t.datum))
+    === JSON.stringify(rhythmusTreffer(regeln, 2027).filter((t) => t.kuerzel === "D").map((t) => t.datum)));
+  const ab27 = regelnMitVersatz([{ ...r26, gueltigAb: "2027-01-01" }], 2027, "Z", 2);
+  check("Regel beginnt am Stichtag: nur Muster ändern, keine Kopie", ab27.regeln.length === 1 && ab27.regeln[0].muster.join() === "D,Z,D,");
+  check("Versatz 0: keine Änderung", regelnMitVersatz([r26], 2027, "Z", 0).aenderungen.length === 0);
+  check("Regel ohne Z bleibt", regelnMitVersatz([{ ...r26, muster: ["D", ""] }], 2027, "Z", 2).aenderungen.length === 0);
+  check("Versatz unmöglich (Z träfe auf D) → fehler", regelnMitVersatz([{ ...r26, muster: ["D", "Z", "Z", "D"] }], 2027, "Z", 2).fehler.length === 1);
+}
 
 // ── Akzeptanztest 2026 (Spec 5.3) mit den Regeln aus der Datenbank ──
 schutz({ db: ["MIGRATE_DATABASE_URL"] });

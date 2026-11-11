@@ -2,7 +2,9 @@ import { sql } from "drizzle-orm";
 import type { ScopedTx } from "@/lib/db/scoped";
 import { expectRows } from "@/lib/db/rows";
 import { anzeigenamen, anzeigenameExtern } from "@/lib/mitglieder/anzeigename";
-import { feiertageNiedersachsen, rhythmusTreffer, type RhythmusRegel } from "@/lib/dienstplan/kalender";
+import {
+  feiertageNiedersachsen, plusTage, regelnMitVersatz, rhythmusTreffer, type RhythmusRegel,
+} from "@/lib/dienstplan/kalender";
 import {
   berechneHinweise, type DpHinweis, type DpTermin, type DpTerminThema, type DpVerantwortlicher,
 } from "@/lib/dienstplan/hinweise";
@@ -132,12 +134,50 @@ export async function ladePlan(tx: ScopedTx, plan: DpPlan, organisationId: numbe
  * werden nie überschrieben oder gelöscht (verschobene behalten rhythmus_datum,
  * abgesagte sind ausgefallen). Feiertage werden trotzdem angelegt (Hinweis).
  */
-export async function generiereTermine(tx: ScopedTx, plan: DpPlan, organisationId: number) {
-  const regeln = [...await tx.execute<RhythmusRegel>(sql`
+/** Rhythmusregeln der Organisation (alle, auch inaktive; nach id). */
+export async function ladeRegeln(tx: ScopedTx, organisationId: number): Promise<RhythmusRegel[]> {
+  return [...await tx.execute<RhythmusRegel>(sql`
     select id, name, typ::text as typ, wochentag, to_char(uhrzeit, 'HH24:MI') as uhrzeit, anker_datum::text as "ankerDatum",
            muster, nter_wochentag as "nterWochentag", monate, kategorie_kuerzel as "kategorieKuerzel",
            gueltig_ab::text as "gueltigAb", gueltig_bis::text as "gueltigBis", aktiv
-      from dienstplan.rhythmus_regeln where organisation_id = ${organisationId} and aktiv`)];
+      from dienstplan.rhythmus_regeln where organisation_id = ${organisationId} order by id`)];
+}
+
+/**
+ * Phasenwechsel (Spec 5.2a): versetzt `kuerzel` in allen betroffenen
+ * Wochen-Regeln ab dem 01.01. des Jahres um `wochen`. Gilt eine Regel schon vor
+ * dem Stichtag, endet sie am 31.12. des Vorjahres und eine neue Regel mit
+ * versetztem Muster beginnt am 01.01.; beginnt sie am Stichtag, wird nur ihr
+ * Muster geändert. Nur Dienstplan-Admin (Policy rhythmus_regeln_schreiben).
+ */
+export async function wendeVersatzAn(tx: ScopedTx, organisationId: number, jahr: number, kuerzel: string, wochen: number) {
+  const stichtag = `${jahr}-01-01`;
+  const { aenderungen, fehler } = regelnMitVersatz(await ladeRegeln(tx, organisationId), jahr, kuerzel, wochen);
+  if (fehler.length) throw new DpFehler(409, `Versatz nicht möglich: ${fehler.map((r) => r.name).join(", ")} (Zielwoche belegt)`);
+  if (!aenderungen.length) throw new DpFehler(409, `Keine Wochen-Regel mit ${kuerzel}, die am ${stichtag} gilt`);
+  const neu: number[] = [];
+  for (const { regel: r, muster } of aenderungen) {
+    if (r.gueltigAb < stichtag) {
+      expectRows(await tx.execute(sql`
+        update dienstplan.rhythmus_regeln set gueltig_bis = ${plusTage(stichtag, -1)} where id = ${r.id} returning id`), "Regel");
+      const [n] = expectRows(await tx.execute<{ id: number }>(sql`
+        insert into dienstplan.rhythmus_regeln
+          (organisation_id, name, typ, wochentag, uhrzeit, anker_datum, muster, gueltig_ab, gueltig_bis, aktiv)
+        values (${organisationId}, ${r.name}, 'wochen_zyklus', ${r.wochentag}, ${r.uhrzeit}, ${r.ankerDatum},
+                ${sql`array[${sql.join(muster.map((m) => sql`${m}`), sql`, `)}]::text[]`}, ${stichtag}, ${r.gueltigBis}, true)
+        returning id`), "Regel");
+      neu.push(n.id);
+    } else {
+      expectRows(await tx.execute(sql`
+        update dienstplan.rhythmus_regeln set muster = ${sql`array[${sql.join(muster.map((m) => sql`${m}`), sql`, `)}]::text[]`}
+         where id = ${r.id} returning id`), "Regel");
+    }
+  }
+  return { geaendert: aenderungen.map((a) => a.regel.id), neu };
+}
+
+export async function generiereTermine(tx: ScopedTx, plan: DpPlan, organisationId: number) {
+  const regeln = (await ladeRegeln(tx, organisationId)).filter((r) => r.aktiv);
   const kategorien = new Map((await ladeKategorien(tx, organisationId)).filter((k) => k.aktiv).map((k) => [k.kuerzel.toUpperCase(), k.id]));
   const treffer = rhythmusTreffer(regeln, plan.jahr);
   const unbekannt = new Set<string>();

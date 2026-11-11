@@ -144,3 +144,49 @@ export function rhythmusTreffer(regeln: RhythmusRegel[], jahr: number): Rhythmus
   return regeln.flatMap((r) => regelTreffer(r, jahr))
     .sort((a, b) => a.datum.localeCompare(b.datum) || a.uhrzeit.localeCompare(b.uhrzeit) || a.regelId - b.regelId);
 }
+
+// ── Phasenwechsel beim Jahreswechsel (Spec 5.2a) ─────────────────────────────
+
+/**
+ * Verschiebt alle Einträge `kuerzel` im Muster um `wochen` nach hinten (zyklisch).
+ * Die bisherigen Plätze werden frei (''). Trifft ein verschobener Eintrag auf einen
+ * belegten Platz, gibt es null (Versatz nicht möglich).
+ * Beispiel: ['D','','D','Z'] mit Z um 2 → ['D','Z','D',''].
+ */
+export function versetzeMuster(muster: string[], kuerzel: string, wochen: number): string[] | null {
+  const k = kuerzel.toUpperCase();
+  const n = muster.length;
+  const neu = muster.map((m) => (m.trim().toUpperCase() === k ? "" : m));
+  for (let i = 0; i < n; i++) {
+    if (muster[i].trim().toUpperCase() !== k) continue;
+    const ziel = mod(i + wochen, n);
+    if (neu[ziel].trim() !== "") return null;
+    neu[ziel] = muster[i];
+  }
+  return neu;
+}
+
+/**
+ * Regeln, wie sie nach einem Versatz für das Jahr gelten würden: Jede aktive
+ * wochen_zyklus-Regel, die am 01.01. des Jahres gilt und `kuerzel` enthält, wird
+ * ab dem 01.01. durch eine Kopie mit versetztem Muster ersetzt. Für die Vorschau
+ * und als Vorlage für die Änderung in der Datenbank. `aenderungen` nennt die
+ * betroffenen Regeln; ist ein Versatz nicht möglich, steht die Regel in `fehler`.
+ */
+export function regelnMitVersatz(regeln: RhythmusRegel[], jahr: number, kuerzel: string, wochen: number) {
+  const stichtag = `${jahr}-01-01`;
+  const aenderungen: { regel: RhythmusRegel; muster: string[] }[] = [];
+  const fehler: RhythmusRegel[] = [];
+  const ergebnis: RhythmusRegel[] = [];
+  for (const r of regeln) {
+    const betroffen = wochen !== 0 && r.aktiv && r.typ === "wochen_zyklus" && gueltig(r, stichtag)
+      && (r.muster ?? []).some((m) => m.trim().toUpperCase() === kuerzel.toUpperCase());
+    if (!betroffen) { ergebnis.push(r); continue; }
+    const muster = versetzeMuster(r.muster!, kuerzel, wochen);
+    if (!muster) { fehler.push(r); ergebnis.push(r); continue; }
+    aenderungen.push({ regel: r, muster });
+    if (r.gueltigAb < stichtag) ergebnis.push({ ...r, gueltigBis: plusTage(stichtag, -1) });
+    ergebnis.push({ ...r, id: -r.id, muster, gueltigAb: stichtag });
+  }
+  return { regeln: ergebnis, aenderungen, fehler };
+}
