@@ -151,13 +151,41 @@ Ausrollen 0016 (macht der Mensch): additiv, vor oder mit der App. Danach
 
 ## Phase 2 – Schema `dienstplan`
 
+Noch nicht begonnen. Konflikte Spec ↔ Repo am 11.11.2026 mit Ben geklärt:
+
 ### Entscheidungen
+- Rollenwerte `Admin` / `Planer` / `Mitglied` (groß, wie die anderen Module),
+  Bedeutung wie Spec Abschnitt 6.
+- Ohne `dienst_rolle` gilt eine angemeldete Person als `Mitglied`: /dienstplan
+  ist für alle sichtbar, die Rolle wird nur für Admin und Planer vergeben.
+- Eigener Scope `withDienstplanScope` in `src/lib/db/scoped.ts` nach dem Muster
+  von `withFunkScope` (setzt `app.kamerad_id` und `app.dienst_rolle`).
 ### Abweichungen von der Spec
+- Es gibt keine globale Auth-Middleware (kein `middleware.ts`/`proxy.ts`).
+  Jede Seite und Route prüft selbst (`getAuthUser`, Modul-Guards). Für
+  Anzeige-Token und iCal-Abo ist deshalb keine Ausnahme einzutragen; die Routen
+  prüfen das Token selbst. `withFoodPublicScope` darf laut Regel nicht
+  wiederverwendet werden, es braucht einen eigenen, auf einen Plan begrenzten
+  Token-Scope.
+- Für das neue Schema `dienstplan` gibt es keine ALTER DEFAULT PRIVILEGES (nur
+  core, psa, fw_funk). Die Migration muss USAGE und Tabellenrechte für fw_app
+  selbst vergeben.
+
 ### Offene Fragen
+- Keine (Rollenwerte, Standardrolle, Scope und Import-Testdaten geklärt, siehe
+  Entscheidungen hier und in Phase 4).
 
 ## Phase 4 – Importskript
 
 ### Entscheidungen
+- Vorgaben von Ben (11.11.2026):
+  - Der reguläre Import legt NIE Kameraden an. Nicht zuordenbare Namen landen
+    in einem Klärungsbericht (CSV und Konsole), die Zuordnung erfolgt manuell.
+  - Zuerst ein Probelauf ohne Schreiben (`--dry-run`), der den Bericht erzeugt.
+  - Ein Testdaten-Modus darf fehlende Kameraden anlegen, aber nur, wenn
+    DATABASE_URL auf localhost zeigt. Sonst Abbruch mit Fehlermeldung, egal
+    welches Flag gesetzt ist. So angelegte Kameraden sind erkennbar markiert
+    (personalnummer mit Präfix `TEST-`).
 ### Abweichungen von der Spec
 ### Offene Fragen
 
