@@ -118,8 +118,9 @@ Vor dem Ausrollen
    `node scripts/kontrast.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
+   `node scripts/test-mitglieder-import-lib.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-auth.mjs`,
-   `node scripts/test-mitglieder.mjs`, `node scripts/test-sitzungen.mjs`,
+   `node scripts/test-mitglieder.mjs`, `node scripts/test-mitglieder-import.mjs`, `node scripts/test-sitzungen.mjs`,
    `node scripts/test-setup.mjs` (eigener Server, 3100 vorher beenden)
 2. Docker-Build einmal auf dem Windows-Rechner (auf dem Mac gibt es kein
    Docker, die Stages sind dort nie gebaut worden): `docker build .` (Portal)
@@ -1074,9 +1075,46 @@ Rückgängig zurücknehmen.
   Das Thema ist danach normal im Katalog verfügbar.
 
 ### Offene Fragen
-- **CSV-Import für Kameraden (Frage Ben):** Die Mitgliederverwaltung hat keinen
-  CSV-Import (CSV gibt es nur für Karten-IDs der Küche). Aufwandsschätzung im
-  Bericht vom 11.11.2026; gebaut wird erst nach Freigabe durch Ben.
+- CSV-Import für Kameraden: von Ben am 11.11.2026 freigegeben, umgesetzt vor
+  Phase 9 (siehe „CSV-Import Kameraden“).
+
+## Zwischenschritt – CSV-Import Kameraden (Mitgliederverwaltung)
+
+### Entscheidungen
+- `/mitglieder` → „CSV importieren“ (nur globaler Admin). Route
+  `POST /api/mitglieder/import`, reine Logik in `src/lib/mitglieder/csv-import.ts`.
+- Zwei Formate werden erkannt: Tabelle mit Kopfzeile
+  `Nachname;Vorname;Spitzname;Personalnummer` (Spalten in beliebiger Reihenfolge,
+  `;`, `,` oder Tab; Vorlage zum Herunterladen) und die Anwesenheitsliste der
+  Kreis-Mitgliederverwaltung (`lfd. Nr.;;Nachname, Vorname (Personalnummer)`,
+  Kopf- und Summenzeilen werden übersprungen). Kodierung UTF-8 oder
+  Windows-1252 (der Kreis-Export ist Windows-1252).
+- Personalnummern bleiben wie geliefert („002“, „21_034“). Verglichen wird ohne
+  führende Nullen und ohne Groß/klein („002“ = „2“).
+- Zwei Schritte mit derselben Datei: Vorschau, dann Übernahme der angehakten
+  Zeilen. Die Vorschau wird bei der Übernahme auf dem Server neu berechnet; der
+  Client schickt nur Datei und Zeilennummern. Ist eine gewählte Zeile inzwischen
+  nicht mehr übernehmbar: 409, nichts gespeichert. Alles in einer Transaktion.
+- Ergebnis je Zeile: **neu** (angehakt), **ergänzen** (gleicher Name, leere
+  Personalnummer bzw. leerer Spitzname wird nachgetragen; angehakt),
+  **prüfen** (nicht angehakt: gleicher Name mit anderer Personalnummer, mehrere
+  Kameraden gleichen Namens, Name doppelt in der Datei, sieht nach Organisation
+  aus wie „… AG (z.Hd. …)“), **vorhanden**, **Konflikt** (Personalnummer gehört
+  jemand anderem oder steht doppelt in der Datei).
+- Vorhandene Kameraden werden nie überschrieben oder deaktiviert; Personen, die
+  in der Liste fehlen, bleiben unverändert. Neue Kameraden: aktiv, ohne Rollen,
+  ohne Login, `spitzname_anzeigen` aus. Das Änderungsprotokoll schreibt der
+  Trigger (Akteur = Admin).
+- Die Datei wird nirgends gespeichert (nur im Browser und im Request).
+- Tests: `test-mitglieder-import-lib.mjs` (ohne Server, 22 Prüfungen),
+  `test-mitglieder-import.mjs` (Dev-Server, 20), Browser-Durchlauf (Vorschau,
+  Handybreite, Übernahme). Alle Namen in Tests erfunden.
+
+### Abweichungen von der Spec
+- Keine (die Spec sieht keinen Import vor; Auftrag Ben vom 11.11.2026).
+
+### Offene Fragen
+- Keine.
 
 ## Phasen 9–13
 

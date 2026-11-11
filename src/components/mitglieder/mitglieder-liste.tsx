@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Plus, Search } from "lucide-react";
+import { FileUp, MoreHorizontal, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiCall, type Meldung } from "./api-client";
+import { KameradenImport } from "./kameraden-import";
 
 export interface ListenEintrag {
   id: number;
@@ -65,6 +66,7 @@ export function MitgliederListe({
   const [status, setStatus] = useState<Status>("aktiv");
   const [meldung, setMeldung] = useState<Meldung | null>(null);
   const [neuOffen, setNeuOffen] = useState(false);
+  const [importOffen, setImportOffen] = useState(false);
 
   const sichtbar = useMemo(() => {
     const s = suche.trim().toLowerCase();
@@ -112,6 +114,13 @@ export function MitgliederListe({
         />
       )}
 
+      {istAdmin && importOffen && (
+        <KameradenImport
+          onFertig={(text) => { setImportOffen(false); setMeldung({ ok: true, text }); router.refresh(); }}
+          onAbbrechen={() => setImportOffen(false)}
+        />
+      )}
+
       <Card>
         <CardHeader className="gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -121,10 +130,15 @@ export function MitgliederListe({
                 ({sichtbar.length} von {mitglieder.length})
               </span>
             </CardTitle>
-            {istAdmin && !neuOffen && (
-              <Button size="sm" onClick={() => setNeuOffen(true)}>
-                <Plus aria-hidden /> Neues Mitglied
-              </Button>
+            {istAdmin && !neuOffen && !importOffen && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => { setMeldung(null); setImportOffen(true); }}>
+                  <FileUp aria-hidden /> CSV importieren
+                </Button>
+                <Button size="sm" onClick={() => setNeuOffen(true)}>
+                  <Plus aria-hidden /> Neues Mitglied
+                </Button>
+              </div>
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-[1fr_12rem]">

@@ -481,6 +481,7 @@ Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Ze
 | test-sitzungen.mjs | JWT-Claims, /api/admin/*, Token-Widerruf, PIN, Abmelden, Selbstschutz, Logout, Startseite/Kacheln, ungültige JWTs | ja |
 | test-food.mjs | Karten-ID-Route, set_karten_id, CSV-Import/-Export, Funk-Scope, /food/admin/heute | ja |
 | test-mitglieder.mjs, -rechte.mjs, -lib.mjs | Mitgliederverwaltung (API, Seiten, Profil), Rechteregeln, Validierung | ja / nein / nein |
+| test-mitglieder-import-lib.mjs, test-mitglieder-import.mjs | CSV-Import von Kameraden: Kodierung, Tabelle und Anwesenheitsliste, Abgleich (ohne Server); Route mit Rechten, Vorschau, Übernahme, veralteter Auswahl, Protokoll | nein / ja |
 | test-anzeigename.mjs | Anzeigename-Regel (Spitzname, Nachname, Vornamen-Präfix, identische Namen, externe Personen) | nein |
 | test-login-sperre.mjs, test-login-deaktiviert.mjs, test-client-ip.mjs | Login-Sperre, deaktivierte Konten, Client-IP | ja / ja / nein |
 | test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
@@ -642,6 +643,12 @@ verlinken auf /mitglieder/[id] (`MitgliedLink`, Ziel aus `mitgliedLinkZiel`).
   die Größenspalten). Der Profil-Abschnitt ist darauf vorbereitet
   (`bearbeiten` wird durchgereicht, `kannPsaAbschnittBearbeiten` bleibt
   PSA-Verwaltung)
+- **CSV-Import (nur globaler Admin):** `/mitglieder` → „CSV importieren“,
+  `POST /api/mitglieder/import` (Logik in `lib/mitglieder/csv-import.ts`). Tabelle
+  `Nachname;Vorname;Spitzname;Personalnummer` oder Anwesenheitsliste des Kreises
+  (Windows-1252). Vorschau, dann Übernahme der gewählten Zeilen in einer
+  Transaktion (Server rechnet die Vorschau neu). Legt nur an oder füllt leere
+  Personalnummern/Spitznamen; überschreibt und deaktiviert nie
 - **Änderungsprotokoll:** Abschnitt "Änderungsverlauf" (nur globale Admins) aus
   `core.mitglieder_audit`
 - **Anzeigename (Migration 0016):** `src/lib/mitglieder/anzeigename.ts` erzeugt

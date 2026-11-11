@@ -63,9 +63,12 @@ Legende: **Du** = Ben, **Claude** = Arbeit im Repo, die vorher erledigt sein mus
 1. Für jedes Ausbilder-Kürzel aus dem Excel beim passenden Kameraden in
    `/mitglieder/[id]` → Stammdaten den **Spitznamen** eintragen (bei Bedarf Haken
    „Spitzname anzeigen“). Dann ordnet der Import diese Namen selbst zu.
-2. Fehlende Kameraden (im Excel als Ausbilder, aber nicht im Portal) in
-   `/mitglieder` anlegen. Es gibt dafür derzeit keinen CSV-Import (siehe Bericht
-   vom 11.11.2026; wird nur gebaut, wenn du das willst).
+2. Fehlende Kameraden anlegen: `/mitglieder` → „CSV importieren“ mit der
+   Anwesenheitsliste aus der Kreis-Mitgliederverwaltung (oder einer Tabelle
+   `Nachname;Vorname;Spitzname;Personalnummer`). Vorschau prüfen: „neu“ und
+   „ergänzen“ sind angehakt, „prüfen“ (z. B. Organisationen, gleiche Namen) nur
+   bei Bedarf anhaken, dann „übernehmen“. Die Datei danach löschen.
+   Am besten **vor** Schritt 1, dann gibt es die Kameraden schon für die Spitznamen.
 
 ### B7. Import der Pläne 2023–2026 (60–90 min, Du)
 1. Probelauf: in `~/fw/FW-Hub` `scripts/server-import.sh --dry-run`. Beim ersten
