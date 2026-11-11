@@ -62,7 +62,7 @@ const kurz = (datum: string) => `${datum.slice(8, 10)}.${datum.slice(5, 7)}.`;
  */
 export function berechneHinweise(
   termine: DpTermin[],
-  pflichtThemen: { id: number; titel: string }[] = [],
+  pflichtThemen: { id: number; titel: string; zielgruppe?: string | null }[] = [],
 ): DpHinweis[] {
   const out: DpHinweis[] = [];
   const aktiv = termine.filter((t) => !t.ausgefallen);
@@ -95,7 +95,7 @@ export function berechneHinweise(
   }
   const verplant = new Set(aktiv.flatMap((t) => t.themen.map((th) => th.themaId)).filter((x): x is number => x !== null));
   for (const p of pflichtThemen) {
-    if (!verplant.has(p.id)) out.push({ art: "pflichtthema", terminId: null, text: `Pflichtthema „${p.titel}“ fehlt im Plan` });
+    if (!verplant.has(p.id)) out.push({ art: "pflichtthema", terminId: null, text: `Pflichtthema „${p.titel}“${p.zielgruppe ? ` (${p.zielgruppe})` : ""} fehlt im Plan` });
   }
   return out;
 }

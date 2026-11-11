@@ -106,6 +106,7 @@ export function Verwaltung({ istAdmin }: { istAdmin: boolean }) {
       <Kategorien istAdmin={istAdmin} />
       <Regeln istAdmin={istAdmin} />
       <Themen />
+      <Ausgleich istAdmin={istAdmin} />
       <Bloecke />
       <ExternePersonen />
     </div>
@@ -295,10 +296,27 @@ function Themen() {
   const [neuerBereich, setNeuerBereich] = useState("");
   const bName = new Map((bereiche.liste ?? []).map((b) => [b.id, b.name]));
   const gefiltert = (liste ?? []).filter((t) => t.titel.toLocaleLowerCase("de-DE").includes(suche.trim().toLocaleLowerCase("de-DE")));
+  const pflicht = (liste ?? []).filter((t) => t.pflichtJaehrlich && t.aktiv);
+  const [pflichtMeldung, setPflichtMeldung] = useState<string | null>(null);
   return (
     <Abschnitt titel="Themenkatalog" beschreibung="Themen werden nicht gelöscht (sie hängen an alten Plänen), sondern deaktiviert."
       aktion={<Button size="sm" onClick={() => setForm("neu")}><Plus /> Thema</Button>}>
       {fehler && <p role="alert" className="text-sm text-destructive">{fehler}</p>}
+      <div className="mb-4 grid gap-2 rounded-lg border border-border p-3">
+        <p className="text-sm font-medium">Pflichtthemen (jedes Jahr einplanen, sonst Hinweis in Eingabe und Präsentation)</p>
+        <p className="text-sm text-muted-foreground">
+          {pflicht.length ? pflicht.map((t) => `${t.titel}${t.zielgruppe ? ` (${t.zielgruppe})` : ""}`).join(" · ") : "Noch keine Pflichtthemen festgelegt."}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={async () => {
+            const r = await dpApi<{ themen: { titel: string; neu: boolean }[] }>("POST", "/themen/pflicht-vorschlag");
+            setPflichtMeldung(r.ok ? `Markiert: ${r.data.themen.map((t) => `${t.titel}${t.neu ? " (neu angelegt)" : ""}`).join(", ")}` : r.message);
+            await neu();
+          }}>Vorschlag übernehmen</Button>
+          <span className="text-xs text-muted-foreground">Sicherheitsunterweisung, Erste Hilfe, Atemschutzunterweisung (Atemschutzgeräteträger). Weitere über „Bearbeiten“.</span>
+        </div>
+        {pflichtMeldung && <p role="status" className="text-sm">{pflichtMeldung}</p>}
+      </div>
       <Input value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Themen suchen" aria-label="Themen suchen" className="mb-3 max-w-sm" />
       <Table>
         <TableHeader><TableRow><TableHead>Titel</TableHead><TableHead>Bereich</TableHead><TableHead>Pflicht</TableHead><TableHead>Zuletzt</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
@@ -359,6 +377,55 @@ function ThemaForm({ t, bereiche, schliessen, danach }: { t: Thema | null; berei
       <Feld id="th-notiz" label="Notizen (Inhalte, Material)"><textarea id="th-notiz" className={textareaKlasse} value={w.notizen} onChange={(e) => setW({ ...w, notizen: e.target.value })} /></Feld>
       <Haken label="aktiv" wert={w.aktiv} setze={(v) => setW({ ...w, aktiv: v })} />
     </FormSheet>
+  );
+}
+
+// ── Ausgleich ───────────────────────────────────────────────────────────────
+
+interface AusgleichPerson { kameradId: number; name: string; aktiv: boolean }
+interface Person { id: number; anzeige: string }
+
+function Ausgleich({ istAdmin }: { istAdmin: boolean }) {
+  const { liste, fehler, neu } = useListe<AusgleichPerson>("/ausgleich", "personen");
+  const personen = useListe<Person>("/personen", "kameraden");
+  const [auswahl, setAuswahl] = useState("");
+  const [meldung, setMeldung] = useState<string | null>(null);
+  const drin = new Set((liste ?? []).map((p) => p.kameradId));
+  return (
+    <Abschnitt titel="Ausgleich (Gruppenführer)"
+      beschreibung="Wer hier steht, erscheint in der Eingabemaske im Reiter „Ausgleich“ mit der Zahl seiner Einteilungen. Kameradschaft (K) und Gremien (G, O) zählen nicht. Pflegen darf nur der Dienstplan-Admin.">
+      {fehler && <p role="alert" className="text-sm text-destructive">{fehler}</p>}
+      <ul className="mb-3 flex flex-wrap gap-2">
+        {(liste ?? []).map((p) => (
+          <li key={p.kameradId} className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-sm">
+            {p.name}{!p.aktiv && <span className="text-muted-foreground"> (inaktiv)</span>}
+            {istAdmin && (
+              <button type="button" aria-label={`${p.name} aus der Ausgleichsliste nehmen`} className="rounded-full hover:bg-accent"
+                onClick={async () => { const r = await dpApi("DELETE", `/ausgleich/${p.kameradId}`); setMeldung(r.ok ? null : r.message); await neu(); }}>
+                <X className="size-3.5" />
+              </button>
+            )}
+          </li>
+        ))}
+        {liste && !liste.length && <li className="text-sm text-muted-foreground">Noch niemand in der Liste.</li>}
+      </ul>
+      {istAdmin && (
+        <form className="flex max-w-md gap-2" onSubmit={async (e) => {
+          e.preventDefault();
+          const r = await dpApi("POST", "/ausgleich", { kameradId: Number(auswahl) });
+          setMeldung(r.ok ? null : r.message);
+          setAuswahl("");
+          await neu();
+        }}>
+          <select aria-label="Kamerad für die Ausgleichsliste" className={selectKlasse} value={auswahl} onChange={(e) => setAuswahl(e.target.value)}>
+            <option value="">Kamerad wählen …</option>
+            {(personen.liste ?? []).filter((p) => !drin.has(p.id)).map((p) => <option key={p.id} value={p.id}>{p.anzeige}</option>)}
+          </select>
+          <Button type="submit" variant="outline" disabled={!auswahl}>Aufnehmen</Button>
+        </form>
+      )}
+      {meldung && <p role="alert" className="mt-2 text-sm text-destructive">{meldung}</p>}
+    </Abschnitt>
   );
 }
 

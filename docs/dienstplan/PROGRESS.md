@@ -16,7 +16,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | 5 | Eingabemaske (Klickbedienung), Verwaltung, Feiertagshinweise | fertig (Monatsraster folgt mit Phase 7) |
 | 6 | Präsentationsansicht mit Live-Aktualisierung und Anzeige-Token | fertig (Migration 0019 lokal angewendet, nicht auf dem Server) |
 | 7 | Drag and Drop, Rückgängig, Vorjahresanzeige | fertig (Migration 0020 lokal angewendet, nicht auf dem Server) |
-| 8 | Themenpool, Pflichtthemen-Hinweis, Ausgleichsanzeige, Mitgliederansicht | offen |
+| 8 | Themenpool, Pflichtthemen-Hinweis, Ausgleichsanzeige, Mitgliederansicht | fertig (keine Migration) |
 | 9 | Versionen (Freigabe, manuell, Vergleich, Wiederherstellen) | offen |
 | 10 | Exporte: CSV-Profile inkl. DIVERA, .ics, Excel | offen |
 | 11 | PDF, Bild für Smartphone | offen |
@@ -103,6 +103,7 @@ Mac (eingerichtet am 11.11.2026, Shell zsh, kein Docker):
 ## Deployment-Checkliste
 
 Was beim Ausrollen zu beachten ist. Befehle gegen den Server führt Ben aus.
+Die Reihenfolge für den Tag selbst mit Zeiten: [DEPLOYMENT_TAG.md](DEPLOYMENT_TAG.md).
 Wird in jeder Phase ergänzt. Allgemeiner Ablauf siehe copilot-instructions.md
 ("Produktion: Server-Struktur und Migrationen", "Produktion: Backup").
 
@@ -113,6 +114,7 @@ Vor dem Ausrollen
    `node scripts/test-dienstplan-kalender.mjs`, `node scripts/test-dienstplan-eingabe.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-api.mjs`, `node scripts/test-dienstplan-verwaltung.mjs`,
    `node scripts/test-dienstplan-anzeige.mjs`, `node scripts/test-dienstplan-rueckgaengig.mjs`,
+   `node scripts/test-dienstplan-pool.mjs`,
    `node scripts/kontrast.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
@@ -192,6 +194,10 @@ Smoke-Test nach dem Ausrollen
   (Kopie), Strg+Z zweimal (beides zurück), Strg+Y. Monatsraster: Termin auf
   einen anderen Tag ziehen, Strg+Z. Vorjahreszeile erscheint, wenn der Vorjahres-
   plan freigegeben ist (Präsentation: `?vorjahr=1` oder Taste V).
+- Phase 8: als Mitglied `/dienstplan` (aktuelles Jahr, „Nächster Termin“,
+  Vorschlag einreichen); als Planer in der Eingabemaske Reiter „Pool“ (Vorschlag
+  auf einen Termin ziehen) und „Ausgleich“ (Zahlen stimmen mit dem Plan).
+  Testvorschlag danach im Pool verwerfen.
 - Präsentation und Rate-Limits (geprüft am 11.11.2026 gegen die Repo-Dateien):
   Last: je Fernseher 30 Anfragen/Minute auf `/api/dienstplan/anzeige/<jahr>`
   (0,5 r/s, fast immer 304 ohne Inhalt), dazu die Eingabemaske vom selben
@@ -269,6 +275,18 @@ Import der Excel-Pläne 2023–2026 (Phase 4, nach Migrationen und App)
   geschrieben. Nach erfolgreichem Import: mit `--ersetzen` neu importieren
   (löscht die Pläne der Jahre samt Terminen; Katalog, Blöcke und externe
   Personen bleiben und werden wiederverwendet) oder als Owner die Pläne löschen.
+
+Nach dem Import festlegen (Phase 8, als Dienstplan-Admin in der Oberfläche)
+- **Ausgleichsliste auf dem Server festlegen.** Der Import trägt die Namen aus
+  dem Excel-Blatt „Gruppenführer“ nur ein, wenn die Liste noch leer ist, und nur
+  als Vorschlag; das Blatt ist veraltet. In `/dienstplan/verwaltung` →
+  „Ausgleich (Gruppenführer)“ die echten Gruppenführer aufnehmen bzw. entfernen.
+  Prüfen (Owner-psql): `select count(*) from dienstplan.ausgleich_personen;`
+- **Pflichtthemen festlegen.** `/dienstplan/verwaltung` → Themenkatalog →
+  „Vorschlag übernehmen“ markiert Sicherheitsunterweisung (bzw. vorhandene
+  „Sicherheitsbelehrung“), Erste Hilfe und Atemschutzunterweisung (Zielgruppe
+  Atemschutzgeräteträger). Abweichende Titel über „Bearbeiten“ → Haken
+  „Pflichtthema“. Prüfen: `select titel, zielgruppe from dienstplan.themen where pflicht_jaehrlich;`
 
 Sichtbarkeit (Spec 11: Nutzer sehen das Modul erst nach Release 1)
 - Bis zur Freischaltung gibt es keinen Eintrag in Kopfzeile, Kacheln und
@@ -999,8 +1017,66 @@ Rückgängig zurücknehmen.
 ## Phase 8 – Pool, Pflichtthemen, Ausgleich, Mitgliederansicht
 
 ### Entscheidungen
+- **Keine Migration.** Tabellen und Policies für Vorschläge und Ausgleich gibt es
+  seit 0018; Phase 8 baut nur API und Oberfläche.
+- **Themenpool:** `GET/POST /api/dienstplan/themenvorschlaege` (alle
+  Angemeldeten reichen ein, Spec-Annahme „alle Mitglieder“; Mitglieder sehen nur
+  ihre eigenen, Planer alle; `?status=`, `?eigene=1`), `PATCH …/[id]`
+  (verwerfen/wieder öffnen, Planer), `POST …/[id]/uebernehmen` `{ terminId? }`
+  (Planer). Übernehmen legt das Thema im Katalog an (Beschreibung → Notizen) oder
+  nimmt ein vorhandenes gleichen Titels (Groß/klein egal, inaktive werden wieder
+  aktiv), setzt den Vorschlag auf „übernommen“ mit Verweis aufs Thema und hängt
+  es mit `terminId` ans Ende des Termins. Eingabemaske: Reiter „Pool“ mit
+  Einreicher und Datum; Vorschlag auf einen Termin ziehen oder „+“, „Als Thema
+  übernehmen“, „Verwerfen“.
+- **Pflichtthemen:** Der Hinweis existierte seit Phase 3 (dauerhaft oben in
+  Eingabe und Präsentation); jetzt mit Zielgruppe („… (Atemschutzgeräteträger)
+  fehlt im Plan“). Seed der Spec als Knopf „Vorschlag übernehmen“ in der
+  Verwaltung (`POST /api/dienstplan/themen/pflicht-vorschlag`, idempotent):
+  markiert vorhandene Themen mit genau passendem Titel bzw. bekannter
+  Schreibweise (z. B. „Sicherheitsbelehrung“ aus dem Import), legt fehlende an.
+  Kein Seed in einer Migration, weil der Katalog erst mit dem Import entsteht und
+  dort andere Titel stehen. Zielgruppe bleibt ein Hinweis (Spec-Annahme), kein
+  Abgleich mit Qualifikationen.
+- **Ausgleich:** Liste `ausgleich_personen` pflegt nur der Dienstplan-Admin in
+  der Verwaltung (`GET/POST /api/dienstplan/ausgleich`, `DELETE …/[kameradId]`;
+  nur aktive Kameraden). Eingabemaske Reiter „Ausgleich“: je Person „3 · Ø 4,2“,
+  wenigste oben, Vorjahr in Klammern; wer mindestens 1 und mindestens 25 % unter
+  dem Durchschnitt liegt, steht hervorgehoben („deutlich unter“, Spec ohne
+  Zahl). Zählung nach Spec: jede Themenposition einmal, ohne K, G, O und ohne
+  ausgefallene Termine; Platzhalter aus Altdaten („alle Gruppenführer“) zählen
+  nicht. Eine reine Funktion (`zaehleEinteilungen`) für Server (Vorjahr,
+  `GET /plaene/[jahr]/ausgleich`) und Maske (aktueller Plan, rechnet nach jeder
+  Änderung sofort neu). Personen aus dem Reiter lassen sich direkt auf ein
+  Thema ziehen.
+- **Import-Seed nur als Vorschlag (Vorgabe Ben):** Das Excel-Blatt
+  „Gruppenführer“ ist veraltet. Der Import trägt es nur noch ein, wenn die
+  Ausgleichsliste leer ist, und meldet es als Vorschlag; eine gepflegte Liste
+  überschreibt er nie (auch nicht mit `--ersetzen`). Checkliste: Liste auf dem
+  Server festlegen.
+- **Mitgliederansicht `/dienstplan`:** jede angemeldete Person (Mitglieder nur
+  freigegebene Pläne, Planer auch Entwürfe mit Kennzeichnung). Standard: Plan des
+  laufenden Jahres. „Nächster Termin“ oben (mit Sprung zum aktuellen Monat),
+  aktuelle Woche mit Rahmen und „Diese Woche“, vergangene Termine abgeblendet,
+  Notizen sichtbar (Spec: „nur im Portal“). Rechts bzw. mobil darunter
+  „Themenvorschlag einreichen“ und „Meine Vorschläge“ mit Status. Mobil eine
+  Liste ohne seitliches Scrollen.
+- Getestet: test-dienstplan-pool.mjs (33, stellt den Themenkatalog danach wieder
+  her), reine Funktionen in -eingabe (84), Browser-Durchlauf (Mitglied reicht
+  ein, Admin pflegt Ausgleich, Planer zieht den Vorschlag auf einen Termin und
+  eine Person aus „Ausgleich“ auf das Thema, Zahl steigt sofort).
+
 ### Abweichungen von der Spec
+- Links zu iCal-Abo, PDF und Bild in der Mitgliederansicht kommen mit den
+  Phasen 10 und 11.
+- Rückgängig nach „Vorschlag auf Termin ziehen“ entfernt die Position am Termin,
+  der Vorschlag bleibt aber „übernommen“ (und das Thema im Katalog). Gewollt:
+  Das Thema ist danach normal im Katalog verfügbar.
+
 ### Offene Fragen
+- **CSV-Import für Kameraden (Frage Ben):** Die Mitgliederverwaltung hat keinen
+  CSV-Import (CSV gibt es nur für Karten-IDs der Küche). Aufwandsschätzung im
+  Bericht vom 11.11.2026; gebaut wird erst nach Freigabe durch Ben.
 
 ## Phasen 9–13
 

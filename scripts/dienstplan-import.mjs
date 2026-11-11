@@ -300,8 +300,13 @@ async function schreiben(tx, a, vorhandenePlaene) {
     blockId.set(b.key, r.id); zaehler.bloeckeNeu++;
   }
 
-  // Ausgleichspersonen (Blatt Gruppenführer), nur Kameraden
-  for (const key of new Set(a.ausgleich)) {
+  // Ausgleichspersonen (Blatt Gruppenführer), nur Kameraden. Nur ein Vorschlag:
+  // Die Liste im Excel ist veraltet; die echte pflegt der Dienstplan-Admin in der
+  // Verwaltung. Darum nur eintragen, wenn die Liste noch leer ist (eine
+  // gepflegte Liste wird nie überschrieben, auch nicht mit --ersetzen).
+  const [{ n: ausgleichVorhanden }] = await tx`select count(*)::int n from dienstplan.ausgleich_personen where organisation_id = ${ORGANISATION_ID}`;
+  if (ausgleichVorhanden) console.log(`  Ausgleich: Liste hat schon ${ausgleichVorhanden} Personen, Vorschlag aus dem Excel nicht übernommen`);
+  for (const key of ausgleichVorhanden ? [] : new Set(a.ausgleich)) {
     const b = a.personen.get(key)?.bezug;
     if (b?.art !== "kamerad") { console.log(`  Ausgleich: "${a.personen.get(key)?.schreibweise}" ist kein Kamerad, übersprungen`); continue; }
     const r = await tx`insert into dienstplan.ausgleich_personen (organisation_id, kamerad_id) values (${ORGANISATION_ID}, ${b.kameradId})
@@ -345,7 +350,7 @@ async function schreiben(tx, a, vorhandenePlaene) {
     console.log(`  Plan ${jahr}: ${termine.length} Termine, freigegeben`);
   }
   console.log(`\nImportiert: ${zaehler.termine} Termine, ${zaehler.themen} Themen an Terminen, ${zaehler.verantwortliche} Verantwortliche.`);
-  console.log(`Neu angelegt: ${zaehler.themenNeu} Themen im Katalog, ${zaehler.bloeckeNeu} Blöcke, ${zaehler.externNeu} externe Personen, ${zaehler.ausgleich} Ausgleichspersonen.`);
+  console.log(`Neu angelegt: ${zaehler.themenNeu} Themen im Katalog, ${zaehler.bloeckeNeu} Blöcke, ${zaehler.externNeu} externe Personen, ${zaehler.ausgleich} Ausgleichspersonen (Vorschlag, in der Verwaltung prüfen).`);
 }
 
 // ── Konsole ─────────────────────────────────────────────────────────────────

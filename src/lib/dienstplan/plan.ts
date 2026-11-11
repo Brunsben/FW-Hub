@@ -113,8 +113,8 @@ export async function ladePlan(tx: ScopedTx, plan: DpPlan, organisationId: numbe
      where t.plan_id = ${plan.id}
      order by v.termin_thema_id, v.position, v.id`);
   const { namen } = await ladeAnzeigenamen(tx);
-  const pflicht = [...await tx.execute<{ id: number; titel: string }>(sql`
-    select id, titel from dienstplan.themen
+  const pflicht = [...await tx.execute<{ id: number; titel: string; zielgruppe: string | null }>(sql`
+    select id, titel, zielgruppe from dienstplan.themen
      where organisation_id = ${organisationId} and pflicht_jaehrlich and aktiv order by titel`)];
 
   const vProThema = new Map<number, DpVerantwortlicher[]>();

@@ -12,6 +12,7 @@ import { pointerWithin, rectIntersection, useDraggable, useDroppable, type Colli
 export type ZiehDaten =
   | { art: "thema"; themaId: number; titel: string }
   | { art: "block"; blockId: number; titel: string }
+  | { art: "vorschlag"; id: number; titel: string }
   | { art: "person"; body: { kameradId: number } | { externePersonId: number }; titel: string }
   | { art: "position"; id: number; terminId: number; titel: string }
   | { art: "termin"; id: number; titel: string };

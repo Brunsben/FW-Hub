@@ -21,6 +21,7 @@ import { Monatsraster } from "@/components/dienstplan/monatsraster";
 import { ersetzeId, STAPEL_MAX, unterschiede, type Eintrag, type Zustand } from "@/lib/dienstplan/rueckgaengig";
 import type { VorjahrTermin } from "@/lib/dienstplan/kalender";
 import { vorjahrText } from "@/lib/dienstplan/praesentation";
+import { ausgleichTabelle, ausgleichText, positionenAus, zaehleEinteilungen } from "@/lib/dienstplan/ausgleich";
 import { datumKurz, klassenFuer, MONATE } from "@/components/dienstplan/farben";
 
 interface PlanDaten {
@@ -36,14 +37,19 @@ interface Thema { id: number; titel: string; aktiv: boolean; zuletzt: string | n
 interface Block { id: number; name: string; aktiv: boolean; themen: { themaId: number; titel: string }[] }
 interface Personen { kameraden: { id: number; anzeige: string }[]; externe: { id: number; anzeige: string }[] }
 
+interface Vorschlag { id: number; titel: string; beschreibung: string | null; einreicher: string; vorgeschlagenAm: string }
+interface AusgleichDaten { vorjahr: number | null; personen: { kameradId: number; name: string; vorjahr: number | null }[] }
+
 const holePlan = (jahr: number) => dpApi<PlanDaten>("GET", `/plaene/${jahr}`);
-async function holeKataloge() {
-  const [t, b, p] = await Promise.all([
+async function holeKataloge(jahr: number) {
+  const [t, b, p, v, a] = await Promise.all([
     dpApi<{ themen: Thema[] }>("GET", "/themen"),
     dpApi<{ bloecke: Block[] }>("GET", "/bloecke"),
     dpApi<Personen>("GET", "/personen"),
+    dpApi<{ vorschlaege: Vorschlag[] }>("GET", "/themenvorschlaege?status=offen"),
+    dpApi<AusgleichDaten>("GET", `/plaene/${jahr}/ausgleich`),
   ]);
-  return { t, b, p };
+  return { t, b, p, v, a };
 }
 
 const textarea = "min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/80";
@@ -55,6 +61,8 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
   const [themen, setThemen] = useState<Thema[]>([]);
   const [bloecke, setBloecke] = useState<Block[]>([]);
   const [personen, setPersonen] = useState<Personen>({ kameraden: [], externe: [] });
+  const [vorschlaege, setVorschlaege] = useState<Vorschlag[]>([]);
+  const [ausgleich, setAusgleich] = useState<AusgleichDaten>({ vorjahr: null, personen: [] });
   const [terminId, setTerminId] = useState<number | null>(null);
   const [positionId, setPositionId] = useState<number | null>(null);
   const [meldung, setMeldung] = useState<{ ok: boolean; text: string } | null>(null);
@@ -75,16 +83,18 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
     if (k.t.ok) setThemen(k.t.data.themen);
     if (k.b.ok) setBloecke(k.b.data.bloecke);
     if (k.p.ok) setPersonen(k.p.data);
+    if (k.v.ok) setVorschlaege(k.v.data.vorschlaege);
+    if (k.a.ok) setAusgleich(k.a.data);
   }, []);
   const laden = useCallback(async (): Promise<PlanDaten | null> => {
     const r = await holePlan(jahr);
     uebernehmePlan(r);
     return r.ok ? r.data : null;
   }, [jahr, uebernehmePlan]);
-  const katalogeLaden = useCallback(async () => uebernehmeKataloge(await holeKataloge()), [uebernehmeKataloge]);
+  const katalogeLaden = useCallback(async () => uebernehmeKataloge(await holeKataloge(jahr)), [jahr, uebernehmeKataloge]);
   useEffect(() => {
     let aktiv = true;
-    void Promise.all([holePlan(jahr), holeKataloge()]).then(([plan, kataloge]) => {
+    void Promise.all([holePlan(jahr), holeKataloge(jahr)]).then(([plan, kataloge]) => {
       if (!aktiv) return;
       uebernehmePlan(plan);
       uebernehmeKataloge(kataloge);
@@ -219,7 +229,12 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
     const z = ev.over?.data.current as ZielDaten | undefined;
     if (!q || !z || busy) return;
     const kopieren = alt.current;
-    if (q.art === "thema" || q.art === "block") {
+    if (q.art === "vorschlag") {
+      if (z.ziel === "tag") return;
+      setTerminId(z.terminId);
+      const r = await aktion("POST", `/themenvorschlaege/${q.id}/uebernehmen`, { terminId: z.terminId }, `Vorschlag „${q.titel}“ übernommen`);
+      if (r.ok) await katalogeLaden();
+    } else if (q.art === "thema" || q.art === "block") {
       if (z.ziel === "tag") return;
       setTerminId(z.terminId);
       await aktion("POST", `/termine/${z.terminId}/themen`, q.art === "thema" ? { themaId: q.themaId } : { blockId: q.blockId },
@@ -369,9 +384,12 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
           themen={themen}
           bloecke={bloecke}
           personen={personen}
+          vorschlaege={vorschlaege}
+          ausgleich={ausgleich}
           busy={busy}
           aktion={aktion}
           katalogeLaden={katalogeLaden}
+          setMeldung={setMeldung}
         />
       </div>
 
@@ -573,11 +591,15 @@ function FreitextZeile({ terminId, aktion, busy }: { terminId: number; aktion: A
   );
 }
 
-function Seitenleiste({ termine, termin, position, themen, bloecke, personen, busy, aktion, katalogeLaden }: {
+type Reiter = "themen" | "bloecke" | "pool" | "personen" | "ausgleich";
+const REITER: [Reiter, string][] = [["themen", "Themen"], ["bloecke", "Blöcke"], ["pool", "Pool"], ["personen", "Personen"], ["ausgleich", "Ausgleich"]];
+
+function Seitenleiste({ termine, termin, position, themen, bloecke, personen, vorschlaege, ausgleich, busy, aktion, katalogeLaden, setMeldung }: {
   termine: DpTermin[]; termin: DpTermin | null; position: DpTerminThema | null; themen: Thema[]; bloecke: Block[];
-  personen: Personen; busy: boolean; aktion: AktionFn; katalogeLaden: () => Promise<void>;
+  personen: Personen; vorschlaege: Vorschlag[]; ausgleich: AusgleichDaten; busy: boolean; aktion: AktionFn; katalogeLaden: () => Promise<void>;
+  setMeldung: (m: { ok: boolean; text: string } | null) => void;
 }) {
-  const [reiter, setReiter] = useState<"themen" | "bloecke" | "personen">("themen");
+  const [reiter, setReiter] = useState<Reiter>("themen");
   const [suche, setSuche] = useState("");
   const [nurUnverplant, setNurUnverplant] = useState(false);
   const [neuesThema, setNeuesThema] = useState("");
@@ -607,15 +629,15 @@ function Seitenleiste({ termine, termin, position, themen, bloecke, personen, bu
             {termin ? <>Termin: <span className="font-medium text-foreground">{datumKurz(termin.datum)} {termin.kuerzel}</span></> : "Termin anklicken oder Einträge direkt auf einen Termin ziehen."}
             {position && <><br />Thema: <span className="font-medium text-foreground">{position.titel}</span></>}
           </p>
-          <div role="tablist" aria-label="Seitenleiste" className="flex gap-1 rounded-lg bg-muted p-1">
-            {(["themen", "bloecke", "personen"] as const).map((r) => (
+          <div role="tablist" aria-label="Seitenleiste" className="grid grid-cols-5 gap-0.5 rounded-lg bg-muted p-1">
+            {REITER.map(([r, text]) => (
               <button key={r} type="button" role="tab" aria-selected={reiter === r} onClick={() => setReiter(r)}
-                className={cn("flex-1 rounded-md px-2 py-1 text-sm", reiter === r ? "bg-card font-medium shadow-xs" : "text-muted-foreground")}>
-                {r === "themen" ? "Themen" : r === "bloecke" ? "Blöcke" : "Personen"}
+                className={cn("min-w-0 truncate rounded-md px-1 py-1 text-xs", reiter === r ? "bg-card font-medium shadow-xs" : "text-muted-foreground")}>
+                {text}{r === "pool" && vorschlaege.length > 0 && <span className="ml-0.5 tabular-nums">({vorschlaege.length})</span>}
               </button>
             ))}
           </div>
-          {reiter !== "bloecke" && <Input value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Suchen" aria-label="Suchen" className="h-8" />}
+          {(reiter === "themen" || reiter === "personen") && <Input value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Suchen" aria-label="Suchen" className="h-8" />}
         </CardHeader>
         <CardContent className="min-h-0 overflow-y-auto">
           {reiter === "themen" && (
@@ -666,6 +688,63 @@ function Seitenleiste({ termine, termin, position, themen, bloecke, personen, bu
               {!bloecke.some((b) => b.aktiv) && <li className="py-6 text-center text-sm text-muted-foreground">Keine Blöcke. Anlegen in der Verwaltung.</li>}
             </ul>
           )}
+          {reiter === "pool" && (
+            <ul className="grid gap-1">
+              {vorschlaege.map((v) => (
+                <ZiehZeile key={v.id} id={`vorschlag-${v.id}`} daten={{ art: "vorschlag", id: v.id, titel: v.titel }} busy={busy}>
+                  <span className="min-w-0 text-sm">
+                    <span className="block font-medium">{v.titel}</span>
+                    <span className="block text-xs text-muted-foreground">von {v.einreicher} · {datumLang(v.vorgeschlagenAm.slice(0, 10))}</span>
+                    {v.beschreibung && <span className="line-clamp-2 block text-xs text-muted-foreground">{v.beschreibung}</span>}
+                    <span className="mt-1 flex gap-1">
+                      <Button size="xs" variant="outline" disabled={busy} onClick={async () => {
+                        const r = await dpApi<{ neuesThema: boolean }>("POST", `/themenvorschlaege/${v.id}/uebernehmen`, {});
+                        setMeldung(r.ok ? { ok: true, text: `„${v.titel}“ ${r.data.neuesThema ? "in den Katalog übernommen" : "dem vorhandenen Thema zugeordnet"}` } : { ok: false, text: r.message });
+                        await katalogeLaden();
+                      }}>Als Thema übernehmen</Button>
+                      <Button size="xs" variant="ghost" disabled={busy} onClick={async () => {
+                        const r = await dpApi("PATCH", `/themenvorschlaege/${v.id}`, { status: "verworfen" });
+                        setMeldung(r.ok ? { ok: true, text: `Vorschlag „${v.titel}“ verworfen` } : { ok: false, text: r.message });
+                        await katalogeLaden();
+                      }}>Verwerfen</Button>
+                    </span>
+                  </span>
+                  <Button size="icon-sm" variant="outline" aria-label={`Vorschlag ${v.titel} zum Termin`} disabled={busy || !termin}
+                    onClick={async () => {
+                      const r = await aktion("POST", `/themenvorschlaege/${v.id}/uebernehmen`, { terminId: termin!.id }, `Vorschlag „${v.titel}“ übernommen`);
+                      if (r.ok) await katalogeLaden();
+                    }}><Plus /></Button>
+                </ZiehZeile>
+              ))}
+              {!vorschlaege.length && <li className="py-6 text-center text-sm text-muted-foreground">Keine offenen Vorschläge. Mitglieder reichen sie unter /dienstplan ein.</li>}
+            </ul>
+          )}
+          {reiter === "ausgleich" && (() => {
+            const { durchschnitt, zeilen } = ausgleichTabelle(ausgleich.personen,
+              zaehleEinteilungen(positionenAus(termine), ausgleich.personen.map((p) => p.kameradId)));
+            return (
+              <div className="grid gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Einteilungen je Person (Themen mit Verantwortung; ohne K, G, O und ausgefallene Termine). Wenigste oben.
+                  {ausgleich.vorjahr && ` Klammer: ${ausgleich.vorjahr}.`} Auf ein Thema ziehen zum Eintragen.
+                </p>
+                <ul className="grid gap-0.5">
+                  {zeilen.map((z) => (
+                    <ZiehZeile key={z.kameradId} id={`ausgleich-${z.kameradId}`} daten={{ art: "person", body: { kameradId: z.kameradId }, titel: z.name }} busy={busy}>
+                      <span className={cn("text-sm", z.deutlichUnter && "font-semibold text-warning")}>
+                        {z.name} <span className="tabular-nums">{ausgleichText(z.anzahl, durchschnitt)}</span>
+                        {z.vorjahr !== null && <span className="text-xs text-muted-foreground tabular-nums"> ({z.vorjahr})</span>}
+                        {z.deutlichUnter && <span className="sr-only"> deutlich unter dem Durchschnitt</span>}
+                      </span>
+                      <Button size="icon-sm" variant="outline" aria-label={`${z.name} als Verantwortliche`} disabled={busy || !position}
+                        onClick={() => zuPosition({ kameradId: z.kameradId })}><Plus /></Button>
+                    </ZiehZeile>
+                  ))}
+                  {!zeilen.length && <li className="py-6 text-center text-sm text-muted-foreground">Ausgleichsliste ist leer. Pflege in der Verwaltung.</li>}
+                </ul>
+              </div>
+            );
+          })()}
           {reiter === "personen" && (
             <div className="grid gap-2">
               {!position && <p className="text-sm text-muted-foreground">Person auf ein Thema ziehen oder ein Thema im Termin anklicken und „+“ wählen.</p>}

@@ -34,6 +34,9 @@ const tmp = mkdtempSync(join(tmpdir(), "dp-import-"));
 const datei = join(tmp, "plan.xlsx");
 const zuordnung = join(tmp, "zuordnung.json");
 const ids = { kam: [] };
+// Ausgleichsliste: Der Import füllt sie nur, wenn sie leer ist. Darum vorher
+// sichern und leeren, am Ende wiederherstellen.
+let ausgleichVorher = [];
 
 function lauf(args, env = {}) {
   const r = spawnSync(process.execPath, [join(P, "scripts", "dienstplan-import.mjs"), "--datei", datei, "--bericht", tmp, "--zuordnung", zuordnung, ...args], {
@@ -75,6 +78,8 @@ async function excel() {
 }
 
 try {
+  ausgleichVorher = [...await owner`select organisation_id, kamerad_id from dienstplan.ausgleich_personen`];
+  await owner`delete from dienstplan.ausgleich_personen`;
   await excel();
   writeFileSync(zuordnung, "{}");
   // Kameraden (Owner): Alpha eindeutig, Beta eindeutig, Gamma doppelt (mehrdeutig), Omega fehlt
@@ -159,14 +164,18 @@ try {
   const extern = await owner`select count(*)::int as n from dienstplan.externe_personen where organisation in (${`OF ${S}`}, ${`${S} Verein`})`;
   check("Externe Personen nur einmal angelegt", extern[0].n === 2, String(extern[0].n));
   const ausgleich = await owner`select kamerad_id from dienstplan.ausgleich_personen where kamerad_id in ${owner(ids.kam)} order by kamerad_id`;
-  check("Ausgleichspersonen aus dem Blatt Gruppenführer", JSON.stringify(ausgleich.map((x) => x.kamerad_id)) === JSON.stringify([alpha, beta]));
+  check("Ausgleichspersonen aus dem Blatt Gruppenführer (Liste war leer)", JSON.stringify(ausgleich.map((x) => x.kamerad_id)) === JSON.stringify([alpha, beta]));
   const neueKam = await owner`select count(*)::int as n from core.kameraden where name like ${S + "%"}`;
   check("Regulärer Import legt keine Kameraden an", neueKam[0].n === ids.kam.length);
 
   // ── Wiederholen ──
   r = lauf(["--als", String(importeur)]);
   check("Erneuter Import ohne --ersetzen → Exit 1", r.code === 1 && r.out.includes("Plan existiert bereits"), String(r.code));
+  await owner`delete from dienstplan.ausgleich_personen where kamerad_id = ${beta}`; // "gepflegte" Liste
   r = lauf(["--als", String(importeur), "--ersetzen"]);
+  const ausgleich2 = await owner`select kamerad_id from dienstplan.ausgleich_personen where kamerad_id in ${owner(ids.kam)}`;
+  check("Gepflegte Ausgleichsliste wird nicht überschrieben (Vorschlag nur bei leerer Liste)",
+    ausgleich2.length === 1 && ausgleich2[0].kamerad_id === alpha && r.out.includes("Vorschlag aus dem Excel nicht übernommen"), r.out.slice(-300));
   const nach = await owner`select count(*)::int as n from dienstplan.termine t join dienstplan.plaene p on p.id = t.plan_id where p.jahr in ${owner(JAHRE)}`;
   const kat2 = await owner`select count(*)::int as n from dienstplan.themen where titel like ${S + "%"}`;
   const bl2 = await owner`select count(*)::int as n from dienstplan.themenbloecke where name like ${S + "%"}`;
@@ -191,6 +200,12 @@ try {
       await owner`delete from core.mitglieder_audit where kamerad_id in ${owner(ids.kam)}`;
       await owner`delete from core.kameraden where id in ${owner(ids.kam)}`;
     }
+    await owner`delete from dienstplan.ausgleich_personen`;
+    for (const a of ausgleichVorher) {
+      await owner`insert into dienstplan.ausgleich_personen (organisation_id, kamerad_id) values (${a.organisation_id}, ${a.kamerad_id}) on conflict do nothing`;
+    }
+    const [{ n: ag }] = await owner`select count(*)::int n from dienstplan.ausgleich_personen`;
+    if (ag !== ausgleichVorher.length) { console.log(`AUFRÄUMEN: Ausgleichsliste ${ag} statt ${ausgleichVorher.length}`); fail++; }
     const rest = await owner`select count(*)::int as n from core.kameraden where name like ${S + "%"}`;
     if (rest[0].n) { console.log(`AUFRÄUMEN: ${rest[0].n} Kameraden mit Präfix übrig`); fail++; }
   } catch (e) { console.log("AUFRÄUMEN FEHLGESCHLAGEN:", e.message); fail++; }

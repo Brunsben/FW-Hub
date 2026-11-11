@@ -467,3 +467,23 @@ export function pruefeTerminZustand(b: Body): Pruefung<TerminZustand> {
     };
   });
 }
+
+// ── Themenvorschläge (Pool, Phase 8) ─────────────────────────────────────────
+
+export function pruefeVorschlag(b: Body): Pruefung<{ titel: string; beschreibung: string | null }> {
+  return lauf(() => ({
+    titel: pflichtText(b.titel, "titel", 200),
+    beschreibung: optText(b.beschreibung, "beschreibung", 2000, true),
+  }));
+}
+
+export function pruefeVorschlagStatus(b: Body): Pruefung<{ status: "offen" | "verworfen" }> {
+  return lauf(() => {
+    if (b.status !== "offen" && b.status !== "verworfen") raus("status muss offen oder verworfen sein (übernehmen über /uebernehmen)");
+    return { status: b.status as "offen" | "verworfen" };
+  });
+}
+
+export function pruefeUebernehmen(b: Body): Pruefung<{ terminId: number | null }> {
+  return lauf(() => ({ terminId: b.terminId === undefined || b.terminId === null ? null : id(b.terminId, "terminId") }));
+}

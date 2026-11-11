@@ -6,6 +6,8 @@ import {
   pruefeTerminThemaAendern, pruefeTerminZustand, pruefeThema, pruefeVerantwortlicher,
 } from "../src/lib/dienstplan/eingabe.ts";
 import { ersetzeId, unterschiede, zustandVon } from "../src/lib/dienstplan/rueckgaengig.ts";
+import { ausgleichTabelle, ausgleichText, pflichtZuordnen, positionenAus, zaehleEinteilungen } from "../src/lib/dienstplan/ausgleich.ts";
+import { pruefeUebernehmen, pruefeVorschlag, pruefeVorschlagStatus } from "../src/lib/dienstplan/eingabe.ts";
 import { berechneHinweise } from "../src/lib/dienstplan/hinweise.ts";
 
 let fail = 0, ok = 0;
@@ -112,6 +114,43 @@ check("unterschiede: geändert, angelegt, gelöscht; unverändert nicht",
 const e = ersetzeId([{ text: "x", aenderungen: [{ terminId: 3, vorher: null, nachher: null, stempel: null }] }, { text: "y", aenderungen: [{ terminId: 5, vorher: null, nachher: null, stempel: null }] }], 3, 30);
 check("ersetzeId: alte id in allen Einträgen ersetzt", e[0].aenderungen[0].terminId === 30 && e[1].aenderungen[0].terminId === 5);
 
+// Pool (Phase 8)
+gut("Vorschlag: Titel getrimmt, Beschreibung mehrzeilig", pruefeVorschlag({ titel: "  Neue  Pumpe ", beschreibung: "a\nb" }), { titel: "Neue Pumpe", beschreibung: "a\nb" });
+schlecht("Vorschlag ohne Titel", pruefeVorschlag({ titel: " " }), "titel");
+schlecht("Vorschlag: Beschreibung zu lang", pruefeVorschlag({ titel: "x", beschreibung: "y".repeat(2001) }), "zu lang");
+gut("Vorschlag verwerfen", pruefeVorschlagStatus({ status: "verworfen" }));
+schlecht("Vorschlag-Status übernommen nur über /uebernehmen", pruefeVorschlagStatus({ status: "uebernommen" }), "uebernehmen");
+gut("Übernehmen ohne Termin", pruefeUebernehmen({}), { terminId: null });
+schlecht("Übernehmen: terminId als Text", pruefeUebernehmen({ terminId: "3" }));
+
+// Ausgleich (Phase 8)
+const pos = [
+  { kuerzel: "D", ausgefallen: false, kameradIds: [1, 2] },
+  { kuerzel: "D", ausgefallen: false, kameradIds: [1] },
+  { kuerzel: "Z", ausgefallen: false, kameradIds: [3, 3] },
+  { kuerzel: "K", ausgefallen: false, kameradIds: [2] },
+  { kuerzel: "g", ausgefallen: false, kameradIds: [2] },
+  { kuerzel: "O", ausgefallen: false, kameradIds: [2] },
+  { kuerzel: "D", ausgefallen: true, kameradIds: [2] },
+  { kuerzel: "D", ausgefallen: false, kameradIds: [99] },
+];
+const zl = zaehleEinteilungen(pos, [1, 2, 3, 4]);
+check("Ausgleich: zählt je Position einmal; K, G, O, ausgefallene und Fremde nicht",
+  zl.get(1) === 2 && zl.get(2) === 1 && zl.get(3) === 1 && zl.get(4) === 0 && !zl.has(99), JSON.stringify([...zl]));
+const tab = ausgleichTabelle([{ kameradId: 1, name: "Bruns" }, { kameradId: 2, name: "Alpha", vorjahr: 5 }, { kameradId: 3, name: "Beta" }, { kameradId: 4, name: "Gamma" }],
+  new Map([[1, 6], [2, 4], [3, 4], [4, 1]]));
+check("Ausgleich: Durchschnitt und Sortierung (wenigste oben, dann Name)", tab.durchschnitt === 3.75 && tab.zeilen.map((z) => z.name).join() === "Gamma,Alpha,Beta,Bruns");
+check("Ausgleich: deutlich unter dem Durchschnitt nur bei großem Abstand", tab.zeilen[0].deutlichUnter && !tab.zeilen[1].deutlichUnter && tab.zeilen[1].vorjahr === 5);
+check("Ausgleich: Text wie Spec", ausgleichText(3, 4.2) === "3 · Ø 4,2" && ausgleichText(0, 0) === "0 · Ø 0,0");
+check("Ausgleich: leere Liste", ausgleichTabelle([], new Map()).zeilen.length === 0);
+check("Ausgleich: Positionen aus Terminen (Platzhalter ohne kameradId)",
+  JSON.stringify(positionenAus([{ kuerzel: "D", ausgefallen: false, themen: [{ verantwortliche: [{ kameradId: 1 }, { kameradId: null }] }] }])) === JSON.stringify([{ kuerzel: "D", ausgefallen: false, kameradIds: [1] }]));
+
+// Pflichtthemen-Vorschlag
+const pz = pflichtZuordnen([{ id: 1, titel: "Sicherheitsbelehrung" }, { id: 2, titel: " erste  Hilfe" }, { id: 3, titel: "AT Unterweisung / Pumpenkunde" }]);
+check("Pflicht-Vorschlag: Schreibweisen zugeordnet, Teiltreffer nicht", pz.map((x) => x.themaId).join() === "1,2,", JSON.stringify(pz.map((x) => x.themaId)));
+check("Pflicht-Vorschlag: Atemschutz mit Zielgruppe", pz[2].vorschlag.zielgruppe === "Atemschutzgeräteträger");
+
 // Hinweise
 const T = (id, datum, kuerzel, themen = [], extra = {}) => ({ id, datum, kuerzel, ausgefallen: false, feiertag: null, themen, ...extra });
 const th = (id, titel, verantwortliche = [], themaId = null) => ({ id, titel, themaId, verantwortliche });
@@ -123,13 +162,13 @@ const h = berechneHinweise([
   T(4, "2027-01-26", "K", [th(12, "Grillen", [v(5, "Alpha")])]),
   T(5, "2027-04-05", "D", [th(13, "TH", [v(6, "Beta")])], { feiertag: "Ostermontag" }),
   T(6, "2027-02-02", "D", [], { ausgefallen: true, feiertag: "x" }),
-], [{ id: 7, titel: "Knoten" }, { id: 8, titel: "Erste Hilfe" }]);
+], [{ id: 7, titel: "Knoten" }, { id: 8, titel: "Erste Hilfe" }, { id: 9, titel: "Atemschutzunterweisung", zielgruppe: "Atemschutzgeräteträger" }]);
 const arten = (a) => h.filter((x) => x.art === a);
 check("Hinweis: Dienstabend ohne Thema (nicht bei Z, nicht ausgefallen)", arten("ohne_thema").map((x) => x.terminId).join() === "1");
 check("Hinweis: Position ohne Verantwortliche nur bei D", arten("ohne_verantwortliche").map((x) => x.terminId).join() === "2");
 check("Hinweis: Feiertag (nicht bei ausgefallenen)", arten("feiertag").map((x) => x.terminId).join() === "5" && arten("feiertag")[0].text.includes("Ostermontag"));
 check("Hinweis: Person am selben Tag in zwei Terminen", arten("doppelt").length === 1 && arten("doppelt")[0].text.includes("Alpha") && arten("doppelt")[0].text.includes("26.01."));
-check("Hinweis: fehlendes Pflichtthema", arten("pflichtthema").map((x) => x.text).join() === "Pflichtthema „Erste Hilfe“ fehlt im Plan");
+check("Hinweis: fehlendes Pflichtthema, mit Zielgruppe", arten("pflichtthema").map((x) => x.text).join("|") === "Pflichtthema „Erste Hilfe“ fehlt im Plan|Pflichtthema „Atemschutzunterweisung“ (Atemschutzgeräteträger) fehlt im Plan");
 
 console.log(`\n${ok} OK, ${fail} Fehler`);
 process.exit(fail ? 1 : 0);
