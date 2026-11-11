@@ -143,6 +143,12 @@ vite.config.ts.timestamp-*
 .vite/
 cookies.txt
 
-data/import/
+# Personendaten (Dienstplan-Import, Mitglieder-Exporte): nie committen.
+# Durchgesetzt zusätzlich vom Pre-Commit-Hook scripts/git-hooks/pre-commit
+# (einrichten: npm run hooks:install).
+data/
+*.xlsx
+*.csv
+zuordnung*.json
 # macOS
 .DS_Store

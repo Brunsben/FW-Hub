@@ -673,6 +673,13 @@ verlinken auf /mitglieder/[id] (`MitgliedLink`, Ziel aus `mitgliedLinkZiel`).
 - **Tests:** `scripts/test-mitglieder-rechte.mjs` und `test-mitglieder-lib.mjs`
   (ohne Server), `scripts/test-mitglieder.mjs` (API und Seiten, mit Dev-Server)
 
+## Personendaten nie ins Repo
+`data/` (in jedem Ordner), `*.xlsx`, `*.csv` und `zuordnung*.json` stehen in
+`.gitignore`. Zusätzlich bricht der Pre-Commit-Hook `scripts/git-hooks/pre-commit`
+jeden Commit mit solchen Dateien ab, auch nach `git add -f`. Einmal je Klon
+einrichten: `npm run hooks:install` (setzt `core.hooksPath`). Testdateien
+(z. B. CSV für Importtests) erzeugen die Tests zur Laufzeit im Temp-Verzeichnis.
+
 ## Grundregel für ALLE Agents: Erst verifizieren, dann berichten
 Nach JEDER Datei-Operation (Schreiben, Kopieren, Umbenennen, Löschen) den
 tatsächlichen Zustand unabhängig gegenprüfen (Datei erneut lesen, Ordner
