@@ -11,7 +11,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 |---|---|---|
 | 1 | Core-Migration (Spitzname, Anzeigename-Funktion mit Tests) | fertig (Migration 0016 lokal angewendet, nicht auf dem Server) |
 | 2 | Schema `dienstplan`, Migration, RLS, Claim `dienst_rolle`, Seeds | fertig (Migrationen 0017, 0018 lokal angewendet, nicht auf dem Server) |
-| 3 | API inkl. Generator und Akzeptanztest 2026 | offen |
+| 3 | API inkl. Generator und Akzeptanztest 2026 | fertig (Verwaltung Kategorien/Regeln folgt mit Phase 5, Versionen mit Phase 9) |
 | 4 | Importskript Excel (Themenkatalog, Blockvorschläge, Verantwortliche, Pläne) | fertig (lokal mit Testdaten importiert; echter Import wartet auf Klärung, siehe Phase 4) |
 | 5 | Eingabemaske (Klickbedienung), Verwaltung, Feiertagshinweise | offen |
 | 6 | Präsentationsansicht mit Live-Aktualisierung und Anzeige-Token | offen |
@@ -110,6 +110,8 @@ Vor dem Ausrollen
 1. Lokal grün: `npx tsc --noEmit`, `npm run build`, `node scripts/test-haertung.mjs`,
    `node scripts/test-dienstplan-rls.mjs`, `node scripts/test-anzeigename.mjs`,
    `node scripts/test-dienstplan-import-lib.mjs`, `node scripts/test-dienstplan-import.mjs`,
+   `node scripts/test-dienstplan-kalender.mjs`, `node scripts/test-dienstplan-eingabe.mjs`,
+   mit Dev-Server `node scripts/test-dienstplan-api.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-auth.mjs`,
@@ -214,8 +216,10 @@ Import der Excel-Pläne 2023–2026 (Phase 4, nach Migrationen und App)
 Sichtbarkeit (Spec 11: Nutzer sehen das Modul erst nach Release 1)
 - Bis zur Freischaltung gibt es keinen Eintrag in Kopfzeile, Kacheln und
   Profil. Die Rolle ist nur im Rollen-Abschnitt (globaler Admin) sichtbar. Die
-  Lese-Route `/api/dienstplan/kategorien` ist für angemeldete Personen
-  erreichbar, aber nirgends verlinkt.
+  API unter `/api/dienstplan` (seit Phase 3) ist für angemeldete Personen
+  erreichbar, aber nirgends verlinkt. Schreiben dürfen nur Konten mit
+  dienst_rolle Planer/Admin, und die vergibt nur der globale Admin. Ohne Pläne
+  in der Produktion (vor dem Import) gibt es dort nichts zu sehen.
 - Freischaltung (eigener Schritt nach der Abnahme): `sichtbareModule()` in
   app-header.tsx, `MODUL_ICONS`, `ModulKey` in module-guard.ts, Profilzeile
   "Dienstplan" (ohne Rolle: Mitglied).
@@ -570,8 +574,97 @@ Verbleibende Hinweise im Bericht (blockieren nicht)
 ## Phase 3 – API und Generator
 
 ### Entscheidungen
+- Aufbau:
+  - `src/lib/dienstplan/kalender.ts` (rein): Datumsrechnung auf ISO-Strings,
+    gesetzliche Feiertage in Niedersachsen (lokal berechnet), Rhythmus-Treffer
+    (`wochen_zyklus` mit mathematischem mod auch vor dem Anker,
+    `monats_wochentag` mit n = 1–5 oder -1, Gültigkeit `gueltig_ab/_bis` je
+    Datum, nur aktive Regeln).
+  - `eingabe.ts` (rein): Eingabeprüfung; unbekannte Felder werden ignoriert,
+    fehlende beim Ändern bleiben unverändert, null leert.
+  - `hinweise.ts` (rein): Datentypen des geladenen Plans und Hinweise
+    (Spec 7.6).
+  - `plan.ts`: Plan laden (Termine, Themen, Verantwortliche mit Anzeigenamen,
+    Feiertag je Termin, Hinweise), Generator, Positionen.
+  - `route.ts`: gemeinsamer Rahmen `dienstplanRoute(mindestrolle, arbeit)`:
+    401 ohne Session, 403 unter der Mindestrolle, eine Transaktion im
+    Dienstplan-Scope, Fehler → Status (keine Zeile → 404, RLS/Rechte → 403,
+    Unique → 409, Fremdschlüssel/Check → 400).
+- Generator (Spec 5.3): legt je Treffer einen Termin mit `quelle = rhythmus`,
+  `regel_id`, `rhythmus_datum` an, `ON CONFLICT` auf den Unique-Index (idempotent).
+  Verschobene Termine behalten `rhythmus_datum` und werden nicht neu angelegt.
+  Rhythmus-Termine löscht die API nicht (409), sie werden abgesagt
+  (`ausgefallen`). Der Generator läuft nur für Entwürfe; ein Kürzel ohne aktive
+  Kategorie wird übersprungen und gemeldet.
+- Akzeptanztest 2026 (Spec 5.3) in `scripts/test-dienstplan-kalender.mjs` mit
+  den Regeln aus der Datenbank (Seed 0018) gegen die Daten des bisherigen Plans
+  (nur Daten, keine Namen, fest im Test): D = Dienstabende + JHV-Slots, Z und G
+  exakt, O ab April; Januar erzeugt den 15.01. statt Fr 23.01. 2026 fällt kein
+  Rhythmus-Termin auf einen Feiertag.
+- Routen (alle unter `/api/dienstplan`, Mindestrolle in Klammern):
+  - `GET plaene` (Mitglied, RLS: Mitglieder nur freigegebene), `POST plaene`
+    `{jahr, generieren?}` (Admin; Generator standardmäßig an; 409 bei
+    vorhandenem Jahr)
+  - `GET plaene/[jahr]` (Mitglied) mit ETag `"v<version>-<status>"` und 304 bei
+    If-None-Match; `PATCH plaene/[jahr]` `{status}` (Admin, Freigabe setzt
+    `freigegeben_am/_von`, Zurücknehmen leert sie); `DELETE plaene/[jahr]`
+    (Admin, nur Entwurf)
+  - `POST plaene/[jahr]/generieren` (Planer, nur Entwurf)
+  - `POST plaene/[jahr]/termine` (Planer, Datum im Planjahr, aktive Kategorie),
+    `PATCH/DELETE termine/[id]` (Planer; DELETE nur manuelle Termine)
+  - `POST termine/[id]/themen` `{themaId | titelFreitext | blockId}` (Planer,
+    ans Ende; Block → alle Themen mit `aus_block_id`),
+    `PATCH termin-themen/[id]` `{position?, terminId?}` (umsortieren, in anderen
+    Termin desselben Plans verschieben samt Verantwortlichen),
+    `DELETE termin-themen/[id]`; Positionen danach lückenlos 1..n
+  - `POST termin-themen/[id]/verantwortliche` `{kameradId | externePersonId}`
+    (Planer; nur aktive; doppelt → 409; Platzhalter nicht über die API),
+    `DELETE termin-verantwortliche/[id]`
+  - `GET/POST themen`, `PATCH themen/[id]` (Lesen Mitglied, Schreiben Planer;
+    Titel ohne Groß/klein eindeutig; `zuletzt` = letztes durchgeführtes Datum
+    bis heute; kein Löschen, stattdessen `aktiv`)
+  - `GET/POST bloecke`, `PATCH/DELETE bloecke/[id]` (Löschen nur unbenutzt,
+    sonst 409 → deaktivieren)
+  - `GET/POST externe-personen`, `PATCH externe-personen/[id]` (E-Mail nur für
+    Planer und Admin in der Antwort)
+  - `GET personen` (Planer): aktive Kameraden mit Anzeigename und aktive
+    externe Personen für die Auswahl
+  - `GET kategorien` (Mitglied, aus Phase 2)
+- Änderungen nach der Freigabe sind für Planer erlaubt (Spec 6, Einzeländerungen).
+  Die Markierung "geändert" und die Version bei der Freigabe kommen mit Phase 9.
+- Hinweise (nicht blockierend, in `GET plaene/[jahr]`): Dienstabend ohne Thema,
+  Position eines Dienstabends ohne Verantwortliche, Feiertag, Kamerad am selben
+  Tag in mehreren Terminen, aktives Pflichtthema fehlt im Plan. Ausgefallene
+  Termine zählen nicht.
+
+Geprüft (11.11.2026, Mac)
+- `scripts/test-dienstplan-kalender.mjs` 26/0 (inkl. Akzeptanztest 2026),
+  `scripts/test-dienstplan-eingabe.mjs` 41/0, `scripts/test-dienstplan-api.mjs`
+  69/0 (Dev-Server; Admin/Planer/Mitglied-Konten, Jahr 2095, räumt selbst auf),
+  `scripts/test-dienstplan-auth.mjs` 62/0 (findet die 17 neuen Routen selbst).
+- Gegenproben: (1) Rollenprüfung im Routen-Rahmen abgeschaltet → Mitglieder
+  können trotzdem nichts schreiben (Datenbank verweigert, 404 statt 403); der
+  Test meldet 6 Fehler. (2) ETag konstant → Test meldet den Fehler. Beides
+  zurückgenommen.
+- tsc, eslint, `npm run build` sauber; test-dienstplan-rls, test-haertung,
+  test-mitglieder, test-sitzungen, test-ui-a, test-food und die Import-Tests grün.
+
 ### Abweichungen von der Spec
+- Feiertage ohne Bibliothek (`feiertagejs` war nur ein Beispiel): eigene
+  Berechnung (Osterformel) in `kalender.ts`, getestet für 2026 und den
+  Reformationstag ab 2018.
+- Verwaltung von Kategorien und Rhythmusregeln (Spec 7.5) samt Vorschau und
+  "Zwischendienst versetzen" (Spec 5.2a) kommen mit der Verwaltungsoberfläche in
+  Phase 5. Die API dafür entsteht dort.
+- Freigabe legt noch keine Version in `plan_versionen` an (Spec 8), das kommt mit
+  Phase 9.
+- Kopieren einer Themenposition (Drag and Drop mit Alt-Taste) kommt mit Phase 7.
+
 ### Offene Fragen
+- `GET personen` ist nur in der Route auf Planer beschränkt: Mitglieder dürfen
+  `kameraden_namen()` lesen (sie sehen die Namen im Plan, Entscheidung Phase 2),
+  die Datenbank trennt hier nicht. Die Liste enthält nur Namensfelder. Bewusst
+  so gelassen; bei Bedarf eigene Funktion nur für Planer.
 
 ## Phase 5 – Eingabemaske, Verwaltung, Feiertage
 
