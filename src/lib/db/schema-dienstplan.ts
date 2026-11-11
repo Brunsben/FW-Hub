@@ -218,13 +218,17 @@ export const dpExportProfile = dp.table("export_profile", {
 export const dpExportLaeufe = dp.table("export_laeufe", {
   id: serial("id").primaryKey(),
   planId: integer("plan_id").notNull().references(() => dpPlaene.id, { onDelete: "cascade" }),
-  profilId: integer("profil_id").notNull().references(() => dpExportProfile.id),
+  // null bei format = 'ics' (Phase 10: iCal-Änderungsexport ohne Profil)
+  profilId: integer("profil_id").references(() => dpExportProfile.id),
+  format: text("format").notNull().default("csv"),
   modus: text("modus").notNull(),
   stand: jsonb("stand").notNull(),
   erstelltAm: timestamp("erstellt_am", { withTimezone: true }).notNull().defaultNow(),
   erstelltVon: integer("erstellt_von").notNull().references(() => kameraden.id),
 }, (t) => [
   check("export_laeufe_modus", sql`${t.modus} IN ('komplett', 'aenderungen')`),
+  check("export_laeufe_format", sql`(${t.format} = 'csv' AND ${t.profilId} IS NOT NULL) OR (${t.format} = 'ics' AND ${t.profilId} IS NULL)`),
+  index("idx_export_laeufe_plan").on(t.planId, t.format, t.profilId),
 ]);
 
 export const dpErinnerungsEinstellungen = dp.table("erinnerungs_einstellungen", {
@@ -283,4 +287,23 @@ export const dpAnzeigeTokens = dp.table("anzeige_tokens", {
   uniqueIndex("anzeige_tokens_hash").on(t.tokenHash),
   index("idx_anzeige_tokens_plan").on(t.planId),
   check("anzeige_tokens_hash_format", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
+]);
+
+// iCal-Abo (Spec 9.4, Phase 10): geheime Abo-URL für Google-Kalender und DIVERA.
+// Je Organisation höchstens ein aktives Abo (widerrufen_am IS NULL). Gespeichert
+// wird nur der SHA-256-Hash; die URL sieht der Admin einmalig beim Erzeugen.
+// Das Token prüft dienstplan.abo_scope() (Migration 0022).
+export const dpIcalAbos = dp.table("ical_abos", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => dpOrganisationen.id),
+  tokenHash: text("token_hash").notNull(),
+  erstelltVon: integer("erstellt_von").notNull().references(() => kameraden.id),
+  erstelltAm: timestamp("erstellt_am", { withTimezone: true }).notNull().defaultNow(),
+  widerrufenAm: timestamp("widerrufen_am", { withTimezone: true }),
+  zuletztAbgerufenAm: timestamp("zuletzt_abgerufen_am", { withTimezone: true }),
+  abrufe: integer("abrufe").notNull().default(0),
+}, (t) => [
+  uniqueIndex("ical_abos_hash").on(t.tokenHash),
+  uniqueIndex("ical_abos_ein_aktives").on(t.organisationId).where(sql`${t.widerrufenAm} IS NULL`),
+  check("ical_abos_hash_format", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
 ]);

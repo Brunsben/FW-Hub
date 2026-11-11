@@ -155,6 +155,13 @@
       "when": 1794433339112,
       "tag": "0021_dienstplan_versionen_lesen",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794433934896,
+      "tag": "0022_dienstplan_exporte",
+      "breakpoints": true
     }
   ]
 }

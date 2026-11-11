@@ -401,10 +401,67 @@ try {
   await als({}, async (tx) => {
     check("8 Ohne Scope: keine Versionen", (await versionen(tx)).length === 0);
   });
+
+  // ── 9. iCal-Abo: ical_abos und abo_scope() (Migration 0022) ────────────────
+  // Org 1 hat evtl. schon ein aktives Abo (Entwicklungsdaten): Testabo nur für Org 2.
+  const HAB = h(stamp + "-abo"), HWD = h(stamp + "-abo-alt");
+  await owner`insert into dienstplan.ical_abos (organisation_id, token_hash, erstellt_von, widerrufen_am) values (2, ${HWD}, ${ADM}, now())`;
+  await owner`insert into dienstplan.ical_abos (organisation_id, token_hash, erstellt_von) values (2, ${HAB}, ${ADM})`;
+  await owner.begin(async (tx) => {
+    await tx`select set_config('app.dienst_rolle', 'Admin', true)`;
+    await tx`update dienstplan.plaene set status = 'freigegeben' where id = ${ORG2}`;
+  });
+  await als({}, async (tx) => {
+    const [r] = await tx`select dienstplan.abo_scope(${HAB}) as org`;
+    check("9 abo_scope: gültiges Token → Organisation 2", r.org === 2);
+    const g = (await tx`select current_setting('app.dienst_rolle') r, current_setting('app.dienst_org') o, current_setting('app.kamerad_id') k`)[0];
+    check("9 abo_scope: setzt Mitglied, Organisation, kamerad_id 0", g.r === "Mitglied" && g.o === "2" && g.k === "0", JSON.stringify(g));
+    const pl = await tx`select id, status from dienstplan.plaene`;
+    check("9 Abo-Scope: sieht nur freigegebene Pläne der eigenen Organisation", pl.length === 1 && pl[0].id === ORG2, JSON.stringify(pl));
+    check("9 Abo-Scope: sieht keine Abos (kein Admin)", (await anzahl(tx, "ical_abos")) === 0);
+    const u = await tx`update dienstplan.termine set ort = 'x' returning id`;
+    check("9 Abo-Scope: schreibt nichts (0 Zeilen)", u.length === 0);
+  });
+  // Der Abrufzähler wird mit der Transaktion zurückgerollt; gezählt wird im API-Test (test-dienstplan-export).
+  for (const [n, hash] of [["widerrufenes", HWD], ["unbekanntes", h(stamp + "-nix")], ["kaputtes", "abc"]]) {
+    await als({}, async (tx) => {
+      const e = await fehler(tx, "42501", (sp) => sp`select dienstplan.abo_scope(${hash})`);
+      check(`9 abo_scope: ${n} Token → 42501`, e.ok, e.got);
+    });
+  }
+  await als(mit, async (tx) => {
+    const e = await fehler(tx, "42501", (sp) => sp`select dienstplan.abo_scope(${HAB})`);
+    check("9 abo_scope: in bestehendem Scope → 42501", e.ok, e.got);
+  });
+  await als({ "app.kamerad_id": MIT }, async (tx) => {
+    const e = await fehler(tx, "42501", (sp) => sp`select dienstplan.abo_scope(${HAB})`);
+    check("9 abo_scope: mit gesetzter kamerad_id → 42501", e.ok, e.got);
+  });
+  await als(G("Admin", 2, ADM), async (tx) => {
+    check("9 Admin Org 2: sieht beide Abos der Organisation", (await anzahl(tx, "ical_abos")) === 2);
+    const e = await fehler(tx, "23505", (sp) => sp`insert into dienstplan.ical_abos (organisation_id, token_hash, erstellt_von) values (2, ${h(stamp + "-zwei")}, ${ADM})`);
+    check("9 zweites aktives Abo → 23505", e.ok, e.got);
+    const e2 = await fehler(tx, "42501", (sp) => sp`insert into dienstplan.ical_abos (organisation_id, token_hash, erstellt_von, widerrufen_am) values (2, ${h(stamp + "-x")}, ${PLN}, now())`);
+    check("9 Abo im Namen einer anderen Person → 42501", e2.ok, e2.got);
+    const e3 = await fehler(tx, "42501", (sp) => sp`update dienstplan.ical_abos set abrufe = 0`);
+    check("9 Zähler ändern → 42501 (nur widerrufen_am)", e3.ok, e3.got);
+    const w = await tx`update dienstplan.ical_abos set widerrufen_am = now() where token_hash = ${HAB} returning id`;
+    check("9 Admin widerruft", w.length === 1);
+  });
+  await als(G("Admin", 1, ADM), async (tx) => {
+    check("9 Admin Org 1: sieht Abos der Organisation 2 nicht", (await anzahl(tx, "ical_abos", "organisation_id = 2")) === 0);
+  });
+  await als(G("Planer", 2, PLN), async (tx) => {
+    check("9 Planer: sieht keine Abos", (await anzahl(tx, "ical_abos")) === 0);
+    const e = await fehler(tx, "42501", (sp) => sp`insert into dienstplan.ical_abos (organisation_id, token_hash, erstellt_von) values (2, ${h(stamp + "-p")}, ${PLN})`);
+    check("9 Planer: Abo anlegen → 42501", e.ok, e.got);
+  });
+  check("9 Policies in dienstplan: 50", (await owner`select count(*)::int n from pg_policies where schemaname = 'dienstplan'`)[0].n === 50);
 } finally {
   try {
     if (ids.plan.length) await owner`delete from dienstplan.plaene where id in ${owner(ids.plan)}`;
     await owner`delete from dienstplan.themenvorschlaege where titel like ${stamp + "%"}`;
+    await owner`delete from dienstplan.ical_abos where organisation_id = 2`;
     await owner`delete from dienstplan.kategorien where organisation_id = 2`;
     if (ids.org2) await owner`delete from dienstplan.organisationen where id = 2 and name like ${stamp + "%"}`;
     if (ids.ben.length) await owner`delete from core.benutzer where id in ${owner(ids.ben)}`;

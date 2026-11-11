@@ -18,7 +18,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | 7 | Drag and Drop, Rückgängig, Vorjahresanzeige | fertig (Migration 0020 lokal angewendet, nicht auf dem Server) |
 | 8 | Themenpool, Pflichtthemen-Hinweis, Ausgleichsanzeige, Mitgliederansicht | fertig (keine Migration) |
 | 9 | Versionen (Freigabe, manuell, Vergleich, Wiederherstellen) | fertig (Migration 0021 lokal angewendet, nicht auf dem Server) |
-| 10 | Exporte: CSV-Profile inkl. DIVERA, .ics, Excel | offen |
+| 10 | Exporte: CSV-Profile inkl. DIVERA, .ics, Excel | fertig (Migration 0022 lokal angewendet, nicht auf dem Server) |
 | 11 | PDF, Bild für Smartphone | offen |
 | 12 | Erinnerungen (E-Mail) – Release 2 | offen |
 | 13 | Katalog-Auswertung – Release 2 | offen |
@@ -115,7 +115,8 @@ Vor dem Ausrollen
    mit Dev-Server `node scripts/test-dienstplan-api.mjs`, `node scripts/test-dienstplan-verwaltung.mjs`,
    `node scripts/test-dienstplan-anzeige.mjs`, `node scripts/test-dienstplan-rueckgaengig.mjs`,
    `node scripts/test-dienstplan-pool.mjs`, `node scripts/test-dienstplan-versionen.mjs`,
-   `node scripts/test-dienstplan-versionen-lib.mjs`,
+   `node scripts/test-dienstplan-versionen-lib.mjs`, `node scripts/test-dienstplan-export-lib.mjs`,
+   mit Dev-Server `node scripts/test-dienstplan-export.mjs`,
    `node scripts/kontrast.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
@@ -140,6 +141,7 @@ Migrationen, Reihenfolge
 | 0018_dienstplan_schema | additiv | vor der App | Schema dienstplan (19 Tabellen, 39 Policies, Trigger, kameraden_namen()), Rechte fw_app, Seeds (Organisation 1, 7 Kategorien, 3 Regeln) |
 | 0020_dienstplan_vorjahr | additiv | **vor der App (Pflicht)** | Funktion vorjahr_themen() (SECURITY DEFINER, nur Titel); die App ruft sie bei jedem Laden eines Plans |
 | 0019_dienstplan_anzeige | additiv | **vor der App (Pflicht)** | Tabelle anzeige_tokens, Spalte plaene.fokus_termin_id, 6 Policies (Anzeige-Scope), Trigger anzeige_tokens_plan, kameraden_namen() ersetzt |
+| 0022_dienstplan_exporte | additiv | **vor der App (Pflicht)** | Tabelle ical_abos (5 Policies), Funktion abo_scope(), export_laeufe.format und profil_id nullable, Seed-Profile „DIVERA 24/7“ und „DIVERA 24/7 (Beginn/Ende)“; Policies dienstplan 45 → 50 |
 | 0021_dienstplan_versionen_lesen | additiv | vor der App | Policy plan_versionen_lesen ersetzt: Mitglieder lesen Freigabe-Versionen freigegebener Pläne (Markierung „geändert“); Anzahl Policies bleibt 45 |
 
 **Reihenfolge: erst alle Migrationen, dann die App.** Die neue App liest
@@ -150,8 +152,8 @@ drei Migrationen unverändert weiter (nur neue Spalten, Funktionen nehmen eine
 Obermenge an, neues Schema).
 
 Alle ausstehenden Migrationen in einem Lauf: in `~/fw/FW-Hub` nach `git pull`
-`scripts/server-migrate.sh`. Erwartet bei 0016–0021: `Migrationen eingetragen:
-16 -> 22`, `Policies in core` unverändert (keine neuen Policies in core).
+`scripts/server-migrate.sh`. Erwartet bei 0016–0022: `Migrationen eingetragen:
+16 -> 23`, `Policies in core` unverändert (keine neuen Policies in core).
 0019 und 0020 müssen vor der neuen App laufen: Die App liest
 `plaene.fokus_termin_id` und ruft `dienstplan.vorjahr_themen()` bei jedem Laden
 eines Plans.
@@ -171,7 +173,9 @@ Manuelle Schritte auf dem Server
          has_column_privilege('fw_app','core.kameraden','karten_id','UPDATE'),          -- f
          has_column_privilege('fw_app','core.kameraden','dienst_rolle','UPDATE'),       -- f
          has_schema_privilege('fw_app','dienstplan','USAGE');                           -- t
-  select count(*) from pg_policies where schemaname = 'dienstplan';                    -- 45 (39 aus 0018, 6 aus 0019)
+  select count(*) from pg_policies where schemaname = 'dienstplan';                    -- 50 (39 aus 0018, 6 aus 0019, 5 aus 0022)
+  select has_function_privilege('fw_app', 'dienstplan.abo_scope(text)', 'EXECUTE');    -- t
+  select name from dienstplan.export_profile order by name;                            -- DIVERA 24/7, DIVERA 24/7 (Beginn/Ende)
   select has_function_privilege('fw_app', 'dienstplan.vorjahr_themen(integer)', 'EXECUTE');  -- t
   select count(*) from pg_tables where schemaname = 'dienstplan' and not rowsecurity;  -- 0
   select string_agg(kuerzel, ',' order by sortierung) from dienstplan.kategorien;      -- D,Z,G,O,J,K,B
@@ -235,6 +239,20 @@ Smoke-Test nach dem Ausrollen
     begrenzt. Falls doch, `/api/dienstplan/anzeige/` ausnehmen oder die Regel
     auf `/api/auth/` beschränken. Cache: Die Antworten tragen
     `Cache-Control: private, no-cache`; keine Cache-Rule darf `/api/*` cachen.
+
+- Exporte und iCal-Abo (Phase 10): Ablauf mit DIVERA- und Google-Test steht in
+  [DEPLOYMENT_TAG.md](DEPLOYMENT_TAG.md), Teil B. Netzwerkseite:
+  - `/api/dienstplan/abo/<token>.ics` wird von Google (Server in den USA, Abruf
+    alle paar Stunden) und ggf. von DIVERA ohne Anmeldung abgerufen. nginx: kein
+    `limit_req` auf diesem Pfad (wie oben). Cloudflare: Bot Fight Mode bzw.
+    „Super Bot Fight Mode“ und Länder-Sperren dürfen den Pfad nicht blocken
+    (sonst bleibt der Kalender leer); Cache-Regeln nicht auf `/api/*`. Prüfen:
+    `curl -sI https://portal.ofwietmarschen.org/api/dienstplan/abo/<token>.ics`
+    von außerhalb → 200 und `content-type: text/calendar`.
+  - Die Abo-URL enthält das Token im Pfad. Es landet damit in Zugriffslogs von
+    Cloudflare und nginx (anders als beim Anzeige-Link, der das Fragment nutzt);
+    Kalenderdienste können keine Header schicken. Ein Token gewährt nur Lesen
+    freigegebener Pläne; bei Verdacht in der Verwaltung neu erzeugen.
 
 Import der Excel-Pläne 2023–2026 (Phase 4, nach Migrationen und App)
 - Voraussetzung: 0018 ist angewendet, die App läuft (das Skript liest
@@ -1172,7 +1190,81 @@ Rückgängig zurücknehmen.
 ### Offene Fragen
 - Keine.
 
-## Phasen 10–13
+## Phase 10 – Exporte (CSV-Profile inkl. DIVERA, .ics, Excel)
+
+### Entscheidungen
+- **Gemeinsame Termindaten** (`lib/dienstplan/export.ts`, rein): Beginn aus
+  Datum/Uhrzeit, Ende = Beginn + Dauer (Termin, sonst Standarddauer der
+  Kategorie), über Mitternacht korrekt; ohne Uhrzeit ganztägig. Titel = Themen
+  mit „ / “, ohne Thema der Kategoriename. Beschreibung = je Zeile „Thema –
+  Verantwortliche“, darunter die Bemerkung. Notizen gehen in keinen Export.
+- **CSV nach Profil**: Felder aus Spec 9.5 plus `start`/`ende` (Datum und
+  Uhrzeit in einer Spalte), `titelMitKategorie` („Dienstabend: …“) und `fest`
+  (fester Wert, z. B. für „Empfänger“). Formate mit YYYY, MM, DD, HH, mm (auch
+  JJJJ, TT); ganztägig bleiben Uhrzeitfelder leer. Quoting nach RFC 4180,
+  Zeilenende CRLF, Kodierung UTF-8 mit/ohne BOM oder Windows-1252 (Zeichen
+  außerhalb werden „?“). Ausgefallene Termine nicht. Profil-Filter
+  `nur_freigegeben` (Entwurf → 409) und Kategorien.
+- **Seed „DIVERA 24/7“**: `Datum` (DD.MM.YYYY), `Von`, `Bis` (HH:mm), `Titel`
+  (mit Kategorie), `Text` (Beschreibung, mehrzeilig in Anführungszeichen),
+  `Ort`; `;`, UTF-8 mit BOM. Zweites Profil „DIVERA 24/7 (Beginn/Ende)“ mit
+  `Beginn`/`Ende` (DD.MM.YYYY HH:mm) für Termine über Mitternacht. Die Spalte
+  `Empfänger` ist bewusst nicht im Seed (Format unbekannt; DIVERA fragt beim
+  Import die Empfänger ab). Bei Bedarf in der Verwaltung als „Fester Wert“
+  ergänzen.
+- **Nur Änderungen**: Je Lauf wird in `export_laeufe.stand` je Termin eine
+  Prüfsumme der exportierten Zeile (FNV-1a) plus alter Kopf (Datum, Zeit, Titel)
+  gespeichert. Exportiert werden neue und geänderte Termine; die Liste „In
+  <Profil> von Hand löschen“ nennt die alte Fassung geänderter und die
+  entfallenen Termine (gelöscht, abgesagt, aus dem Filter gefallen). Ohne
+  früheren Lauf wie komplett. Halbjahres-Läufe ersetzen nur ihren Bereich im
+  Stand. Jeder CSV-Lauf wird protokolliert (auch komplett).
+- **.ics** (Download, Jahr oder Halbjahr, optional Kategorien): UID
+  `dienstplan-<terminId>@ofwietmarschen.org`, SEQUENCE = Minuten seit 2020 aus
+  `aktualisiert_am` (steigt mit jeder Änderung), LAST-MODIFIED, VTIMEZONE
+  Europe/Berlin, abgesagte Termine mit `STATUS:CANCELLED` und „Entfällt:“ im
+  Titel, Zeilen nach RFC 5545 gefaltet. Kalendername stabil („Dienstplan
+  2027“), der Stand steht in `X-WR-CALDESC`. Mitglieder laden nur komplett
+  (ohne Protokoll), Planer zusätzlich „nur Änderungen“ (protokolliert mit
+  `format = 'ics'`).
+- **iCal-Abo**: `/api/dienstplan/abo/<token>.ics` ohne Login. Tabelle
+  `ical_abos` (nur Hash, je Organisation ein aktives Abo, Zähler der Abrufe
+  und letzter Abruf, damit man sieht, ob Google/DIVERA abrufen). Das Token prüft
+  `dienstplan.abo_scope()` in der Datenbank und setzt dann den Lesescope
+  Mitglied (nur freigegebene Pläne); keine neuen Policies auf den Plantabellen.
+  Inhalt: alle freigegebenen Pläne ab dem Vorjahr. Falsches oder widerrufenes
+  Token → 404 ohne Unterscheidung. Erzeugen und Beenden in der Verwaltung (nur
+  Admin), die Adresse wird nur einmal angezeigt.
+- **Excel** (exceljs): Blätter „1. Halbjahr“, „2. Halbjahr“, „Gesamt“; Spalten
+  wie Spec 9.1; Zeile in 20-%-Tönung der Kategoriefarbe, Kürzelzelle voll;
+  abgesagte Termine grau und durchgestrichen mit „entfällt“; A4 hoch, an
+  Breite angepasst, Kopfzeile wiederholt, Legende, Fußzeile mit Stand und
+  Seitenzahl. Farben für Dateien in `lib/dienstplan/druckfarben.ts` (Spec 7.1).
+- **Oberfläche**: Eingabemaske → „Export“ (CSV nach Profil, iCal, Excel,
+  Löschliste, letzte Exporte); Verwaltung → „Exportprofile (CSV)“ (Admin
+  bearbeitet Spalten mit Feld, Format, festem Wert, Reihenfolge) und „iCal-Abo“
+  (Admin); Mitgliederansicht → Karte „Herunterladen“ (Kalender .ics für
+  Halbjahr oder Jahr).
+- Tests: `test-dienstplan-export-lib.mjs` (45), `test-dienstplan-export.mjs`
+  (52), RLS Abschnitt 9 (131 gesamt), Routen-Test (Abo-Feed 404 ohne/mit
+  falschem Token), Browser-Durchlauf (Export-Fenster mit Löschliste, Downloads,
+  Profilformular, Abo erzeugen, Mitglied lädt .ics auf Handybreite).
+
+### Abweichungen von der Spec
+- Der Mitgliederansicht fehlt ein iCal-**Abo**-Link: Die Abo-Adresse sieht nur
+  der Admin einmalig (nur Hash gespeichert). Mitglieder abonnieren wie bisher
+  den freigegebenen Google-Kalender oder laden die .ics-Datei.
+- Halbjahres-Download im Abo-Feed gibt es nicht (Abo = alle freigegebenen
+  Pläne ab dem Vorjahr).
+
+### Offene Fragen
+- Verhalten von Google-Kalender-Import und DIVERA bei erneutem Import gleicher
+  UIDs bzw. beim Abo-Link (aktualisieren oder Dubletten) – Test am
+  Deployment-Tag, siehe DEPLOYMENT_TAG.md. Je nach Ergebnis ist CSV oder Abo
+  der Weg nach DIVERA.
+- Format der DIVERA-Spalte „Empfänger“ (siehe oben).
+
+## Phasen 11–13
 
 ### Entscheidungen
 ### Abweichungen von der Spec

@@ -17,3 +17,20 @@ export async function dpApi<T = unknown>(method: string, pfad: string, body?: un
     return { ok: false, message: "Netzwerkfehler" };
   }
 }
+
+export type DateiAntwort = { dateiname: string; mime: string; inhalt: string };
+
+/** Datei aus einer Export-Antwort (Base64) im Browser speichern. */
+export function speichereDatei(d: DateiAntwort) {
+  const bin = atob(d.inhalt);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: d.mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = d.dateiname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

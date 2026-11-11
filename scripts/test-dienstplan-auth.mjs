@@ -4,7 +4,8 @@
 // findet alle route.ts unter src/app/api/dienstplan und ruft jede exportierte
 // Methode ohne Anmeldung und mit kaputtem Cookie auf. Erwartet wird 401.
 // Ausnahmen sind nur die Token-Routen (Präsentation, iCal) in TOKEN_ROUTEN:
-// Sie müssen ohne Token und mit falschem Token 401 oder 403 liefern. Eine Route,
+// Sie müssen ohne Token und mit falschem Token 401 oder 403 liefern (das
+// iCal-Abo 404). Eine Route,
 // die in keiner der beiden Gruppen sauber prüfbar ist, lässt den Test scheitern.
 // Zusätzlich: Eine angemeldete Person ohne dienst_rolle (= Mitglied) erreicht
 // die Lese-Route der Kategorien (Durchstich Session → Scope → RLS).
@@ -37,6 +38,11 @@ const TOKEN_ROUTEN = [
   { pfad: "anzeige/[jahr]", methode: "GET", aufrufe: () => ({
     ohne: { url: "/api/dienstplan/anzeige/2026" },
     falsch: { url: "/api/dienstplan/anzeige/2026", headers: { "x-dienstplan-anzeige": FALSCHES_TOKEN } },
+  }) },
+  // iCal-Abo (Phase 10): Token im Pfad, unbekannt oder falsch → 404 ohne Unterscheidung
+  { pfad: "abo/[token]", methode: "GET", erwartet: [404], aufrufe: () => ({
+    ohne: { url: "/api/dienstplan/abo/kein-token.ics" },
+    falsch: { url: `/api/dienstplan/abo/${FALSCHES_TOKEN}.ics` },
   }) },
 ];
 
@@ -111,7 +117,8 @@ try {
       for (const [art, a] of [["ohne Token", ohne], ["mit falschem Token", falsch]]) {
         if (!a) continue;
         const r = await aufruf(methode, a.url, null, a.headers);
-        check(`${methode} ${a.url} ${art} → 401/403`, r.status === 401 || r.status === 403, String(r.status));
+        const erwartet = token.erwartet ?? [401, 403];
+        check(`${methode} ${a.url} ${art} → ${erwartet.join("/")}`, erwartet.includes(r.status), String(r.status));
       }
       continue;
     }

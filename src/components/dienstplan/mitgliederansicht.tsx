@@ -14,6 +14,7 @@ import { plusTage, wochentag } from "@/lib/dienstplan/kalender";
 import { dpApi } from "@/components/dienstplan/api";
 import { datumKurz, klassenFuer, MONATE } from "@/components/dienstplan/farben";
 import { Geaendert } from "@/components/dienstplan/geaendert";
+import { Downloads } from "@/components/dienstplan/downloads";
 
 // Mitgliederansicht (Spec 7.4): freigegebene Pläne lesen (Planer sehen auch
 // Entwürfe), aktuelle Woche hervorgehoben, vergangene Termine abgeblendet,
@@ -108,6 +109,7 @@ export function Mitgliederansicht({ istPlaner }: { istPlaner: boolean }) {
           ))}
         </div>
         <aside className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
+          {jahr !== null && <Downloads jahr={jahr} />}
           <VorschlagEinreichen />
         </aside>
       </div>

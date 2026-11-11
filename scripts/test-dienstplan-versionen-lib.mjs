@@ -20,16 +20,16 @@ const t = (id, datum, themen = [], extra = {}) => ({
 });
 
 // Abbild
-const quelle = [t(1, "2027-01-05", [th(10, "Pumpenkunde", [v(5, "Bruns")]), th(null, "Weihnachtsfeier", [], true)])];
+const quelle = [t(1, "2027-01-05", [th(10, "Pumpenkunde", [v(5, "Beispiel")]), th(null, "Weihnachtsfeier", [], true)])];
 const abbild = abbildAus(2027, quelle);
 check("Abbild: Format, Jahr, Felder ohne aktualisiertAm/feiertag", [abbild.format, abbild.jahr, "aktualisiertAm" in abbild.termine[0], "feiertag" in abbild.termine[0]], [1, 2027, false, false]);
 check("Abbild: Thema mit id, Freitext mit Text", abbild.termine[0].themen.map((p) => [p.themaId, p.titelFreitext, p.titel]), [[10, null, "Pumpenkunde"], [null, "Weihnachtsfeier", "Weihnachtsfeier"]]);
-check("Abbild: Verantwortliche mit Namen zum Zeitpunkt", abbild.termine[0].themen[0].verantwortliche, [{ kameradId: 5, externePersonId: null, platzhalter: null, name: "Bruns" }]);
+check("Abbild: Verantwortliche mit Namen zum Zeitpunkt", abbild.termine[0].themen[0].verantwortliche, [{ kameradId: 5, externePersonId: null, platzhalter: null, name: "Beispiel" }]);
 check("titelVon", titelVon(abbild.termine[0]), "Pumpenkunde / Weihnachtsfeier");
 
 // Fingerabdruck: Umbenennungen zählen nicht
-const a1 = abbildAus(2027, [t(1, "2027-01-05", [th(10, "Pumpenkunde", [v(5, "Bruns")])])]).termine;
-const umbenannt = abbildAus(2027, [t(1, "2027-01-05", [th(10, "Pumpen und Armaturen", [v(5, "Bruns, B.")])])]).termine;
+const a1 = abbildAus(2027, [t(1, "2027-01-05", [th(10, "Pumpenkunde", [v(5, "Beispiel")])])]).termine;
+const umbenannt = abbildAus(2027, [t(1, "2027-01-05", [th(10, "Pumpen und Armaturen", [v(5, "Beispiel, B.")])])]).termine;
 check("Umbenennung von Thema und Anzeigename ist keine Änderung", fingerabdruck(a1[0]) === fingerabdruck(umbenannt[0]), true);
 check("Vergleich: Umbenennung → keine Einträge", vergleiche(a1, umbenannt), []);
 

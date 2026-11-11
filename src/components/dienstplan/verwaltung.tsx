@@ -109,6 +109,8 @@ export function Verwaltung({ istAdmin }: { istAdmin: boolean }) {
       <Ausgleich istAdmin={istAdmin} />
       <Bloecke />
       <ExternePersonen />
+      <ExportProfile istAdmin={istAdmin} />
+      {istAdmin && <IcalAbo />}
     </div>
   );
 }
@@ -548,5 +550,181 @@ function ExternForm({ p, schliessen, danach }: { p: Extern | null; schliessen: (
       <Feld id="e-mail" label="E-Mail (für spätere Erinnerungen)"><Input id="e-mail" type="email" value={w.email} onChange={(e) => setW({ ...w, email: e.target.value })} /></Feld>
       <Haken label="aktiv" wert={w.aktiv} setze={(v) => setW({ ...w, aktiv: v })} />
     </FormSheet>
+  );
+}
+
+// ── Exportprofile (Spec 9.5, Phase 10) ──────────────────────────────────────
+
+const EXPORT_FELDER: [string, string][] = [
+  ["startDatum", "Beginn Datum"], ["startZeit", "Beginn Uhrzeit"], ["endeDatum", "Ende Datum"], ["endeZeit", "Ende Uhrzeit"],
+  ["start", "Beginn (Datum und Uhrzeit)"], ["ende", "Ende (Datum und Uhrzeit)"], ["startIso", "Beginn ISO 8601"], ["endeIso", "Ende ISO 8601"],
+  ["ganztaegig", "Ganztägig (0/1)"], ["titel", "Titel (Themen)"], ["titelMitKategorie", "Titel mit Kategorie"],
+  ["verantwortliche", "Verantwortliche"], ["beschreibung", "Beschreibung (mehrzeilig)"], ["kategorieKuerzel", "Kategorie-Kürzel"],
+  ["kategorieName", "Kategorie-Name"], ["ort", "Ort"], ["bemerkung", "Bemerkung"], ["terminId", "Termin-id"], ["fest", "Fester Wert"],
+];
+const FELD_TEXT = Object.fromEntries(EXPORT_FELDER);
+const MIT_FORMAT = new Set(["startDatum", "startZeit", "endeDatum", "endeZeit", "start", "ende"]);
+
+interface Spalte { ueberschrift: string; feld: string; format?: string | null; wert?: string | null }
+interface Profil { id: number; name: string; trennzeichen: string; kodierung: string; kopfzeile: boolean; spalten: Spalte[]; nurFreigegeben: boolean; kategorien: string[] | null }
+
+function ExportProfile({ istAdmin }: { istAdmin: boolean }) {
+  const { liste, fehler, neu } = useListe<Profil>("/export-profile", "profile");
+  const [form, setForm] = useState<Profil | "neu" | null>(null);
+  const [meldung, setMeldung] = useState<string | null>(null);
+  return (
+    <Abschnitt titel="Exportprofile (CSV)" beschreibung={istAdmin ? "Spaltenfolge, Überschriften, Formate, Trennzeichen und Kodierung je Zielsystem, z. B. DIVERA 24/7." : "Ändern darf der Dienstplan-Admin."}
+      aktion={istAdmin && <Button size="sm" onClick={() => setForm("neu")}><Plus /> Profil</Button>}>
+      {fehler && <p role="alert" className="text-sm text-destructive">{fehler}</p>}
+      {meldung && <p role="alert" className="mb-2 text-sm text-destructive">{meldung}</p>}
+      <ul className="grid gap-3">
+        {(liste ?? []).map((p) => (
+          <li key={p.id} className="rounded-lg border p-3" data-profil={p.name}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-medium">{p.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {p.trennzeichen === "\t" ? "Tab" : p.trennzeichen} · {p.kodierung} · {p.kopfzeile ? "mit Kopfzeile" : "ohne Kopfzeile"}
+                  {p.nurFreigegeben ? " · nur freigegebene Pläne" : ""}{p.kategorien ? ` · nur ${p.kategorien.join(", ")}` : ""}
+                </p>
+                <p className="break-words font-mono text-xs text-muted-foreground">{p.spalten.map((sp) => sp.ueberschrift || FELD_TEXT[sp.feld]).join(p.trennzeichen === "\t" ? " ⇥ " : ` ${p.trennzeichen} `)}</p>
+              </div>
+              {istAdmin && (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setForm(p)}>Bearbeiten</Button>
+                  <Button size="sm" variant="ghost" aria-label={`Profil ${p.name} löschen`} onClick={async () => {
+                    if (!confirm(`Profil „${p.name}“ löschen?`)) return;
+                    const r = await dpApi("DELETE", `/export-profile/${p.id}`);
+                    setMeldung(r.ok ? null : r.message);
+                    if (r.ok) await neu();
+                  }}><X /></Button>
+                </div>
+              )}
+            </div>
+          </li>
+        ))}
+        {liste?.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">Keine Profile</li>}
+      </ul>
+      {form && <ProfilForm p={form === "neu" ? null : form} schliessen={() => setForm(null)} danach={neu} />}
+    </Abschnitt>
+  );
+}
+
+function ProfilForm({ p, schliessen, danach }: { p: Profil | null; schliessen: () => void; danach: () => Promise<void> }) {
+  const [w, setW] = useState({
+    name: p?.name ?? "", trennzeichen: p?.trennzeichen ?? ";", kodierung: p?.kodierung ?? "utf-8-bom", kopfzeile: p?.kopfzeile ?? true,
+    nurFreigegeben: p?.nurFreigegeben ?? true, kategorien: (p?.kategorien ?? []).join(","),
+  });
+  const [spalten, setSpalten] = useState<Spalte[]>(p?.spalten ?? [{ ueberschrift: "Datum", feld: "startDatum", format: "DD.MM.YYYY" }]);
+  const aendere = (i: number, x: Partial<Spalte>) => setSpalten(spalten.map((s, j) => (j === i ? { ...s, ...x } : s)));
+  const tausche = (i: number, j: number) => { const n = [...spalten]; [n[i], n[j]] = [n[j], n[i]]; setSpalten(n); };
+  return (
+    <FormSheet titel={p ? `Profil ${p.name}` : "Neues Exportprofil"}
+      beschreibung="Formate mit YYYY, MM, DD, HH, mm (z. B. DD.MM.YYYY oder HH:mm). Ohne Uhrzeit (ganztägig) bleiben Uhrzeitfelder leer."
+      schliessen={schliessen}
+      absenden={() => speichere("/export-profile", p?.id ?? null, {
+        name: w.name, trennzeichen: w.trennzeichen, kodierung: w.kodierung, kopfzeile: w.kopfzeile, nurFreigegeben: w.nurFreigegeben,
+        kategorien: w.kategorien.split(",").map((k) => k.trim()).filter(Boolean),
+        spalten: spalten.map((s) => ({ ueberschrift: s.ueberschrift, feld: s.feld, format: MIT_FORMAT.has(s.feld) ? s.format || null : null, wert: s.feld === "fest" ? s.wert ?? "" : null })),
+      }, danach)}>
+      <Feld id="p-name" label="Name"><Input id="p-name" required maxLength={80} value={w.name} onChange={(e) => setW({ ...w, name: e.target.value })} /></Feld>
+      <div className="grid grid-cols-2 gap-3">
+        <Feld id="p-trenner" label="Trennzeichen">
+          <select id="p-trenner" className={selectKlasse} value={w.trennzeichen} onChange={(e) => setW({ ...w, trennzeichen: e.target.value })}>
+            <option value=";">Semikolon ;</option><option value=",">Komma ,</option><option value={"\t"}>Tabulator</option>
+          </select>
+        </Feld>
+        <Feld id="p-kodierung" label="Kodierung">
+          <select id="p-kodierung" className={selectKlasse} value={w.kodierung} onChange={(e) => setW({ ...w, kodierung: e.target.value })}>
+            <option value="utf-8-bom">UTF-8 mit BOM (Excel)</option><option value="utf-8">UTF-8</option><option value="windows-1252">Windows-1252</option>
+          </select>
+        </Feld>
+      </div>
+      <Haken label="Kopfzeile mit Überschriften" wert={w.kopfzeile} setze={(v) => setW({ ...w, kopfzeile: v })} />
+      <Haken label="Nur freigegebene Pläne exportieren" wert={w.nurFreigegeben} setze={(v) => setW({ ...w, nurFreigegeben: v })} />
+      <Feld id="p-kat" label="Nur Kategorien (Kürzel mit Komma, leer = alle)"><Input id="p-kat" value={w.kategorien} placeholder="z. B. D,Z" onChange={(e) => setW({ ...w, kategorien: e.target.value })} /></Feld>
+      <div className="grid gap-2">
+        <p className="text-sm font-medium">Spalten</p>
+        {spalten.map((s, i) => (
+          <div key={i} className="grid gap-2 rounded-lg border p-2" data-spalte={i}>
+            <div className="flex gap-2">
+              <Input aria-label={`Überschrift Spalte ${i + 1}`} value={s.ueberschrift} placeholder="Überschrift" onChange={(e) => aendere(i, { ueberschrift: e.target.value })} />
+              <Button type="button" size="icon-sm" variant="ghost" aria-label="nach oben" disabled={i === 0} onClick={() => tausche(i, i - 1)}><ArrowUp /></Button>
+              <Button type="button" size="icon-sm" variant="ghost" aria-label="nach unten" disabled={i === spalten.length - 1} onClick={() => tausche(i, i + 1)}><ArrowDown /></Button>
+              <Button type="button" size="icon-sm" variant="ghost" aria-label="Spalte entfernen" disabled={spalten.length === 1} onClick={() => setSpalten(spalten.filter((_, j) => j !== i))}><X /></Button>
+            </div>
+            <select aria-label={`Feld Spalte ${i + 1}`} className={selectKlasse} value={s.feld} onChange={(e) => aendere(i, { feld: e.target.value })}>
+              {EXPORT_FELDER.map(([f, t]) => <option key={f} value={f}>{t}</option>)}
+            </select>
+            {MIT_FORMAT.has(s.feld) && <Input aria-label={`Format Spalte ${i + 1}`} value={s.format ?? ""} placeholder="Format, z. B. DD.MM.YYYY" onChange={(e) => aendere(i, { format: e.target.value })} />}
+            {s.feld === "fest" && <Input aria-label={`Wert Spalte ${i + 1}`} value={s.wert ?? ""} placeholder="Wert in jeder Zeile" onChange={(e) => aendere(i, { wert: e.target.value })} />}
+          </div>
+        ))}
+        <Button type="button" size="sm" variant="outline" onClick={() => setSpalten([...spalten, { ueberschrift: "", feld: "titel" }])}><Plus /> Spalte</Button>
+      </div>
+    </FormSheet>
+  );
+}
+
+// ── iCal-Abo (Spec 9.4, Phase 10) ───────────────────────────────────────────
+
+function IcalAbo() {
+  const [abo, setAbo] = useState<{ erstelltAm: string; zuletztAbgerufenAm: string | null; abrufe: number } | null | undefined>(undefined);
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [meldung, setMeldung] = useState<string | null>(null);
+  const hole = useCallback(() => dpApi<{ abo: typeof abo }>("GET", "/abo"), []);
+  const laden = useCallback(async () => {
+    const r = await hole();
+    if (r.ok) setAbo(r.data.abo); else setMeldung(r.message);
+  }, [hole]);
+  useEffect(() => {
+    let aktiv = true;
+    void hole().then((r) => { if (!aktiv) return; if (r.ok) setAbo(r.data.abo); else setMeldung(r.message); });
+    return () => { aktiv = false; };
+  }, [hole]);
+  const zeit = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+  return (
+    <Abschnitt titel="iCal-Abo" beschreibung="Geheime Adresse für Google-Kalender und DIVERA (nur freigegebene Pläne ab dem Vorjahr, ohne Notizen). Die Adresse wird nur beim Erzeugen angezeigt; neu erzeugen macht die alte ungültig.">
+      <div className="grid gap-3" data-testid="ical-abo">
+        <p className="text-sm">
+          {abo === undefined ? "Wird geladen …" : abo === null ? "Kein aktives Abo." :
+            `Aktiv seit ${zeit(abo.erstelltAm)} · ${abo.abrufe} Abrufe${abo.zuletztAbgerufenAm ? `, zuletzt ${zeit(abo.zuletztAbgerufenAm)}` : ""}`}
+        </p>
+        {url && (
+          <div className="grid gap-2 rounded-lg border p-3">
+            <p className="break-all font-mono text-xs" data-testid="abo-url">{url}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={async () => {
+                try { await navigator.clipboard.writeText(url); setMeldung("Adresse kopiert."); } catch { setMeldung("Kopieren nicht möglich, Adresse bitte markieren."); }
+              }}>Kopieren</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Google-Kalender: Weitere Kalender → Per URL. DIVERA: Termine → ICS-Kalender importieren. Jetzt kopieren, die Adresse wird nicht wieder angezeigt.</p>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" loading={busy} onClick={async () => {
+            if (abo && !confirm("Neue Adresse erzeugen? Die bisherige funktioniert danach nicht mehr (Google und DIVERA neu einrichten).")) return;
+            setBusy(true);
+            const r = await dpApi<{ pfad: string }>("POST", "/abo");
+            setBusy(false);
+            if (!r.ok) { setMeldung(r.message); return; }
+            setUrl(`${window.location.origin}${r.data.pfad}`);
+            setMeldung(null);
+            await laden();
+          }}>{abo ? "Neue Adresse erzeugen" : "Abo-Adresse erzeugen"}</Button>
+          {abo && (
+            <Button size="sm" variant="outline" onClick={async () => {
+              if (!confirm("Abo beenden? Kalender, die es abonniert haben, bekommen danach keine Termine mehr.")) return;
+              const r = await dpApi("DELETE", "/abo");
+              if (!r.ok) setMeldung(r.message);
+              setUrl(null);
+              await laden();
+            }}>Abo beenden</Button>
+          )}
+        </div>
+        {meldung && <p role="status" className="text-sm">{meldung}</p>}
+      </div>
+    </Abschnitt>
   );
 }

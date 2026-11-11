@@ -96,6 +96,13 @@ Scopes:
   des Anzeige-Tokens); sichtbar ist dann nur der Plan des gültigen Tokens, nur
   lesend. Nur über anzeigeRoute (lib/dienstplan/anzeige.ts), einziger Pfad
   /api/dienstplan/anzeige/[jahr]. Nicht für weitere Pfade verwenden
+- withDienstplanAboScope(tokenHash): iCal-Abo ohne Login (Migration 0022). Ruft
+  dienstplan.abo_scope(hash) auf; die Datenbank prüft das Token (ical_abos,
+  nicht widerrufen), zählt den Abruf und setzt für die Transaktion den
+  Lesescope Mitglied der Organisation des Tokens (app.kamerad_id = 0), also nur
+  freigegebene Pläne. Ungültig → null (Route 404). Einziger Pfad
+  /api/dienstplan/abo/[token] (lib/dienstplan/abo.ts). Nicht für weitere Pfade
+  verwenden
 - withDienstplanScope({ kameradId, dienstRolle, organisationId }): setzt
   app.kamerad_id, app.dienst_rolle und app.dienst_org für alle Tabellen in
   dienstplan (Migration 0018). Immer aus requireDienstplanSession()
@@ -486,7 +493,7 @@ Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Ze
 | test-login-sperre.mjs, test-login-deaktiviert.mjs, test-client-ip.mjs | Login-Sperre, deaktivierte Konten, Client-IP | ja / ja / nein |
 | test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
 | test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
-| test-dienstplan-rls.mjs | RLS aller Tabellen in dienstplan je Rolle und Organisation, Trigger (Version, Freigabeschutz), kameraden_namen(), dienst_rolle in core, Anzeige-Scope (Token gültig, abgelaufen, unbekannt), vorjahr_themen() je Rolle | nein |
+| test-dienstplan-rls.mjs | RLS aller Tabellen in dienstplan je Rolle und Organisation, Trigger (Version, Freigabeschutz), kameraden_namen(), dienst_rolle in core, Anzeige-Scope (Token gültig, abgelaufen, unbekannt), vorjahr_themen() je Rolle, Versionen lesen (0021), ical_abos und abo_scope() (0022) | nein |
 | test-dienstplan-auth.mjs | Alle Routen unter /api/dienstplan ohne Login → 401 (findet die Routen selbst; Token-Routen: 401/403), Claim dienst_rolle, Rollenvergabe | ja |
 | test-dienstplan-kalender.mjs, test-dienstplan-eingabe.mjs | Rhythmus, Feiertage Niedersachsen, Akzeptanztest 2026 (Regeln aus der DB, nur lesend); Eingabeprüfung und Hinweise der API | nein / nein |
 | test-dienstplan-verwaltung.mjs | Neues Jahr mit Vorschau und Zwischendienst-Versatz (Regel wird aufgeteilt, danach wiederhergestellt), Kategorien, Rhythmusregeln, Bereiche je Rolle, Dienstplan-Seiten je Rolle | ja |
@@ -495,6 +502,7 @@ Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Ze
 | test-dienstplan-rueckgaengig.mjs | Phase 7: Termin-Zustand (Rückgängig, 409 bei fremder Änderung), Kopie einer Themenposition, Verschieben an Position, Datum ändern, Vorjahr in Plan- und Token-Route je Status | ja |
 | test-dienstplan-pool.mjs | Phase 8: Themenpool (Sichtbarkeit je Rolle, verwerfen, übernehmen mit/ohne Termin, gleicher Titel), Ausgleichsliste und Zählung je Plan mit Vorjahr, Pflichtthemen-Vorschlag (Katalog wird wiederhergestellt), /dienstplan | ja |
 | test-dienstplan-versionen-lib.mjs, test-dienstplan-versionen.mjs | Phase 9: Abbild, Vergleich, „geändert seit Freigabe“, Wiederherstellplan (ohne Server); Versionen-API: manuell, bei Freigabe, Liste, Ansehen, Vergleich, Markierung für Mitglieder, Wiederherstellen (sichert vorher, ids bleiben), Rechte | nein / ja |
+| test-dienstplan-export-lib.mjs, test-dienstplan-export.mjs | Phase 10: Termindaten, Formate, CSV-Quoting, Kodierung, Profilprüfung, Änderungsexport, iCal (ohne Server); Exportprofile (Rechte), CSV DIVERA komplett/Änderungen mit Löschliste, .ics je Rolle, Excel (Blätter, Farben, Druck), iCal-Abo (Feed ohne Login, Zähler, widerrufen → 404) | nein / ja |
 | test-dienstplan-import-lib.mjs, test-dienstplan-import.mjs | Excel-Import Dienstplan: Analyse-Regeln (ohne DB) bzw. Ende zu Ende als fw_app mit erzeugter Excel (Jahre 2091/2092), Localhost-Sperre von `--testdaten` | nein / nein |
 | test-setup.mjs | Erst-Einrichtung /setup in einer Wegwerf-Kopie von fwhub_dev mit leerem core.benutzer (eigener Dev-Server auf 3101; den Dev-Server auf 3100 vorher beenden) | eigener |
 | test-startschutz.mjs | Datenbank-Startschutz: `next start` bricht bei fehlender/falscher Rolle ab, `next dev` warnt nur, keine URLs oder Passwörter in der Ausgabe (Ports 3102/3103, braucht `npm run build`, Dev-Server auf 3100 vorher beenden) | eigener |

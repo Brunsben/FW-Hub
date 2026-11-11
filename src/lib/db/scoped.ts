@@ -158,6 +158,35 @@ export async function withDienstplanAnzeigeScope<T>(
   });
 }
 
+// iCal-Abo-Scope (Abo-URL ohne Login, Migration 0022): ruft
+// dienstplan.abo_scope(hash) auf. Die Datenbank prüft das Token (aktiv, nicht
+// widerrufen), zählt den Abruf und setzt für den Rest der Transaktion den
+// Lesescope Mitglied der Organisation des Tokens (app.kamerad_id = 0): nur
+// freigegebene Pläne, nur lesend. Ungültiges Token → null (Route antwortet 404).
+// Nur aus lib/dienstplan/abo.ts aufrufen (Route GET /api/dienstplan/abo/[token]).
+export async function withDienstplanAboScope<T>(
+  tokenHash: string,
+  fn: (tx: ScopedTx, organisationId: number) => Promise<T>,
+): Promise<T | null> {
+  if (!/^[0-9a-f]{64}$/.test(tokenHash)) return null;
+  class Ungueltig extends Error {}
+  try {
+    return await db.transaction(async (tx) => {
+      let org: number;
+      try {
+        const [r] = await tx.execute<{ org: number }>(sql`select dienstplan.abo_scope(${tokenHash}) as org`);
+        org = r.org;
+      } catch {
+        throw new Ungueltig();
+      }
+      return fn(tx, org);
+    });
+  } catch (e) {
+    if (e instanceof Ungueltig) return null;
+    throw e;
+  }
+}
+
 // Bewusst login-freier, aber als vertrauenswürdig markierter öffentlicher
 // Food-Zugriff (Kiosk/Mobile): setzt app.food_public='true' statt eines
 // personen-/rollenbezogenen Scopes.

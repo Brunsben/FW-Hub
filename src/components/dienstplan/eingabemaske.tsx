@@ -17,6 +17,7 @@ import type { DpKategorie, DpPlan } from "@/lib/dienstplan/plan";
 import { dpApi } from "@/components/dienstplan/api";
 import { AnzeigeLink } from "@/components/dienstplan/anzeige-link";
 import { Geaendert } from "@/components/dienstplan/geaendert";
+import { ExportPanel } from "@/components/dienstplan/export-panel";
 import { kollision, useBeides, useZiehbar, useZiel, type ZiehDaten, type ZielDaten } from "@/components/dienstplan/dnd";
 import { Monatsraster } from "@/components/dienstplan/monatsraster";
 import { ersetzeId, STAPEL_MAX, unterschiede, type Eintrag, type Zustand } from "@/lib/dienstplan/rueckgaengig";
@@ -307,6 +308,7 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/dienstplan/planung">Alle Pläne</Link></Button>
           <AnzeigeLink jahr={jahr} />
+          <ExportPanel jahr={jahr} entwurf={entwurf} />
           <label className="flex items-center gap-2 rounded-md border border-border px-2.5 text-sm" title="Markiert den gewählten Termin in der Präsentation">
             <input type="checkbox" checked={fokus} onChange={(e) => {
               setFokus(e.target.checked);
