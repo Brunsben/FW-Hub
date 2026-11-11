@@ -356,6 +356,25 @@ try {
     const z = await auditLesen(tx, ZIEL);
     check("7 Karten-ID über set_karten_id → Eintrag mit Küchen-Admin als Akteur", z.some((x) => x.feld === "karten_id" && x.neu === "audit-" + stamp && x.akteur_kamerad_id === USR));
   });
+  // ── 7a. Spitzname (Migration 0016): Spaltenrechte, Policies, Protokoll
+  await als(admG, async (tx) => {
+    await tx`update core.kameraden set spitzname = 'HGL', spitzname_anzeigen = true, updated_at = now() where id = ${ZIEL}`;
+    const z = await auditLesen(tx, ZIEL);
+    check("7a globaler Admin setzt Spitzname → Protokoll spitzname und spitzname_anzeigen",
+      z.some((x) => x.feld === "spitzname" && x.alt === null && x.neu === "HGL" && x.abschnitt === "stammdaten") &&
+      z.some((x) => x.feld === "spitzname_anzeigen" && x.alt === "false" && x.neu === "true"));
+    const neu = await tx`insert into core.kameraden (name, vorname, spitzname, spitzname_anzeigen) values (${stamp + "-sp"}, 'Hrt', 'SP', true) returning id`;
+    check("7a globaler Admin legt Kamerad mit Spitzname an (Spaltenrecht INSERT, zurückgerollt)", neu.length === 1);
+  });
+  await als(kwG, async (tx) => {
+    const up = await tx`update core.kameraden set spitzname = 'x' where id = ${ZIEL} returning id`;
+    check("7a Kleiderwart ändert Spitzname → 0 Zeilen (nur globaler Admin)", up.length === 0);
+  });
+  await als(usrG, async (tx) => {
+    const up = await tx`update core.kameraden set spitzname = 'x', spitzname_anzeigen = true where id = ${USR} returning id`;
+    check("7a User ändert eigenen Spitzname → 0 Zeilen", up.length === 0);
+  });
+
   // Schutz des Protokolls selbst
   await als(admG, async (tx) => {
     let e = await fehler(tx, "42501", (sp) => sp`insert into core.mitglieder_audit (kamerad_id, abschnitt, feld) values (${ZIEL}, 'stammdaten', 'x')`);

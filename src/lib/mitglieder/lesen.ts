@@ -46,6 +46,8 @@ export interface Mitglied {
   dienstgrad: string | null;
   email: string | null;
   personalnummer: string | null;
+  spitzname: string | null;
+  spitznameAnzeigen: boolean;
   aktiv: boolean;
   /** Nur für Küchen-Admins. */
   kartenId?: string | null;
@@ -91,6 +93,8 @@ function projiziere(user: JwtPayload, z: Zeile): Mitglied {
     dienstgrad: z.k.dienstgrad,
     email: z.k.email,
     personalnummer: z.k.personalnummer,
+    spitzname: z.k.spitzname,
+    spitznameAnzeigen: z.k.spitznameAnzeigen,
     aktiv: z.k.aktiv,
   };
   if (kannKartenIdSehen(user)) m.kartenId = z.k.kartenId;

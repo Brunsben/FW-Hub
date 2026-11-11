@@ -13,6 +13,8 @@ export interface StammdatenEingabe {
   dienstgrad?: string | null;
   email?: string | null;
   personalnummer?: string | null;
+  spitzname?: string | null;
+  spitznameAnzeigen?: boolean;
   aktiv?: boolean;
 }
 
@@ -35,7 +37,7 @@ export const FEHLER_ROLLEN =
 export const FEHLER_KARTEN_ID =
   "Die Karten-ID wird hier nicht geändert: Karten-ID über den Abschnitt Küche.";
 
-const MAX = { vorname: 100, name: 100, dienstgrad: 50, email: 200, personalnummer: 50, benutzername: 64 };
+const MAX = { vorname: 100, name: 100, dienstgrad: 50, email: 200, personalnummer: 50, spitzname: 30, benutzername: 64 };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const istObjekt = (b: unknown): b is Record<string, unknown> =>
@@ -86,6 +88,7 @@ export function pruefeStammdaten(
     ["dienstgrad", "Dienstgrad", false],
     ["email", "E-Mail", false],
     ["personalnummer", "Personalnummer", false],
+    ["spitzname", "Spitzname", false],
   ] as const) {
     const r = text(body, feld, bezeichnung, pflicht);
     if (!r.ok) return r;
@@ -93,6 +96,12 @@ export function pruefeStammdaten(
   }
   if (daten.email && !EMAIL.test(daten.email)) {
     return { ok: false, fehler: "E-Mail-Adresse ist ungültig" };
+  }
+  if ("spitznameAnzeigen" in body) {
+    if (typeof body.spitznameAnzeigen !== "boolean") {
+      return { ok: false, fehler: "spitznameAnzeigen muss true oder false sein" };
+    }
+    daten.spitznameAnzeigen = body.spitznameAnzeigen;
   }
   if ("aktiv" in body) {
     if (typeof body.aktiv !== "boolean") return { ok: false, fehler: "aktiv muss true oder false sein" };
@@ -105,7 +114,8 @@ export function pruefeStammdaten(
   } else if (Object.keys(daten).length === 0) {
     return {
       ok: false,
-      fehler: "Keine Felder übergeben (vorname, name, dienstgrad, email, personalnummer, aktiv)",
+      fehler:
+        "Keine Felder übergeben (vorname, name, dienstgrad, email, personalnummer, spitzname, spitznameAnzeigen, aktiv)",
     };
   }
   return { ok: true, daten };

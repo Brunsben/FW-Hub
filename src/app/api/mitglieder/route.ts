@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
 // Neues Mitglied anlegen, optional mit Login, in EINER Transaktion (nur globaler
 // Admin). Kameraden werden nie gelöscht; Rollen vergibt man danach getrennt
 // (/api/admin/rollen), die Karten-ID die Küche (set_karten_id).
-//   Body: { vorname, name, dienstgrad?, email?, personalnummer?, aktiv?,
+//   Body: { vorname, name, dienstgrad?, email?, personalnummer?, spitzname?,
+//           spitznameAnzeigen?, aktiv?,
 //           login?: { benutzername, pin, rolle? } }
 export async function POST(req: NextRequest) {
   const guard = await requireGlobalAdmin();
@@ -89,6 +90,8 @@ export async function POST(req: NextRequest) {
           dienstgrad: stamm.daten.dienstgrad ?? null,
           email: stamm.daten.email ?? null,
           personalnummer: stamm.daten.personalnummer ?? null,
+          spitzname: stamm.daten.spitzname ?? null,
+          spitznameAnzeigen: stamm.daten.spitznameAnzeigen ?? false,
           aktiv: stamm.daten.aktiv ?? true,
         })
         .returning({ id: kameraden.id });

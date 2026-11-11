@@ -26,6 +26,8 @@ const feldLabel = (feld: string) =>
     email: "E-Mail",
     personalnummer: "Personalnummer",
     karten_id: "Karten-ID",
+    spitzname: "Spitzname",
+    spitzname_anzeigen: "Spitzname anzeigen",
     aktiv: "Status",
     psa_rolle: "PSA-Rolle",
     food_rolle: "Küche-Rolle",
@@ -42,6 +44,7 @@ const feldLabel = (feld: string) =>
 const wert = (feld: string, v: string | null) => {
   if (v === null) return "–";
   if (feld === "aktiv") return v === "true" ? "aktiv" : "inaktiv";
+  if (feld === "spitzname_anzeigen") return v === "true" ? "ja" : "nein";
   return v;
 };
 

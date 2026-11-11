@@ -2,7 +2,7 @@ import { boolean, text } from "drizzle-orm/pg-core";
 import { core } from "./schema";
 
 // Teilsicht auf core.kameraden NUR mit den Stammdatenspalten, die fw_app
-// anlegen darf (Spaltenrechte, Migration 0013). Drizzle nennt beim INSERT ALLE
+// anlegen darf (Spaltenrechte, Migrationen 0013 und 0016). Drizzle nennt beim INSERT ALLE
 // Spalten der verwendeten Tabellendefinition (nicht angegebene als DEFAULT);
 // mit der vollen Definition scheiterte jeder INSERT an id, karten_id und den
 // Rollenspalten ("permission denied").
@@ -17,5 +17,7 @@ export const kameradenStammdaten = core.table("kameraden", {
   dienstgrad: text("dienstgrad"),
   email: text("email"),
   personalnummer: text("personalnummer"),
+  spitzname: text("spitzname"),
+  spitznameAnzeigen: boolean("spitzname_anzeigen").notNull().default(false),
   aktiv: boolean("aktiv").notNull().default(true),
 });

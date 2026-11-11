@@ -134,6 +134,14 @@ BEGIN
       ON core.kameraden TO fw_app;
     GRANT UPDATE (name, vorname, dienstgrad, email, personalnummer, aktiv, updated_at)
       ON core.kameraden TO fw_app;
+    -- Spitzname (Migration 0016), nur wenn die Spalten schon existieren. Ohne
+    -- diesen Teil nähme ein erneuter Lauf die Rechte aus 0016 wieder weg.
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'core' AND table_name = 'kameraden'
+                  AND column_name = 'spitzname_anzeigen') THEN
+      GRANT INSERT (spitzname, spitzname_anzeigen) ON core.kameraden TO fw_app;
+      GRANT UPDATE (spitzname, spitzname_anzeigen) ON core.kameraden TO fw_app;
+    END IF;
   END IF;
 END
 $$;

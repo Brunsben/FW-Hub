@@ -113,7 +113,10 @@ Scopes:
 
 ### core.kameraden / core.benutzer: Rechte (Migrationen 0012/0013)
 - Spaltenrechte fw_app auf core.kameraden: INSERT/UPDATE nur auf name, vorname,
-  dienstgrad, email, personalnummer, aktiv (UPDATE zusätzlich updated_at).
+  dienstgrad, email, personalnummer, spitzname, spitzname_anzeigen (seit 0016),
+  aktiv (UPDATE zusätzlich updated_at). Neue Spalten bekommen diese Rechte nicht
+  automatisch: In der Migration GRANT INSERT/UPDATE (spalte) ergänzen und die
+  Spalte in core.kameraden_audit aufnehmen.
   Kein DELETE. karten_id nur über core.set_karten_id (Food-Admin), Rollen nur
   über core.set_kamerad_rollen (globaler Admin). SELECT bleibt tabellenweit,
   begrenzt durch RLS
@@ -460,6 +463,7 @@ Werte). Neue Testskripte binden den Helfer ein. Sie legen Testdaten mit Zeitstem
 | test-sitzungen.mjs | JWT-Claims, /api/admin/*, Token-Widerruf, PIN, Abmelden, Selbstschutz, Logout, Startseite/Kacheln, ungültige JWTs | ja |
 | test-food.mjs | Karten-ID-Route, set_karten_id, CSV-Import/-Export, Funk-Scope, /food/admin/heute | ja |
 | test-mitglieder.mjs, -rechte.mjs, -lib.mjs | Mitgliederverwaltung (API, Seiten, Profil), Rechteregeln, Validierung | ja / nein / nein |
+| test-anzeigename.mjs | Anzeigename-Regel (Spitzname, Nachname, Vornamen-Präfix, identische Namen, externe Personen) | nein |
 | test-login-sperre.mjs, test-login-deaktiviert.mjs, test-client-ip.mjs | Login-Sperre, deaktivierte Konten, Client-IP | ja / ja / nein |
 | test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
 | test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
@@ -603,6 +607,15 @@ verlinken auf /mitglieder/[id] (`MitgliedLink`, Ziel aus `mitgliedLinkZiel`).
   PSA-Verwaltung)
 - **Änderungsprotokoll:** Abschnitt "Änderungsverlauf" (nur globale Admins) aus
   `core.mitglieder_audit`
+- **Anzeigename (Migration 0016):** `src/lib/mitglieder/anzeigename.ts` erzeugt
+  den kurzen Namen für enge Darstellungen (Dienstplan, Exporte), modulübergreifend.
+  Regel: Spitzname, wenn `spitzname_anzeigen`; sonst Nachname, wenn unter den
+  aktiven Kameraden eindeutig; sonst "Nachname, " plus kürzestes eindeutiges
+  Vornamen-Präfix ("Esters, Mar."). Gleicher Vor- und Nachname ist nicht
+  unterscheidbar: Der Stammdaten-Abschnitt zeigt dann den Hinweis, einen
+  Spitznamen zu vergeben. Spitzname und Haken pflegt der globale Admin in den
+  Stammdaten. Der Name wird immer gegen ALLE aktiven Kameraden berechnet; wer nur
+  die eigene Zeile sieht (Profil), bekommt ihn nicht angezeigt
 - **Tests:** `scripts/test-mitglieder-rechte.mjs` und `test-mitglieder-lib.mjs`
   (ohne Server), `scripts/test-mitglieder.mjs` (API und Seiten, mit Dev-Server)
 

@@ -26,6 +26,10 @@ export const kameraden = core.table("kameraden", {
   dienstgrad: text("dienstgrad"),
   email: text("email"),
   personalnummer: text("personalnummer"),
+  // Spitzname für den Anzeigenamen (lib/mitglieder/anzeigename.ts). Erscheint
+  // nur mit spitzname_anzeigen = true statt des automatisch erzeugten Namens.
+  spitzname: text("spitzname"),
+  spitznameAnzeigen: boolean("spitzname_anzeigen").notNull().default(false),
   // RFID-Karten-ID — modulübergreifend (FoodBot liest sie); daher in core.
   kartenId: text("karten_id"),
   aktiv: boolean("aktiv").notNull().default(true),

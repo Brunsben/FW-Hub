@@ -206,6 +206,20 @@ try {
   const aRow = (await owner`select aktiv from core.kameraden where id = ${admin.kamerad}`)[0];
   check("Der eigene Kamerad bleibt aktiv", aRow.aktiv === true);
 
+  // ── Spitzname und Anzeigename (Migration 0016) ─────────────────────────────
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, kw.cookie, { spitzname: "X" });
+  check("Spitzname: Kleiderwart ändert → 403", r.status === 403);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { spitznameAnzeigen: "ja" });
+  check("Spitzname: Haken kein boolean → 400", r.status === 400);
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { spitzname: ` Sp${stamp} `, spitznameAnzeigen: true });
+  const spRow = (await owner`select spitzname, spitzname_anzeigen from core.kameraden where id = ${ziel.kamerad}`)[0];
+  check("Spitzname: Admin setzt Spitzname und Haken → 200, bereinigt gespeichert",
+    r.status === 200 && r.json.mitglied.spitzname === `Sp${stamp}` && r.json.mitglied.spitznameAnzeigen === true &&
+    spRow.spitzname === `Sp${stamp}` && spRow.spitzname_anzeigen === true, `${r.status} ${JSON.stringify(spRow)}`);
+  const spAud = await audit(ziel.kamerad);
+  check("Spitzname: Änderungsprotokoll mit Akteur", spAud.some((x) => x.feld === "spitzname" && x.neu === `Sp${stamp}` && x.akteur_kamerad_id === admin.kamerad) &&
+    spAud.some((x) => x.feld === "spitzname_anzeigen" && x.neu === "true"));
+
   // ── Änderungsprotokoll ─────────────────────────────────────────────────────
   const aud = await audit(ziel.kamerad);
   const dg = aud.find((a) => a.feld === "dienstgrad");
@@ -283,6 +297,21 @@ try {
   check("Admin: ungültige id → 404", s.status === 404, String(s.status));
   s = await seite(`/mitglieder/${admin.kamerad}`, admin.cookie);
   check("Admin: die eigene Person bleibt bearbeitbar und nicht deaktivierbar", s.status === 200 && hat(s.html, "kannst du nicht deaktivieren") && hat(s.html, "(du)"));
+
+  // Spitzname und Anzeigename auf der Detailseite (Migration 0016)
+  s = await seite(`/mitglieder/${ziel.kamerad}`, admin.cookie);
+  check("Spitzname: Detailseite mit Eingabefeld und Anzeigename = Spitzname", hat(s.html, 'id="stamm-spitzname"') && hat(s.html, "Anzeigename") && hat(s.html, `Sp${stamp}`));
+  r = await api("PATCH", `/api/mitglieder/${ziel.kamerad}`, admin.cookie, { spitzname: "", spitznameAnzeigen: false });
+  check("Spitzname: leeren → null", r.status === 200 && r.json.mitglied.spitzname === null && r.json.mitglied.spitznameAnzeigen === false);
+  // Zwei aktive Personen mit gleichem Vor- und Nachnamen: Hinweis auf den Spitznamen
+  const zw1 = await konto("zwilling", { login: false });
+  const [zw2] = await owner`insert into core.kameraden (name, vorname) values (${zw1.name}, 'Mg') returning id`;
+  ids.kam.push(zw2.id);
+  s = await seite(`/mitglieder/${zw1.kamerad}`, admin.cookie);
+  check("Gleicher Vor- und Nachname: Hinweis, einen Spitznamen zu vergeben", hat(s.html, "mehrfach") && hat(s.html, "Spitznamen"));
+  await owner`update core.kameraden set spitzname = 'Zw2', spitzname_anzeigen = true where id = ${zw2.id}`;
+  s = await seite(`/mitglieder/${zw1.kamerad}`, admin.cookie);
+  check("Spitzname beim Namensvetter löst den Hinweis auf", !hat(s.html, "mehrfach"));
 
   // ── Modul-Abschnitte (Paket 4) ─────────────────────────────────────────────
   s = await seite(`/mitglieder/${ziel.kamerad}`, kw.cookie);
@@ -396,6 +425,7 @@ try {
   check("Profil Funk-Mitglied: Stammdaten und Funk (eigene Geräte, hier keine)", JSON.stringify(abschnitteIn(s.html)) === '["stammdaten","funk"]' && hat(s.html, "Keine Funkgeräte zugeteilt"), `${abschnitteIn(s.html)}`);
   s = await profil(ohne);
   check("Profil ohne Rolle: nur Stammdaten", s.status === 200 && JSON.stringify(abschnitteIn(s.html)) === '["stammdaten"]', `${abschnitteIn(s.html)}`);
+  check("Profil ohne Rolle: kein Anzeigename (Vergleich nur mit allen Kameraden möglich)", !hat(s.html, "Anzeigename"));
   s = await profil(admin);
   check("Profil globaler Admin: nur Stammdaten, ohne Bearbeiten, Zugang, Rollen und Verlauf", JSON.stringify(abschnitteIn(s.html)) === '["stammdaten"]' && !hat(s.html, 'id="stamm-vorname"') && !hat(s.html, "Änderungsverlauf") && !hat(s.html, "reset-pin"), `${abschnitteIn(s.html)}`);
   s = await profil(kw);

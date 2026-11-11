@@ -113,6 +113,13 @@
       "when": 1794158736213,
       "tag": "0015_kameraden_nur_admin_schreibt",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794358688949,
+      "tag": "0016_kameraden_spitzname",
+      "breakpoints": true
     }
   ]
 }

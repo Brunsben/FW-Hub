@@ -48,6 +48,13 @@ check("ändern: nur unbekannte Felder", st({ quatsch: "Admin", pin: "1" }, "aend
 check("ändern: Vorname darf nicht leer werden", st({ vorname: "" }, "aendern").ok, false);
 check("ändern: Dienstgrad darf leer werden (null)", st({ dienstgrad: "" }, "aendern"), { ok: true, daten: { dienstgrad: null } });
 
+// Spitzname (Migration 0016)
+check("Spitzname und Haken werden übernommen", st({ spitzname: " HGL ", spitznameAnzeigen: true }, "aendern"), { ok: true, daten: { spitzname: "HGL", spitznameAnzeigen: true } });
+check("Spitzname leer wird null", st({ spitzname: "" }, "aendern"), { ok: true, daten: { spitzname: null } });
+check("Spitzname zu lang", st({ spitzname: "x".repeat(31) }, "aendern").ok, false);
+check("spitznameAnzeigen muss boolean sein", st({ spitznameAnzeigen: "ja" }, "aendern").ok, false);
+check("anlegen mit Spitzname", st({ vorname: "A", name: "B", spitzname: "AB" }), { ok: true, daten: { vorname: "A", name: "B", spitzname: "AB" } });
+
 // Login
 const lg = (b) => pruefeLogin(b, 6);
 check("Login: gültig, Rolle Standard User", lg({ benutzername: " max ", pin: "123456" }), { ok: true, daten: { benutzername: "max", pin: "123456", rolle: "User" } });

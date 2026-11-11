@@ -33,7 +33,8 @@ export async function GET(
 }
 
 // Stammdaten ändern, Kamerad deaktivieren und reaktivieren (nur globaler Admin).
-//   Body: beliebige von { vorname, name, dienstgrad, email, personalnummer, aktiv }
+//   Body: beliebige von { vorname, name, dienstgrad, email, personalnummer,
+//         spitzname, spitznameAnzeigen, aktiv }
 // Rollen, Karten-ID und Zugang gehören nicht hierher (set_kamerad_rollen,
 // set_karten_id, /api/admin/benutzer). Rollen und Karten-ID im Body lehnt die
 // Prüfung mit 400 und dem Hinweis auf den richtigen Ort ab.
