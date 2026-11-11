@@ -22,6 +22,8 @@ export type DpPlan = {
   version: number;
   freigegebenAm: string | null;
   freigegebenVon: number | null;
+  /** Termin, den die Eingabemaske gerade bearbeitet (Präsentation markiert ihn). */
+  fokusTerminId: number | null;
 };
 
 export type DpKategorie = {
@@ -37,13 +39,24 @@ export type DpKategorie = {
 
 export const PLATZHALTER_NAME = { alle_gf: "alle Gruppenführer", offen: "offen" } as const;
 
-/** ETag eines Plans: ändert sich mit jeder Änderung an Terminen und mit dem Status. */
-export const planEtag = (p: Pick<DpPlan, "version" | "status">) => `"v${p.version}-${p.status}"`;
+/** ETag eines Plans: ändert sich mit jeder Änderung an Terminen, mit dem Status und dem Fokus-Termin. */
+export const planEtag = (p: Pick<DpPlan, "version" | "status" | "fokusTerminId">) =>
+  `"v${p.version}-${p.status}-f${p.fokusTerminId ?? 0}"`;
+
+const PLAN_SPALTEN = sql`id, jahr, status::text as status, version,
+  to_char(freigegeben_am at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "freigegebenAm",
+  freigegeben_von as "freigegebenVon", fokus_termin_id as "fokusTerminId"`;
 
 export async function findePlan(tx: ScopedTx, organisationId: number, jahr: number): Promise<DpPlan | null> {
   const [p] = await tx.execute<DpPlan>(sql`
-    select id, jahr, status::text as status, version, to_char(freigegeben_am at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "freigegebenAm", freigegeben_von as "freigegebenVon"
-      from dienstplan.plaene where organisation_id = ${organisationId} and jahr = ${jahr}`);
+    select ${PLAN_SPALTEN} from dienstplan.plaene where organisation_id = ${organisationId} and jahr = ${jahr}`);
+  return p ?? null;
+}
+
+/** Plan per id (Anzeige-Scope: RLS zeigt nur den Plan des Tokens). */
+export async function findePlanPerId(tx: ScopedTx, planId: number): Promise<(DpPlan & { organisationId: number }) | null> {
+  const [p] = await tx.execute<DpPlan & { organisationId: number }>(sql`
+    select ${PLAN_SPALTEN}, organisation_id as "organisationId" from dienstplan.plaene where id = ${planId}`);
   return p ?? null;
 }
 

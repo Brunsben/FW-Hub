@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { DpHinweis, DpTermin, DpTerminThema } from "@/lib/dienstplan/hinweise";
 import type { DpKategorie, DpPlan } from "@/lib/dienstplan/plan";
 import { dpApi } from "@/components/dienstplan/api";
+import { AnzeigeLink } from "@/components/dienstplan/anzeige-link";
 import { datumKurz, klassenFuer, MONATE } from "@/components/dienstplan/farben";
 
 interface PlanDaten { plan: DpPlan; kategorien: DpKategorie[]; termine: DpTermin[]; hinweise: DpHinweis[] }
@@ -46,6 +47,11 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
   const [busy, setBusy] = useState(false);
   const [bearbeiten, setBearbeiten] = useState<DpTermin | "neu" | null>(null);
   const [verschieben, setVerschieben] = useState<DpTerminThema | null>(null);
+  // Schalter „Fokus“ (Spec 7.2): der gewählte Termin wird in der Präsentation markiert.
+  const [fokus, setFokus] = useState(true);
+  useEffect(() => {
+    if (fokus) void dpApi("PUT", `/plaene/${jahr}/fokus`, { terminId });
+  }, [fokus, terminId, jahr]);
 
   const uebernehmePlan = useCallback((r: Awaited<ReturnType<typeof holePlan>>) => {
     if (r.ok) { setDaten(r.data); setLadefehler(null); } else setLadefehler(r.message);
@@ -101,6 +107,14 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild><Link href="/dienstplan/planung">Alle Pläne</Link></Button>
+          <AnzeigeLink jahr={jahr} />
+          <label className="flex items-center gap-2 rounded-md border border-border px-2.5 text-sm" title="Markiert den gewählten Termin in der Präsentation">
+            <input type="checkbox" checked={fokus} onChange={(e) => {
+              setFokus(e.target.checked);
+              if (!e.target.checked) void dpApi("PUT", `/plaene/${jahr}/fokus`, { terminId: null });
+            }} />
+            Fokus
+          </label>
           {entwurf && (
             <Button variant="outline" size="sm" loading={busy} onClick={async () => {
               const r = await aktion("POST", `/plaene/${jahr}/generieren`);

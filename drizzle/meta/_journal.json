@@ -134,6 +134,13 @@
       "when": 1794360357395,
       "tag": "0018_dienstplan_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794405149116,
+      "tag": "0019_dienstplan_anzeige",
+      "breakpoints": true
     }
   ]
 }

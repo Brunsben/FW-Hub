@@ -1,0 +1,4529 @@
+{
+  "id": "eca0b195-c378-4c00-a767-538e47b140d6",
+  "prevId": "a702d6ef-984c-4a17-9656-f961be8b7003",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "core.benutzer": {
+      "name": "benutzer",
+      "schema": "core",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "benutzername": {
+          "name": "benutzername",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pin": {
+          "name": "pin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rolle": {
+          "name": "rolle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'User'"
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "token_version": {
+          "name": "token_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_benutzer_benutzername_lower": {
+          "name": "idx_benutzer_benutzername_lower",
+          "columns": [
+            {
+              "expression": "lower(\"benutzername\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "benutzer_kamerad_id_kameraden_id_fk": {
+          "name": "benutzer_kamerad_id_kameraden_id_fk",
+          "tableFrom": "benutzer",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "benutzer_benutzername_unique": {
+          "name": "benutzer_benutzername_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "benutzername"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_food.admin_log": {
+      "name": "admin_log",
+      "schema": "fw_food",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "timestamp": {
+          "name": "timestamp",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "admin_user": {
+          "name": "admin_user",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "details": {
+          "name": "details",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "admin_log_timestamp_idx": {
+          "name": "admin_log_timestamp_idx",
+          "columns": [
+            {
+              "expression": "timestamp",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "admin_log_admin_user_idx": {
+          "name": "admin_log_admin_user_idx",
+          "columns": [
+            {
+              "expression": "admin_user",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_food.guests": {
+      "name": "guests",
+      "schema": "fw_food",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "menu_choice": {
+          "name": "menu_choice",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "guests_date_menu_idx": {
+          "name": "guests_date_menu_idx",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "menu_choice",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "guests_date_idx": {
+          "name": "guests_date_idx",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_food.menus": {
+      "name": "menus",
+      "schema": "fw_food",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "zwei_menues_aktiv": {
+          "name": "zwei_menues_aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "menu1_name": {
+          "name": "menu1_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "menu2_name": {
+          "name": "menu2_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registration_deadline": {
+          "name": "registration_deadline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'19:45'"
+        },
+        "deadline_enabled": {
+          "name": "deadline_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {
+        "menus_date_idx": {
+          "name": "menus_date_idx",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_food.mobile_tokens": {
+      "name": "mobile_tokens",
+      "schema": "fw_food",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_food_mobile_tokens_kamerad_id": {
+          "name": "idx_food_mobile_tokens_kamerad_id",
+          "columns": [
+            {
+              "expression": "kamerad_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mobile_tokens_kamerad_id_kameraden_id_fk": {
+          "name": "mobile_tokens_kamerad_id_kameraden_id_fk",
+          "tableFrom": "mobile_tokens",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "mobile_tokens_token_unique": {
+          "name": "mobile_tokens_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_food.preset_menus": {
+      "name": "preset_menus",
+      "schema": "fw_food",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "preset_menus_name_unique": {
+          "name": "preset_menus_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_food.registrations": {
+      "name": "registrations",
+      "schema": "fw_food",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "menu_choice": {
+          "name": "menu_choice",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "registrations_kamerad_date_idx": {
+          "name": "registrations_kamerad_date_idx",
+          "columns": [
+            {
+              "expression": "kamerad_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "registrations_date_kamerad_idx": {
+          "name": "registrations_date_kamerad_idx",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kamerad_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "registrations_kamerad_id_kameraden_id_fk": {
+          "name": "registrations_kamerad_id_kameraden_id_fk",
+          "tableFrom": "registrations",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_funk.device_audit_log": {
+      "name": "device_audit_log",
+      "schema": "fw_funk",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "issued_by_id": {
+          "name": "issued_by_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "returned_at": {
+          "name": "returned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "returned_by_id": {
+          "name": "returned_by_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'issued'"
+        },
+        "damage_description": {
+          "name": "damage_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "device_audit_log_device_id_devices_id_fk": {
+          "name": "device_audit_log_device_id_devices_id_fk",
+          "tableFrom": "device_audit_log",
+          "tableTo": "devices",
+          "schemaTo": "fw_funk",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "device_audit_log_owner_id_kameraden_id_fk": {
+          "name": "device_audit_log_owner_id_kameraden_id_fk",
+          "tableFrom": "device_audit_log",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "device_audit_log_issued_by_id_kameraden_id_fk": {
+          "name": "device_audit_log_issued_by_id_kameraden_id_fk",
+          "tableFrom": "device_audit_log",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "issued_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "device_audit_log_returned_by_id_kameraden_id_fk": {
+          "name": "device_audit_log_returned_by_id_kameraden_id_fk",
+          "tableFrom": "device_audit_log",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "returned_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_funk.device_assignments": {
+      "name": "device_assignments",
+      "schema": "fw_funk",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assigned_by_id": {
+          "name": "assigned_by_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assignment_date": {
+          "name": "assignment_date",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expected_return_date": {
+          "name": "expected_return_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "returned_at": {
+          "name": "returned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "returned_by_id": {
+          "name": "returned_by_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'assigned'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_funk_assignment_open_unique": {
+          "name": "idx_funk_assignment_open_unique",
+          "columns": [
+            {
+              "expression": "device_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"fw_funk\".\"device_assignments\".\"returned_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "device_assignments_device_id_devices_id_fk": {
+          "name": "device_assignments_device_id_devices_id_fk",
+          "tableFrom": "device_assignments",
+          "tableTo": "devices",
+          "schemaTo": "fw_funk",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "device_assignments_owner_id_kameraden_id_fk": {
+          "name": "device_assignments_owner_id_kameraden_id_fk",
+          "tableFrom": "device_assignments",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "device_assignments_assigned_by_id_kameraden_id_fk": {
+          "name": "device_assignments_assigned_by_id_kameraden_id_fk",
+          "tableFrom": "device_assignments",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "assigned_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "device_assignments_returned_by_id_kameraden_id_fk": {
+          "name": "device_assignments_returned_by_id_kameraden_id_fk",
+          "tableFrom": "device_assignments",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "returned_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_funk.devices": {
+      "name": "devices",
+      "schema": "fw_funk",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "serial_number": {
+          "name": "serial_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_type": {
+          "name": "device_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manufacturer": {
+          "name": "manufacturer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "purchase_date": {
+          "name": "purchase_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "devices_serial_number_unique": {
+          "name": "devices_serial_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "serial_number"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_funk.pager_configs": {
+      "name": "pager_configs",
+      "schema": "fw_funk",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ric_number": {
+          "name": "ric_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pocsag_frequency": {
+          "name": "pocsag_frequency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "programming_stand": {
+          "name": "programming_stand",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ric_assignment": {
+          "name": "ric_assignment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_programmed_at": {
+          "name": "last_programmed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "pager_configs_device_id_devices_id_fk": {
+          "name": "pager_configs_device_id_devices_id_fk",
+          "tableFrom": "pager_configs",
+          "tableTo": "devices",
+          "schemaTo": "fw_funk",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "pager_configs_ric_number_ric_library_ric_number_fk": {
+          "name": "pager_configs_ric_number_ric_library_ric_number_fk",
+          "tableFrom": "pager_configs",
+          "tableTo": "ric_library",
+          "schemaTo": "fw_funk",
+          "columnsFrom": [
+            "ric_number"
+          ],
+          "columnsTo": [
+            "ric_number"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_funk.radio_configs": {
+      "name": "radio_configs",
+      "schema": "fw_funk",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issi": {
+          "name": "issi",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "talkgroup": {
+          "name": "talkgroup",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fleetmap": {
+          "name": "fleetmap",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "programming_stand": {
+          "name": "programming_stand",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_programmed_at": {
+          "name": "last_programmed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "radio_configs_device_id_devices_id_fk": {
+          "name": "radio_configs_device_id_devices_id_fk",
+          "tableFrom": "radio_configs",
+          "tableTo": "devices",
+          "schemaTo": "fw_funk",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "fw_funk.ric_library": {
+      "name": "ric_library",
+      "schema": "fw_funk",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ric_number": {
+          "name": "ric_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "callsign": {
+          "name": "callsign",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_from": {
+          "name": "active_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_to": {
+          "name": "active_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ric_library_ric_number_unique": {
+          "name": "ric_library_ric_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "ric_number"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "core.kameraden": {
+      "name": "kameraden",
+      "schema": "core",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vorname": {
+          "name": "vorname",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dienstgrad": {
+          "name": "dienstgrad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "personalnummer": {
+          "name": "personalnummer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spitzname": {
+          "name": "spitzname",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spitzname_anzeigen": {
+          "name": "spitzname_anzeigen",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "karten_id": {
+          "name": "karten_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "psa_rolle": {
+          "name": "psa_rolle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "food_rolle": {
+          "name": "food_rolle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fk_rolle": {
+          "name": "fk_rolle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "funk_rolle": {
+          "name": "funk_rolle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dienst_rolle": {
+          "name": "dienst_rolle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_kameraden_karten_id": {
+          "name": "idx_kameraden_karten_id",
+          "columns": [
+            {
+              "expression": "karten_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"core\".\"kameraden\".\"karten_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_kameraden_personalnummer": {
+          "name": "idx_kameraden_personalnummer",
+          "columns": [
+            {
+              "expression": "personalnummer",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"core\".\"kameraden\".\"personalnummer\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "core.login_attempts": {
+      "name": "login_attempts",
+      "schema": "core",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "benutzername": {
+          "name": "benutzername",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ip": {
+          "name": "ip",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erfolgreich": {
+          "name": "erfolgreich",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_login_attempts_benutzer_zeit": {
+          "name": "idx_login_attempts_benutzer_zeit",
+          "columns": [
+            {
+              "expression": "benutzername",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_login_attempts_ip_zeit": {
+          "name": "idx_login_attempts_ip_zeit",
+          "columns": [
+            {
+              "expression": "ip",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "core.mitglieder_audit": {
+      "name": "mitglieder_audit",
+      "schema": "core",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "zeitpunkt": {
+          "name": "zeitpunkt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "akteur_kamerad_id": {
+          "name": "akteur_kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "akteur_name": {
+          "name": "akteur_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "abschnitt": {
+          "name": "abschnitt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "feld": {
+          "name": "feld",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alt": {
+          "name": "alt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "neu": {
+          "name": "neu",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_mitglieder_audit_kamerad_zeit": {
+          "name": "idx_mitglieder_audit_kamerad_zeit",
+          "columns": [
+            {
+              "expression": "kamerad_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "zeitpunkt",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.ausgaben": {
+      "name": "ausgaben",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ausruestungstueck_id": {
+          "name": "ausruestungstueck_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ausgabedatum": {
+          "name": "ausgabedatum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rueckgabedatum": {
+          "name": "rueckgabedatum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notizen": {
+          "name": "notizen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_psa_ausgaben_kamerad_id": {
+          "name": "idx_psa_ausgaben_kamerad_id",
+          "columns": [
+            {
+              "expression": "kamerad_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_psa_ausgaben_tueck_id": {
+          "name": "idx_psa_ausgaben_tueck_id",
+          "columns": [
+            {
+              "expression": "ausruestungstueck_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ausgaben_ausruestungstueck_id_ausruestungstuecke_id_fk": {
+          "name": "ausgaben_ausruestungstueck_id_ausruestungstuecke_id_fk",
+          "tableFrom": "ausgaben",
+          "tableTo": "ausruestungstuecke",
+          "schemaTo": "psa",
+          "columnsFrom": [
+            "ausruestungstueck_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ausgaben_kamerad_id_kameraden_id_fk": {
+          "name": "ausgaben_kamerad_id_kameraden_id_fk",
+          "tableFrom": "ausgaben",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.ausruestungstuecke": {
+      "name": "ausruestungstuecke",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ausruestungstyp_id": {
+          "name": "ausruestungstyp_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seriennummer": {
+          "name": "seriennummer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kaufdatum": {
+          "name": "kaufdatum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "herstellungsdatum": {
+          "name": "herstellungsdatum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "naechste_pruefung": {
+          "name": "naechste_pruefung",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "letzte_pruefung": {
+          "name": "letzte_pruefung",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lebensende_datum": {
+          "name": "lebensende_datum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "qr_code": {
+          "name": "qr_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "waesche_anzahl": {
+          "name": "waesche_anzahl",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "groesse": {
+          "name": "groesse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notizen": {
+          "name": "notizen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_psa_ausruestungstuecke_kamerad_id": {
+          "name": "idx_psa_ausruestungstuecke_kamerad_id",
+          "columns": [
+            {
+              "expression": "kamerad_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_psa_ausruestungstuecke_typ_id": {
+          "name": "idx_psa_ausruestungstuecke_typ_id",
+          "columns": [
+            {
+              "expression": "ausruestungstyp_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ausruestungstuecke_ausruestungstyp_id_ausruestungstypen_id_fk": {
+          "name": "ausruestungstuecke_ausruestungstyp_id_ausruestungstypen_id_fk",
+          "tableFrom": "ausruestungstuecke",
+          "tableTo": "ausruestungstypen",
+          "schemaTo": "psa",
+          "columnsFrom": [
+            "ausruestungstyp_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "ausruestungstuecke_kamerad_id_kameraden_id_fk": {
+          "name": "ausruestungstuecke_kamerad_id_kameraden_id_fk",
+          "tableFrom": "ausruestungstuecke",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.ausruestungstypen": {
+      "name": "ausruestungstypen",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "bezeichnung": {
+          "name": "bezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "typ": {
+          "name": "typ",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pruefintervall_monate": {
+          "name": "pruefintervall_monate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_lebensdauer_jahre": {
+          "name": "max_lebensdauer_jahre",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_waeschen": {
+          "name": "max_waeschen",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "norm": {
+          "name": "norm",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "foto": {
+          "name": "foto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.changelog": {
+      "name": "changelog",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tabelle": {
+          "name": "tabelle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktion": {
+          "name": "aktion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "details": {
+          "name": "details",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "benutzer": {
+          "name": "benutzer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zeitpunkt": {
+          "name": "zeitpunkt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.kamerad_details": {
+      "name": "kamerad_details",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "jacke_groesse": {
+          "name": "jacke_groesse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hose_groesse": {
+          "name": "hose_groesse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stiefel_groesse": {
+          "name": "stiefel_groesse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "handschuh_groesse": {
+          "name": "handschuh_groesse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hemd_groesse": {
+          "name": "hemd_groesse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "poloshirt_groesse": {
+          "name": "poloshirt_groesse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fleece_groesse": {
+          "name": "fleece_groesse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "kamerad_details_kamerad_id_kameraden_id_fk": {
+          "name": "kamerad_details_kamerad_id_kameraden_id_fk",
+          "tableFrom": "kamerad_details",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "kamerad_details_kamerad_id_unique": {
+          "name": "kamerad_details_kamerad_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "kamerad_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.normen": {
+      "name": "normen",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "bezeichnung": {
+          "name": "bezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ausruestungstyp_kategorie": {
+          "name": "ausruestungstyp_kategorie",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normbezeichnung": {
+          "name": "normbezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pruefintervall_monate": {
+          "name": "pruefintervall_monate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_lebensdauer_jahre": {
+          "name": "max_lebensdauer_jahre",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_waeschen": {
+          "name": "max_waeschen",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "beschreibung": {
+          "name": "beschreibung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.pruefungen": {
+      "name": "pruefungen",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ausruestungstueck_id": {
+          "name": "ausruestungstueck_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "datum": {
+          "name": "datum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ergebnis": {
+          "name": "ergebnis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pruefer": {
+          "name": "pruefer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "naechste_pruefung": {
+          "name": "naechste_pruefung",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notizen": {
+          "name": "notizen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "foto": {
+          "name": "foto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_psa_pruefungen_kamerad_id": {
+          "name": "idx_psa_pruefungen_kamerad_id",
+          "columns": [
+            {
+              "expression": "kamerad_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_psa_pruefungen_tueck_id": {
+          "name": "idx_psa_pruefungen_tueck_id",
+          "columns": [
+            {
+              "expression": "ausruestungstueck_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "pruefungen_ausruestungstueck_id_ausruestungstuecke_id_fk": {
+          "name": "pruefungen_ausruestungstueck_id_ausruestungstuecke_id_fk",
+          "tableFrom": "pruefungen",
+          "tableTo": "ausruestungstuecke",
+          "schemaTo": "psa",
+          "columnsFrom": [
+            "ausruestungstueck_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "pruefungen_kamerad_id_kameraden_id_fk": {
+          "name": "pruefungen_kamerad_id_kameraden_id_fk",
+          "tableFrom": "pruefungen",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.schadensdokumentation": {
+      "name": "schadensdokumentation",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ausruestungstueck_id": {
+          "name": "ausruestungstueck_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "datum": {
+          "name": "datum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "beschreibung": {
+          "name": "beschreibung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "foto": {
+          "name": "foto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erstellt_von": {
+          "name": "erstellt_von",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_psa_schadensdokumentation_tueck_id": {
+          "name": "idx_psa_schadensdokumentation_tueck_id",
+          "columns": [
+            {
+              "expression": "ausruestungstueck_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "schadensdokumentation_ausruestungstueck_id_ausruestungstuecke_id_fk": {
+          "name": "schadensdokumentation_ausruestungstueck_id_ausruestungstuecke_id_fk",
+          "tableFrom": "schadensdokumentation",
+          "tableTo": "ausruestungstuecke",
+          "schemaTo": "psa",
+          "columnsFrom": [
+            "ausruestungstueck_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "schadensdokumentation_erstellt_von_kameraden_id_fk": {
+          "name": "schadensdokumentation_erstellt_von_kameraden_id_fk",
+          "tableFrom": "schadensdokumentation",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "erstellt_von"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "psa.waesche": {
+      "name": "waesche",
+      "schema": "psa",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ausruestungstueck_id": {
+          "name": "ausruestungstueck_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "datum": {
+          "name": "datum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "waescheart": {
+          "name": "waescheart",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Normal'"
+        },
+        "notizen": {
+          "name": "notizen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_psa_waesche_kamerad_id": {
+          "name": "idx_psa_waesche_kamerad_id",
+          "columns": [
+            {
+              "expression": "kamerad_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_psa_waesche_tueck_id": {
+          "name": "idx_psa_waesche_tueck_id",
+          "columns": [
+            {
+              "expression": "ausruestungstueck_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "waesche_ausruestungstueck_id_ausruestungstuecke_id_fk": {
+          "name": "waesche_ausruestungstueck_id_ausruestungstuecke_id_fk",
+          "tableFrom": "waesche",
+          "tableTo": "ausruestungstuecke",
+          "schemaTo": "psa",
+          "columnsFrom": [
+            "ausruestungstueck_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "waesche_kamerad_id_kameraden_id_fk": {
+          "name": "waesche_kamerad_id_kameraden_id_fk",
+          "tableFrom": "waesche",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.anzeige_tokens": {
+      "name": "anzeige_tokens",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gueltig_bis": {
+          "name": "gueltig_bis",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erstellt_von": {
+          "name": "erstellt_von",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "anzeige_tokens_hash": {
+          "name": "anzeige_tokens_hash",
+          "columns": [
+            {
+              "expression": "token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_anzeige_tokens_plan": {
+          "name": "idx_anzeige_tokens_plan",
+          "columns": [
+            {
+              "expression": "plan_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "anzeige_tokens_organisation_id_organisationen_id_fk": {
+          "name": "anzeige_tokens_organisation_id_organisationen_id_fk",
+          "tableFrom": "anzeige_tokens",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "anzeige_tokens_plan_id_plaene_id_fk": {
+          "name": "anzeige_tokens_plan_id_plaene_id_fk",
+          "tableFrom": "anzeige_tokens",
+          "tableTo": "plaene",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "anzeige_tokens_erstellt_von_kameraden_id_fk": {
+          "name": "anzeige_tokens_erstellt_von_kameraden_id_fk",
+          "tableFrom": "anzeige_tokens",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "erstellt_von"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "anzeige_tokens_hash_format": {
+          "name": "anzeige_tokens_hash_format",
+          "value": "\"dienstplan\".\"anzeige_tokens\".\"token_hash\" ~ '^[0-9a-f]{64}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.ausgleich_personen": {
+      "name": "ausgleich_personen",
+      "schema": "dienstplan",
+      "columns": {
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ausgleich_personen_organisation_id_organisationen_id_fk": {
+          "name": "ausgleich_personen_organisation_id_organisationen_id_fk",
+          "tableFrom": "ausgleich_personen",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ausgleich_personen_kamerad_id_kameraden_id_fk": {
+          "name": "ausgleich_personen_kamerad_id_kameraden_id_fk",
+          "tableFrom": "ausgleich_personen",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ausgleich_personen_org_kamerad": {
+          "name": "ausgleich_personen_org_kamerad",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "kamerad_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.bereiche": {
+      "name": "bereiche",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sortierung": {
+          "name": "sortierung",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bereiche_organisation_id_organisationen_id_fk": {
+          "name": "bereiche_organisation_id_organisationen_id_fk",
+          "tableFrom": "bereiche",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "bereiche_org_name": {
+          "name": "bereiche_org_name",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.erinnerungs_einstellungen": {
+      "name": "erinnerungs_einstellungen",
+      "schema": "dienstplan",
+      "columns": {
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "tage_vorher": {
+          "name": "tage_vorher",
+          "type": "smallint[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{14,3}'"
+        },
+        "kanaele": {
+          "name": "kanaele",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{email}'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "erinnerungs_einstellungen_organisation_id_organisationen_id_fk": {
+          "name": "erinnerungs_einstellungen_organisation_id_organisationen_id_fk",
+          "tableFrom": "erinnerungs_einstellungen",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.erinnerungs_versand": {
+      "name": "erinnerungs_versand",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "termin_verantwortlicher_id": {
+          "name": "termin_verantwortlicher_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tage_vorher": {
+          "name": "tage_vorher",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kanal": {
+          "name": "kanal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gesendet_am": {
+          "name": "gesendet_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fehler": {
+          "name": "fehler",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "erinnerungs_versand_termin_verantwortlicher_id_termin_verantwortliche_id_fk": {
+          "name": "erinnerungs_versand_termin_verantwortlicher_id_termin_verantwortliche_id_fk",
+          "tableFrom": "erinnerungs_versand",
+          "tableTo": "termin_verantwortliche",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "termin_verantwortlicher_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "erinnerungs_versand_eindeutig": {
+          "name": "erinnerungs_versand_eindeutig",
+          "nullsNotDistinct": false,
+          "columns": [
+            "termin_verantwortlicher_id",
+            "tage_vorher",
+            "kanal"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.export_laeufe": {
+      "name": "export_laeufe",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "profil_id": {
+          "name": "profil_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "modus": {
+          "name": "modus",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stand": {
+          "name": "stand",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "erstellt_von": {
+          "name": "erstellt_von",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "export_laeufe_plan_id_plaene_id_fk": {
+          "name": "export_laeufe_plan_id_plaene_id_fk",
+          "tableFrom": "export_laeufe",
+          "tableTo": "plaene",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "export_laeufe_profil_id_export_profile_id_fk": {
+          "name": "export_laeufe_profil_id_export_profile_id_fk",
+          "tableFrom": "export_laeufe",
+          "tableTo": "export_profile",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "profil_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "export_laeufe_erstellt_von_kameraden_id_fk": {
+          "name": "export_laeufe_erstellt_von_kameraden_id_fk",
+          "tableFrom": "export_laeufe",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "erstellt_von"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "export_laeufe_modus": {
+          "name": "export_laeufe_modus",
+          "value": "\"dienstplan\".\"export_laeufe\".\"modus\" IN ('komplett', 'aenderungen')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.export_profile": {
+      "name": "export_profile",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trennzeichen": {
+          "name": "trennzeichen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "';'"
+        },
+        "kodierung": {
+          "name": "kodierung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'utf-8-bom'"
+        },
+        "kopfzeile": {
+          "name": "kopfzeile",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "spalten": {
+          "name": "spalten",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nur_freigegeben": {
+          "name": "nur_freigegeben",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "kategorien": {
+          "name": "kategorien",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "export_profile_organisation_id_organisationen_id_fk": {
+          "name": "export_profile_organisation_id_organisationen_id_fk",
+          "tableFrom": "export_profile",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "export_profile_kodierung": {
+          "name": "export_profile_kodierung",
+          "value": "\"dienstplan\".\"export_profile\".\"kodierung\" IN ('utf-8', 'utf-8-bom', 'windows-1252')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.externe_personen": {
+      "name": "externe_personen",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "organisation": {
+          "name": "organisation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "funktion": {
+          "name": "funktion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "externe_personen_organisation_id_organisationen_id_fk": {
+          "name": "externe_personen_organisation_id_organisationen_id_fk",
+          "tableFrom": "externe_personen",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "name_oder_organisation": {
+          "name": "name_oder_organisation",
+          "value": "num_nonnulls(\"dienstplan\".\"externe_personen\".\"name\", \"dienstplan\".\"externe_personen\".\"organisation\") >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.kategorien": {
+      "name": "kategorien",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kuerzel": {
+          "name": "kuerzel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "farbe": {
+          "name": "farbe",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "standard_uhrzeit": {
+          "name": "standard_uhrzeit",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "standard_dauer_minuten": {
+          "name": "standard_dauer_minuten",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 120
+        },
+        "sortierung": {
+          "name": "sortierung",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "kategorien_organisation_id_organisationen_id_fk": {
+          "name": "kategorien_organisation_id_organisationen_id_fk",
+          "tableFrom": "kategorien",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "kategorien_org_kuerzel": {
+          "name": "kategorien_org_kuerzel",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "kuerzel"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "kategorien_farbe": {
+          "name": "kategorien_farbe",
+          "value": "\"dienstplan\".\"kategorien\".\"farbe\" IN ('blue','teal','orange','indigo','pink','purple','red','yellow','green','gray')"
+        },
+        "kategorien_dauer": {
+          "name": "kategorien_dauer",
+          "value": "\"dienstplan\".\"kategorien\".\"standard_dauer_minuten\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.organisationen": {
+      "name": "organisationen",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.plaene": {
+      "name": "plaene",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "jahr": {
+          "name": "jahr",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "plan_status",
+          "typeSchema": "dienstplan",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'entwurf'"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "freigegeben_am": {
+          "name": "freigegeben_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "freigegeben_von": {
+          "name": "freigegeben_von",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fokus_termin_id": {
+          "name": "fokus_termin_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "plaene_organisation_id_organisationen_id_fk": {
+          "name": "plaene_organisation_id_organisationen_id_fk",
+          "tableFrom": "plaene",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "plaene_freigegeben_von_kameraden_id_fk": {
+          "name": "plaene_freigegeben_von_kameraden_id_fk",
+          "tableFrom": "plaene",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "freigegeben_von"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "plaene_fokus_termin_id_termine_id_fk": {
+          "name": "plaene_fokus_termin_id_termine_id_fk",
+          "tableFrom": "plaene",
+          "tableTo": "termine",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "fokus_termin_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "plaene_org_jahr": {
+          "name": "plaene_org_jahr",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "jahr"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "plaene_jahr": {
+          "name": "plaene_jahr",
+          "value": "\"dienstplan\".\"plaene\".\"jahr\" BETWEEN 2000 AND 2100"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.plan_versionen": {
+      "name": "plan_versionen",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nummer": {
+          "name": "nummer",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "anlass": {
+          "name": "anlass",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bezeichnung": {
+          "name": "bezeichnung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inhalt": {
+          "name": "inhalt",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erstellt_am": {
+          "name": "erstellt_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "erstellt_von": {
+          "name": "erstellt_von",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "plan_versionen_plan_id_plaene_id_fk": {
+          "name": "plan_versionen_plan_id_plaene_id_fk",
+          "tableFrom": "plan_versionen",
+          "tableTo": "plaene",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "plan_versionen_erstellt_von_kameraden_id_fk": {
+          "name": "plan_versionen_erstellt_von_kameraden_id_fk",
+          "tableFrom": "plan_versionen",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "erstellt_von"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "plan_versionen_plan_nummer": {
+          "name": "plan_versionen_plan_nummer",
+          "nullsNotDistinct": false,
+          "columns": [
+            "plan_id",
+            "nummer"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "plan_versionen_anlass": {
+          "name": "plan_versionen_anlass",
+          "value": "\"dienstplan\".\"plan_versionen\".\"anlass\" IN ('freigabe', 'manuell')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.rhythmus_regeln": {
+      "name": "rhythmus_regeln",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "typ": {
+          "name": "typ",
+          "type": "regel_typ",
+          "typeSchema": "dienstplan",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wochentag": {
+          "name": "wochentag",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "uhrzeit": {
+          "name": "uhrzeit",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "anker_datum": {
+          "name": "anker_datum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "muster": {
+          "name": "muster",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nter_wochentag": {
+          "name": "nter_wochentag",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "monate": {
+          "name": "monate",
+          "type": "smallint[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kategorie_kuerzel": {
+          "name": "kategorie_kuerzel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gueltig_ab": {
+          "name": "gueltig_ab",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gueltig_bis": {
+          "name": "gueltig_bis",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rhythmus_regeln_organisation_id_organisationen_id_fk": {
+          "name": "rhythmus_regeln_organisation_id_organisationen_id_fk",
+          "tableFrom": "rhythmus_regeln",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "regeln_wochentag": {
+          "name": "regeln_wochentag",
+          "value": "\"dienstplan\".\"rhythmus_regeln\".\"wochentag\" BETWEEN 1 AND 7"
+        },
+        "regeln_gueltig": {
+          "name": "regeln_gueltig",
+          "value": "\"dienstplan\".\"rhythmus_regeln\".\"gueltig_bis\" IS NULL OR \"dienstplan\".\"rhythmus_regeln\".\"gueltig_bis\" >= \"dienstplan\".\"rhythmus_regeln\".\"gueltig_ab\""
+        },
+        "regeln_wochen_zyklus": {
+          "name": "regeln_wochen_zyklus",
+          "value": "\"dienstplan\".\"rhythmus_regeln\".\"typ\" <> 'wochen_zyklus' OR (\"dienstplan\".\"rhythmus_regeln\".\"anker_datum\" IS NOT NULL AND cardinality(\"dienstplan\".\"rhythmus_regeln\".\"muster\") >= 1)"
+        },
+        "regeln_monats_wochentag": {
+          "name": "regeln_monats_wochentag",
+          "value": "\"dienstplan\".\"rhythmus_regeln\".\"typ\" <> 'monats_wochentag' OR (\"dienstplan\".\"rhythmus_regeln\".\"nter_wochentag\" IN (1,2,3,4,5,-1) AND cardinality(\"dienstplan\".\"rhythmus_regeln\".\"monate\") >= 1 AND \"dienstplan\".\"rhythmus_regeln\".\"kategorie_kuerzel\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.termin_themen": {
+      "name": "termin_themen",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "termin_id": {
+          "name": "termin_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thema_id": {
+          "name": "thema_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "titel_freitext": {
+          "name": "titel_freitext",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "aus_block_id": {
+          "name": "aus_block_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_termin_themen_termin": {
+          "name": "idx_termin_themen_termin",
+          "columns": [
+            {
+              "expression": "termin_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "termin_themen_termin_id_termine_id_fk": {
+          "name": "termin_themen_termin_id_termine_id_fk",
+          "tableFrom": "termin_themen",
+          "tableTo": "termine",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "termin_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "termin_themen_thema_id_themen_id_fk": {
+          "name": "termin_themen_thema_id_themen_id_fk",
+          "tableFrom": "termin_themen",
+          "tableTo": "themen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "thema_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "termin_themen_aus_block_id_themenbloecke_id_fk": {
+          "name": "termin_themen_aus_block_id_themenbloecke_id_fk",
+          "tableFrom": "termin_themen",
+          "tableTo": "themenbloecke",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "aus_block_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "thema_oder_freitext": {
+          "name": "thema_oder_freitext",
+          "value": "(\"dienstplan\".\"termin_themen\".\"thema_id\" IS NOT NULL) <> (\"dienstplan\".\"termin_themen\".\"titel_freitext\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.termin_verantwortliche": {
+      "name": "termin_verantwortliche",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "termin_thema_id": {
+          "name": "termin_thema_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kamerad_id": {
+          "name": "kamerad_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "externe_person_id": {
+          "name": "externe_person_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platzhalter": {
+          "name": "platzhalter",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "idx_termin_verantwortliche_thema": {
+          "name": "idx_termin_verantwortliche_thema",
+          "columns": [
+            {
+              "expression": "termin_thema_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "termin_verantwortliche_termin_thema_id_termin_themen_id_fk": {
+          "name": "termin_verantwortliche_termin_thema_id_termin_themen_id_fk",
+          "tableFrom": "termin_verantwortliche",
+          "tableTo": "termin_themen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "termin_thema_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "termin_verantwortliche_kamerad_id_kameraden_id_fk": {
+          "name": "termin_verantwortliche_kamerad_id_kameraden_id_fk",
+          "tableFrom": "termin_verantwortliche",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "kamerad_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "termin_verantwortliche_externe_person_id_externe_personen_id_fk": {
+          "name": "termin_verantwortliche_externe_person_id_externe_personen_id_fk",
+          "tableFrom": "termin_verantwortliche",
+          "tableTo": "externe_personen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "externe_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "genau_ein_bezug": {
+          "name": "genau_ein_bezug",
+          "value": "num_nonnulls(\"dienstplan\".\"termin_verantwortliche\".\"kamerad_id\", \"dienstplan\".\"termin_verantwortliche\".\"externe_person_id\", \"dienstplan\".\"termin_verantwortliche\".\"platzhalter\") = 1"
+        },
+        "platzhalter_werte": {
+          "name": "platzhalter_werte",
+          "value": "\"dienstplan\".\"termin_verantwortliche\".\"platzhalter\" IS NULL OR \"dienstplan\".\"termin_verantwortliche\".\"platzhalter\" IN ('alle_gf', 'offen')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.termine": {
+      "name": "termine",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "datum": {
+          "name": "datum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "uhrzeit": {
+          "name": "uhrzeit",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dauer_minuten": {
+          "name": "dauer_minuten",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kategorie_id": {
+          "name": "kategorie_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quelle": {
+          "name": "quelle",
+          "type": "termin_quelle",
+          "typeSchema": "dienstplan",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manuell'"
+        },
+        "regel_id": {
+          "name": "regel_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rhythmus_datum": {
+          "name": "rhythmus_datum",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ausgefallen": {
+          "name": "ausgefallen",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "ort": {
+          "name": "ort",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bemerkung": {
+          "name": "bemerkung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notizen": {
+          "name": "notizen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktualisiert_am": {
+          "name": "aktualisiert_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_termine_plan_datum": {
+          "name": "idx_termine_plan_datum",
+          "columns": [
+            {
+              "expression": "plan_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "datum",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_termine_regel_rhythmus": {
+          "name": "idx_termine_regel_rhythmus",
+          "columns": [
+            {
+              "expression": "plan_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "regel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "rhythmus_datum",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"dienstplan\".\"termine\".\"regel_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "termine_plan_id_plaene_id_fk": {
+          "name": "termine_plan_id_plaene_id_fk",
+          "tableFrom": "termine",
+          "tableTo": "plaene",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "termine_kategorie_id_kategorien_id_fk": {
+          "name": "termine_kategorie_id_kategorien_id_fk",
+          "tableFrom": "termine",
+          "tableTo": "kategorien",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "kategorie_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "termine_regel_id_rhythmus_regeln_id_fk": {
+          "name": "termine_regel_id_rhythmus_regeln_id_fk",
+          "tableFrom": "termine",
+          "tableTo": "rhythmus_regeln",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "regel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "termine_rhythmus": {
+          "name": "termine_rhythmus",
+          "value": "\"dienstplan\".\"termine\".\"quelle\" <> 'rhythmus' OR (\"dienstplan\".\"termine\".\"regel_id\" IS NOT NULL AND \"dienstplan\".\"termine\".\"rhythmus_datum\" IS NOT NULL)"
+        },
+        "termine_dauer": {
+          "name": "termine_dauer",
+          "value": "\"dienstplan\".\"termine\".\"dauer_minuten\" IS NULL OR \"dienstplan\".\"termine\".\"dauer_minuten\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "dienstplan.themen": {
+      "name": "themen",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "titel": {
+          "name": "titel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kurztitel": {
+          "name": "kurztitel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bereich_id": {
+          "name": "bereich_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notizen": {
+          "name": "notizen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pflicht_jaehrlich": {
+          "name": "pflicht_jaehrlich",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "zielgruppe": {
+          "name": "zielgruppe",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "themen_organisation_id_organisationen_id_fk": {
+          "name": "themen_organisation_id_organisationen_id_fk",
+          "tableFrom": "themen",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "themen_bereich_id_bereiche_id_fk": {
+          "name": "themen_bereich_id_bereiche_id_fk",
+          "tableFrom": "themen",
+          "tableTo": "bereiche",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "bereich_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "themen_org_titel": {
+          "name": "themen_org_titel",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organisation_id",
+            "titel"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.themenblock_positionen": {
+      "name": "themenblock_positionen",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "block_id": {
+          "name": "block_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thema_id": {
+          "name": "thema_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "idx_themenblock_positionen_block": {
+          "name": "idx_themenblock_positionen_block",
+          "columns": [
+            {
+              "expression": "block_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "themenblock_positionen_block_id_themenbloecke_id_fk": {
+          "name": "themenblock_positionen_block_id_themenbloecke_id_fk",
+          "tableFrom": "themenblock_positionen",
+          "tableTo": "themenbloecke",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "block_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "themenblock_positionen_thema_id_themen_id_fk": {
+          "name": "themenblock_positionen_thema_id_themen_id_fk",
+          "tableFrom": "themenblock_positionen",
+          "tableTo": "themen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "thema_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.themenbloecke": {
+      "name": "themenbloecke",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "aktiv": {
+          "name": "aktiv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "themenbloecke_organisation_id_organisationen_id_fk": {
+          "name": "themenbloecke_organisation_id_organisationen_id_fk",
+          "tableFrom": "themenbloecke",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "dienstplan.themenvorschlaege": {
+      "name": "themenvorschlaege",
+      "schema": "dienstplan",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "titel": {
+          "name": "titel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "beschreibung": {
+          "name": "beschreibung",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vorgeschlagen_von": {
+          "name": "vorgeschlagen_von",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vorgeschlagen_am": {
+          "name": "vorgeschlagen_am",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "status": {
+          "name": "status",
+          "type": "vorschlag_status",
+          "typeSchema": "dienstplan",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'offen'"
+        },
+        "thema_id": {
+          "name": "thema_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "themenvorschlaege_organisation_id_organisationen_id_fk": {
+          "name": "themenvorschlaege_organisation_id_organisationen_id_fk",
+          "tableFrom": "themenvorschlaege",
+          "tableTo": "organisationen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "themenvorschlaege_vorgeschlagen_von_kameraden_id_fk": {
+          "name": "themenvorschlaege_vorgeschlagen_von_kameraden_id_fk",
+          "tableFrom": "themenvorschlaege",
+          "tableTo": "kameraden",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "vorgeschlagen_von"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "themenvorschlaege_thema_id_themen_id_fk": {
+          "name": "themenvorschlaege_thema_id_themen_id_fk",
+          "tableFrom": "themenvorschlaege",
+          "tableTo": "themen",
+          "schemaTo": "dienstplan",
+          "columnsFrom": [
+            "thema_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "dienstplan.plan_status": {
+      "name": "plan_status",
+      "schema": "dienstplan",
+      "values": [
+        "entwurf",
+        "freigegeben"
+      ]
+    },
+    "dienstplan.regel_typ": {
+      "name": "regel_typ",
+      "schema": "dienstplan",
+      "values": [
+        "wochen_zyklus",
+        "monats_wochentag"
+      ]
+    },
+    "dienstplan.termin_quelle": {
+      "name": "termin_quelle",
+      "schema": "dienstplan",
+      "values": [
+        "rhythmus",
+        "manuell"
+      ]
+    },
+    "dienstplan.vorschlag_status": {
+      "name": "vorschlag_status",
+      "schema": "dienstplan",
+      "values": [
+        "offen",
+        "uebernommen",
+        "verworfen"
+      ]
+    }
+  },
+  "schemas": {
+    "core": "core",
+    "fw_food": "fw_food",
+    "fw_funk": "fw_funk",
+    "psa": "psa",
+    "dienstplan": "dienstplan"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -29,10 +29,15 @@ const bcrypt = (await import(pathToFileURL(req.resolve("bcryptjs")).href)).defau
 const owner = postgres(process.env.MIGRATE_DATABASE_URL, { max: 1, onnotice: () => {} });
 
 // Token-Routen: Pfad relativ zu /api/dienstplan im Dateisystem-Format (mit [param]).
-// aufrufe(): URLs ohne Token und mit falschem Token. Eintragen, sobald es sie gibt
-// (Phase 6 Präsentation, Phase 10 iCal). Ein Eintrag ohne passende route.ts ist ein Fehler.
+// aufrufe(): Aufrufe ohne Token und mit falschem Token ({ url, headers }).
+// Ein Eintrag ohne passende route.ts ist ein Fehler. Ausführlich (abgelaufen,
+// anderer Plan, beendet) in test-dienstplan-anzeige.mjs.
+const FALSCHES_TOKEN = "A".repeat(43); // richtiges Format, gibt es nicht
 const TOKEN_ROUTEN = [
-  // { pfad: "anzeige/[token]", methode: "GET", aufrufe: () => ({ ohne: null, falsch: "/api/dienstplan/anzeige/falsch" }) },
+  { pfad: "anzeige/[jahr]", methode: "GET", aufrufe: () => ({
+    ohne: { url: "/api/dienstplan/anzeige/2026" },
+    falsch: { url: "/api/dienstplan/anzeige/2026", headers: { "x-dienstplan-anzeige": FALSCHES_TOKEN } },
+  }) },
 ];
 
 const METHODEN = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -67,11 +72,12 @@ function urlFuer(pfadRel) {
   return `/api/dienstplan${teile.length ? "/" + teile.join("/") : ""}`;
 }
 
-async function aufruf(methode, url, cookie) {
+async function aufruf(methode, url, cookie, extra = {}) {
   const r = await fetch(`${BASE}${url}`, {
     method: methode,
     redirect: "manual",
     headers: {
+      ...extra,
       ...(cookie ? { cookie } : {}),
       ...(methode !== "GET" ? { "content-type": "application/json" } : {}),
     },
@@ -102,10 +108,10 @@ try {
     const token = TOKEN_ROUTEN.find((t) => t.pfad === pfadRel && t.methode === methode);
     if (token) {
       const { ohne, falsch } = token.aufrufe();
-      for (const [art, url] of [["ohne Token", ohne], ["mit falschem Token", falsch]]) {
-        if (!url) continue;
-        const r = await aufruf(methode, url, null);
-        check(`${methode} ${url} ${art} → 401/403`, r.status === 401 || r.status === 403, String(r.status));
+      for (const [art, a] of [["ohne Token", ohne], ["mit falschem Token", falsch]]) {
+        if (!a) continue;
+        const r = await aufruf(methode, a.url, null, a.headers);
+        check(`${methode} ${a.url} ${art} → 401/403`, r.status === 401 || r.status === 403, String(r.status));
       }
       continue;
     }

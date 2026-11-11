@@ -141,6 +141,23 @@ export async function withDienstplanScope<T>(
   });
 }
 
+// Anzeige-Scope (Präsentation ohne Login, Migration 0019): setzt nur
+// app.dienst_rolle='Anzeige' und app.dienst_anzeige = SHA-256-Hash des Tokens.
+// Die Policies zeigen dann genau den Plan des gültigen Tokens, nur lesend.
+// Kein app.kamerad_id, kein app.dienst_org: Plan und Organisation bestimmt die
+// Datenbank aus der Token-Zeile. Nur aus lib/dienstplan/anzeige.ts aufrufen.
+export async function withDienstplanAnzeigeScope<T>(
+  tokenHash: string,
+  fn: (tx: ScopedTx) => Promise<T>,
+): Promise<T> {
+  if (!/^[0-9a-f]{64}$/.test(tokenHash)) throw new Error("withDienstplanAnzeigeScope: ungültiger Hash");
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select set_config('app.dienst_rolle', 'Anzeige', true)`);
+    await tx.execute(sql`select set_config('app.dienst_anzeige', ${tokenHash}, true)`);
+    return fn(tx);
+  });
+}
+
 // Bewusst login-freier, aber als vertrauenswürdig markierter öffentlicher
 // Food-Zugriff (Kiosk/Mobile): setzt app.food_public='true' statt eines
 // personen-/rollenbezogenen Scopes.

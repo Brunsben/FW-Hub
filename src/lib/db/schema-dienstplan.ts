@@ -13,6 +13,7 @@ import {
   unique,
   index,
   uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { kameraden } from "./schema";
@@ -94,6 +95,9 @@ export const dpPlaene = dp.table("plaene", {
   version: integer("version").notNull().default(0), // bei jeder Änderung erhöht (Trigger)
   freigegebenAm: timestamp("freigegeben_am", { withTimezone: true }),
   freigegebenVon: integer("freigegeben_von").references(() => kameraden.id),
+  // Termin, den die Eingabemaske gerade bearbeitet (Schalter „Fokus“, Spec 7.2);
+  // die Präsentation markiert ihn. Ändert nicht die Version (Migration 0019).
+  fokusTerminId: integer("fokus_termin_id").references((): AnyPgColumn => dpTermine.id, { onDelete: "set null" }),
 }, (t) => [
   unique("plaene_org_jahr").on(t.organisationId, t.jahr),
   check("plaene_jahr", sql`${t.jahr} BETWEEN 2000 AND 2100`),
@@ -263,3 +267,20 @@ export const dpErinnerungsVersand = dp.table("erinnerungs_versand", {
   gesendetAm: timestamp("gesendet_am", { withTimezone: true }),
   fehler: text("fehler"),
 }, (t) => [unique("erinnerungs_versand_eindeutig").on(t.terminVerantwortlicherId, t.tageVorher, t.kanal)]);
+
+// Anzeige-Token für die Präsentation (Spec 6, Migration 0019): nur Lesen, nur
+// ein Plan, befristet. Gespeichert wird nur der SHA-256-Hash; das Token selbst
+// sieht nur, wer es erzeugt (einmalig in der Antwort).
+export const dpAnzeigeTokens = dp.table("anzeige_tokens", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => dpOrganisationen.id),
+  planId: integer("plan_id").notNull().references(() => dpPlaene.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  gueltigBis: timestamp("gueltig_bis", { withTimezone: true }).notNull(),
+  erstelltVon: integer("erstellt_von").notNull().references(() => kameraden.id),
+  erstelltAm: timestamp("erstellt_am", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("anzeige_tokens_hash").on(t.tokenHash),
+  index("idx_anzeige_tokens_plan").on(t.planId),
+  check("anzeige_tokens_hash_format", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
+]);

@@ -14,7 +14,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | 3 | API inkl. Generator und Akzeptanztest 2026 | fertig (Verwaltung Kategorien/Regeln folgt mit Phase 5, Versionen mit Phase 9) |
 | 4 | Importskript Excel (Themenkatalog, Blockvorschläge, Verantwortliche, Pläne) | fertig (lokal mit Testdaten importiert; echter Import wartet auf Klärung, siehe Phase 4) |
 | 5 | Eingabemaske (Klickbedienung), Verwaltung, Feiertagshinweise | fertig (Monatsraster folgt mit Phase 7) |
-| 6 | Präsentationsansicht mit Live-Aktualisierung und Anzeige-Token | offen |
+| 6 | Präsentationsansicht mit Live-Aktualisierung und Anzeige-Token | fertig (Migration 0019 lokal angewendet, nicht auf dem Server) |
 | 7 | Drag and Drop, Rückgängig, Vorjahresanzeige | offen |
 | 8 | Themenpool, Pflichtthemen-Hinweis, Ausgleichsanzeige, Mitgliederansicht | offen |
 | 9 | Versionen (Freigabe, manuell, Vergleich, Wiederherstellen) | offen |
@@ -112,6 +112,7 @@ Vor dem Ausrollen
    `node scripts/test-dienstplan-import-lib.mjs`, `node scripts/test-dienstplan-import.mjs`,
    `node scripts/test-dienstplan-kalender.mjs`, `node scripts/test-dienstplan-eingabe.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-api.mjs`, `node scripts/test-dienstplan-verwaltung.mjs`,
+   `node scripts/test-dienstplan-anzeige.mjs`,
    `node scripts/kontrast.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
@@ -133,6 +134,7 @@ Migrationen, Reihenfolge
 | 0016_kameraden_spitzname | additiv | vor der App | Spalten, Spaltenrechte fw_app, Audit-Funktion ersetzt |
 | 0017_kameraden_dienst_rolle | additiv | **vor der App (Pflicht)** | Spalte dienst_rolle, set_kamerad_rollen und Audit-Funktion ersetzt |
 | 0018_dienstplan_schema | additiv | vor der App | Schema dienstplan (19 Tabellen, 39 Policies, Trigger, kameraden_namen()), Rechte fw_app, Seeds (Organisation 1, 7 Kategorien, 3 Regeln) |
+| 0019_dienstplan_anzeige | additiv | **vor der App (Pflicht)** | Tabelle anzeige_tokens, Spalte plaene.fokus_termin_id, 6 Policies (Anzeige-Scope), Trigger anzeige_tokens_plan, kameraden_namen() ersetzt |
 
 **Reihenfolge: erst alle Migrationen, dann die App.** Die neue App liest
 `core.kameraden.dienst_rolle` beim Login (ganze Zeile) und das Erst-Setup
@@ -142,8 +144,10 @@ drei Migrationen unverändert weiter (nur neue Spalten, Funktionen nehmen eine
 Obermenge an, neues Schema).
 
 Alle ausstehenden Migrationen in einem Lauf: in `~/fw/FW-Hub` nach `git pull`
-`scripts/server-migrate.sh`. Erwartet bei 0016–0018: `Migrationen eingetragen:
-16 -> 19`, `Policies in core` unverändert (keine neuen Policies in core).
+`scripts/server-migrate.sh`. Erwartet bei 0016–0019: `Migrationen eingetragen:
+16 -> 20`, `Policies in core` unverändert (keine neuen Policies in core).
+0019 muss vor der neuen App laufen: Die App liest `plaene.fokus_termin_id` bei
+jedem Laden eines Plans.
 
 Manuelle Schritte auf dem Server
 - Nach 0016: `drizzle/manual/create-fw-app-role.sql` nur noch in der neuen
@@ -160,7 +164,7 @@ Manuelle Schritte auf dem Server
          has_column_privilege('fw_app','core.kameraden','karten_id','UPDATE'),          -- f
          has_column_privilege('fw_app','core.kameraden','dienst_rolle','UPDATE'),       -- f
          has_schema_privilege('fw_app','dienstplan','USAGE');                           -- t
-  select count(*) from pg_policies where schemaname = 'dienstplan';                    -- 39
+  select count(*) from pg_policies where schemaname = 'dienstplan';                    -- 45 (39 aus 0018, 6 aus 0019)
   select count(*) from pg_tables where schemaname = 'dienstplan' and not rowsecurity;  -- 0
   select string_agg(kuerzel, ',' order by sortierung) from dienstplan.kategorien;      -- D,Z,G,O,J,K,B
   ```
@@ -174,6 +178,15 @@ Smoke-Test nach dem Ausrollen
 - Globaler Admin: `/mitglieder/[id]` → Rollen zeigt "Dienstplan"; Rolle Planer
   setzen und wieder entfernen, Verlauf zeigt dienst_rolle
 - Login als normaler Benutzer klappt (Claim dienst_rolle leer)
+- Präsentation (Phase 6), als Planer in `/dienstplan/<jahr>/bearbeiten`:
+  „Präsentation“ → „Anzeige-Link erzeugen“. Link in einem privaten Fenster bzw.
+  per QR-Code auf dem Handy öffnen: Plan erscheint ohne Anmeldung. Termin in der
+  Eingabe anklicken: Rahmen springt in der Präsentation mit (2 s). „Alle
+  Anzeige-Links beenden“: Präsentation zeigt den Hinweis auf einen neuen Link.
+- Präsentation hinter Cloudflare: Das Polling läuft alle 2 Sekunden je
+  geöffneter Anzeige (304 ohne Inhalt, wenn sich nichts ändert). Prüfen, dass
+  Cloudflare `/api/dienstplan/*` nicht zwischenspeichert (die Antworten tragen
+  `Cache-Control: private, no-cache`) und keine Rate-Limit-Regel greift.
 
 Import der Excel-Pläne 2023–2026 (Phase 4, nach Migrationen und App)
 - Voraussetzung: 0018 ist angewendet, die App läuft (das Skript liest
@@ -771,9 +784,99 @@ Geprüft (11.11.2026, Mac)
 
 ## Phase 6 – Präsentationsansicht
 
+### Lokal testen: Eingabe und Präsentation gleichzeitig
+1. Dev-Server und Anmeldung wie in Phase 5 („Lokal starten“), Konto mit
+   Dienstplan-Rolle Planer oder Admin.
+2. Fenster 1 (Laptop): http://localhost:3100/dienstplan/2026/bearbeiten.
+3. Fenster 2 (Fernseher), eine von zwei Varianten:
+   - **mit Anmeldung:** in der Eingabemaske „Präsentation“ → „In neuem Fenster
+     öffnen“ (http://localhost:3100/dienstplan/2026/praesentation). Gleiche
+     Sitzung, zeigt auch Notizen nicht an.
+   - **wie der Fernseher, ohne Anmeldung:** „Präsentation“ → „Anzeige-Link
+     erzeugen“, Link kopieren und in einem **privaten Fenster** (Chrome
+     `Cmd+Shift+N`, Safari `Cmd+Shift+N`) öffnen. Der QR-Code funktioniert lokal
+     nur auf demselben Rechner (`localhost`).
+4. Fenster 2 mit `Ctrl+Cmd+F` auf Vollbild. Tasten in Fenster 2: `1` / `2`
+   Halbjahr, `J` Gesamtjahr (oder `?ansicht=h1|h2|jahr` in der Adresse).
+5. In Fenster 1 einen Termin anklicken (Schalter „Fokus“ an): Rahmen in der
+   Präsentation folgt nach höchstens 2 Sekunden. Thema, Person oder Ort ändern:
+   die Karte leuchtet in der Präsentation 3 Sekunden auf.
+
 ### Entscheidungen
+- **Anzeige-Token (Migration 0019):** Tabelle `dienstplan.anzeige_tokens` mit
+  SHA-256-Hash, Plan, Organisation, `gueltig_bis` (12 Stunden), Ersteller. Das
+  Token (32 Zufallsbytes, base64url) steht nur einmal in der Antwort von
+  `POST /api/dienstplan/plaene/[jahr]/anzeige`. Planer und Admin erzeugen,
+  listen (`GET`, ohne Token) und beenden alle Links eines Plans (`DELETE`).
+  Ein neuer Link löscht die abgelaufenen der Organisation. Die Policy erlaubt
+  höchstens 24 Stunden Gültigkeit, auch falls die App sich verrechnet.
+- **Token im URL-Fragment:** Link `…/dienstplan/<jahr>/praesentation#t=<token>`.
+  Das Fragment schickt der Browser nie an den Server; die Seite liest es und
+  sendet es als Header `X-Dienstplan-Anzeige` an
+  `GET /api/dienstplan/anzeige/[jahr]`. So steht das Token in keinem
+  Zugriffsprotokoll (nginx, Cloudflare) und in keinem Referer. Die Seite setzt
+  zusätzlich `referrer: no-referrer` und `noindex`.
+- **Anzeige-Scope in der Datenbank:** `withDienstplanAnzeigeScope(hash)` setzt
+  nur `app.dienst_rolle='Anzeige'` und `app.dienst_anzeige=<hash>`. Die Policies
+  zeigen dann genau den Plan der gültigen Token-Zeile (Termine, Themen,
+  Verantwortliche folgen über ihre Lese-Policies), dazu Kategorien, Themen und
+  externe Personen derselben Organisation. Plan-ID und Organisation kommen nie
+  aus dem Request. Schreiben ist in diesem Scope unmöglich (keine Policy).
+  `kameraden_namen()` prüft das Token im Rumpf selbst, weil die Funktion mit
+  Eigentümerrechten läuft. Die Plan-Zugehörigkeit beim Anlegen prüft ein
+  Trigger (`anzeige_tokens_plan`): Eine Unterabfrage auf `plaene` in der Policy
+  wäre zirkulär (42P17), weil `plaene_anzeige` ihrerseits `anzeige_tokens` liest.
+- **Statuscodes der Token-Route:** ohne, mit falschem oder abgelaufenem Token
+  401; gültiges Token für einen anderen Plan 403. Das Token öffnet nur diese
+  eine Route, nicht `/api/dienstplan/plaene/*` und keine Schreibroute.
+- **Ohne Notizen:** Die Token-Route setzt `notizen` auf null (Lesen lässt sich in
+  der Datenbank nicht pro Spalte trennen, Projektion wie in der
+  Mitgliederverwaltung). Bemerkung bleibt (z. B. „entfällt: Heiligabend“).
+  E-Mail-Adressen externer Personen lädt `ladePlan` gar nicht.
+- **Zwei Zugänge, eine Seite:** `/dienstplan/[jahr]/praesentation` liegt
+  außerhalb des Portalrahmens (wie der Kiosk), enthält selbst keine Daten und
+  holt sie mit Token über die Token-Route oder ohne Token mit der eigenen
+  Anmeldung über `GET /api/dienstplan/plaene/[jahr]`. So geht der zweite
+  Bildschirm am Laptop ohne Link, der Fernseher mit Link.
+- **Polling (Spec 7.3):** alle 2 Sekunden mit `If-None-Match`; der nächste
+  Abruf startet erst nach dem vorherigen. ETag `"v<version>-<status>-f<fokus>"`:
+  Der Fokus ändert den ETag, aber nicht `plaene.version` (Version zählt nur
+  Inhaltsänderungen; wichtig für Phase 9). Bei Netzfehlern bleibt der letzte
+  Stand stehen, die Kopfzeile zeigt „Verbindung unterbrochen“. Bei 401/403
+  hört das Polling auf und die Seite zeigt den Hinweis, einen neuen Link zu
+  erzeugen.
+- **Fokus:** Spalte `plaene.fokus_termin_id` (FK auf termine, `ON DELETE SET
+  NULL`), gesetzt über `PUT /api/dienstplan/plaene/[jahr]/fokus` (Planer, Termin
+  muss zum Plan gehören). Schalter „Fokus“ in der Eingabemaske, Standard an:
+  Jeder angeklickte Termin wird Fokus; Ausschalten setzt den Fokus auf null.
+  Liegt ein neuer Fokus im anderen Halbjahr, wechselt die Präsentation dorthin
+  (Gesamtjahr bleibt Gesamtjahr).
+- **Hervorhebung:** Vergleich von `aktualisiert_am` je Termin (Trigger setzt es
+  bei jeder Änderung an Termin, Thema oder Verantwortlichem). Geänderte und neue
+  Karten bekommen 3 Sekunden einen Rahmen in `warning`, der Fokus dauerhaft
+  einen Rahmen in `primary`.
+- **Darstellung:** Halbjahr als Standard (im laufenden Jahr das aktuelle, sonst
+  das 1. Halbjahr), 6 Monatsspalten; Gesamtjahr mit 12. Alle Maße in `em`,
+  Schriftgröße in `vw`: Sie startet groß (Halbjahr 1,4 vw ≈ 27 px bei 1920,
+  54 px bei 3840) und wird automatisch kleiner, bis keine Spalte mehr in Höhe
+  oder Breite überläuft. Lange Themen werden getrennt (`hyphens`), Datum und
+  Uhrzeit nie. Kopfzeile mit Plan, Status, „Dienstabende ohne Thema: n“,
+  Pflichtthemen-Hinweis und Stand der letzten Abfrage.
+- Getestet (Chrome, zwei Fenster, Plan 2026): 1920×1080 ohne Scrollen und
+  Überlauf, 4K mit doppelter Schrift, Fokus nach ca. 1,3 s, Hervorhebung nach
+  ca. 1,7 s und nach 3 s wieder weg, Beenden des Links sperrt die Anzeige.
+
 ### Abweichungen von der Spec
+- Spec 6 nennt eine globale Auth-Middleware, bei der die Route als Ausnahme
+  einzutragen wäre. Die gibt es nicht; jede Route prüft selbst. Die Token-Route
+  steht stattdessen in `TOKEN_ROUTEN` von test-dienstplan-auth.mjs.
+- Vorjahresanzeige in der Präsentation (Spec 7.2, „Standard: aus“) kommt mit
+  der Vorjahresanzeige in Phase 7.
+- Umschalten Halbjahr/Gesamtjahr ohne sichtbare Bedienelemente: Parameter
+  `?ansicht=` oder Tasten 1, 2, J.
+
 ### Offene Fragen
+- Keine.
 
 ## Phase 7 – Drag and Drop, Rückgängig, Vorjahr
 

@@ -1,5 +1,6 @@
 // Rechtetest Schema dienstplan (Migrationen 0017/0018): RLS je Rolle, Organisation,
-// Trigger (Versionszählung, Freigabeschutz), Namensfunktion, Rolle dienst_rolle in core.
+// Trigger (Versionszählung, Freigabeschutz), Namensfunktion, Rolle dienst_rolle in core,
+// Anzeige-Scope der Präsentation (Migration 0019).
 //
 // Aufruf:  node scripts/test-dienstplan-rls.mjs   (kein Server nötig)
 // Env (aus .env.local, falls vorhanden):
@@ -275,6 +276,69 @@ try {
   await als({ "app.kamerad_id": PLN, "app.psa_rolle": "Kleiderwart" }, async (tx) => {
     const e = await fehler(tx, "42501", (sp) => sp`select core.set_kamerad_rollen(${PLN}::integer, '{"dienst_rolle":"Admin"}'::jsonb)`);
     check("5 set_kamerad_rollen ohne globalen Admin → 42501", e.ok, e.got);
+  });
+
+  // ── 6. Anzeige-Scope (Migration 0019) ──────────────────────────────────────
+  const { createHash } = await import("node:crypto");
+  const h = (x) => createHash("sha256").update(x).digest("hex");
+  const HG = h(stamp + "-gueltig"), HA = h(stamp + "-abgelaufen"), HO = h(stamp + "-org2");
+  await owner`insert into dienstplan.anzeige_tokens (organisation_id, plan_id, token_hash, gueltig_bis, erstellt_von) values
+    (1, ${ENTWURF}, ${HG}, now() + interval '1 hour', ${PLN}),
+    (1, ${FREI}, ${HA}, now() - interval '1 minute', ${PLN}),
+    (2, ${ORG2}, ${HO}, now() + interval '1 hour', ${PLN})`;
+  const A = (hash) => ({ "app.dienst_rolle": "Anzeige", "app.dienst_anzeige": hash });
+  await als(A(HG), async (tx) => {
+    check("6 Anzeige: sieht nur die eigene Token-Zeile", (await anzahl(tx, "anzeige_tokens")) === 1);
+    const pl = await tx`select id from dienstplan.plaene`;
+    check("6 Anzeige: sieht genau den Plan des Tokens (Entwurf)", pl.length === 1 && pl[0].id === ENTWURF, JSON.stringify(pl));
+    check("6 Anzeige: Termine des Plans sichtbar, andere nicht", (await anzahl(tx, "termine")) === 1 && (await anzahl(tx, "termine", `id = ${tFrei}`)) === 0);
+    check("6 Anzeige: Kategorien nur der eigenen Organisation", (await anzahl(tx, "kategorien", "organisation_id = 2")) === 0 && (await anzahl(tx, "kategorien")) > 0);
+    check("6 Anzeige: keine Regeln, keine Vorschläge, keine Versionen",
+      (await anzahl(tx, "rhythmus_regeln")) === 0 && (await anzahl(tx, "themenvorschlaege")) === 0 && (await anzahl(tx, "plan_versionen")) === 0);
+    check("6 Anzeige: kameraden_namen() liefert Namen", (await tx`select count(*)::int n from dienstplan.kameraden_namen()`)[0].n > 0);
+    const u = await tx`update dienstplan.termine set ort = 'x' where id = ${tEntwurf} returning id`;
+    check("6 Anzeige: Termin ändern wirkt nicht (0 Zeilen)", u.length === 0);
+    const u2 = await tx`update dienstplan.plaene set fokus_termin_id = ${tEntwurf} where id = ${ENTWURF} returning id`;
+    check("6 Anzeige: Fokus setzen wirkt nicht (0 Zeilen)", u2.length === 0);
+    const e = await fehler(tx, "42501", (sp) => sp`insert into dienstplan.anzeige_tokens (organisation_id, plan_id, token_hash, gueltig_bis, erstellt_von)
+      values (1, ${ENTWURF}, ${h(stamp + "x")}, now() + interval '1 hour', ${PLN})`);
+    check("6 Anzeige: kein neues Token anlegen (42501)", e.ok, e.got);
+  });
+  await als(A(HA), async (tx) => {
+    check("6 Anzeige abgelaufen: sieht keinen Plan", (await anzahl(tx, "plaene")) === 0 && (await anzahl(tx, "termine")) === 0);
+    const e = await fehler(tx, "42501", (sp) => sp`select * from dienstplan.kameraden_namen()`);
+    check("6 Anzeige abgelaufen: kameraden_namen() → 42501", e.ok, e.got);
+  });
+  await als(A(h("gibt-es-nicht")), async (tx) => {
+    check("6 Anzeige mit unbekanntem Hash: sieht nichts", (await anzahl(tx, "plaene")) === 0 && (await anzahl(tx, "kategorien")) === 0 && (await anzahl(tx, "anzeige_tokens")) === 0);
+  });
+  await als({ "app.dienst_anzeige": HG, "app.dienst_rolle": "Mitglied", "app.dienst_org": 1, "app.kamerad_id": MIT }, async (tx) => {
+    check("6 Mitglied mit gesetztem Hash: sieht keine Tokens und keinen Entwurf",
+      (await anzahl(tx, "anzeige_tokens")) === 0 && (await anzahl(tx, "plaene", `id = ${ENTWURF}`)) === 0);
+  });
+  await als(pln, async (tx) => {
+    check("6 Planer: sieht Tokens der eigenen Organisation", (await anzahl(tx, "anzeige_tokens")) === 2);
+    const [t] = await tx`insert into dienstplan.anzeige_tokens (organisation_id, plan_id, token_hash, gueltig_bis, erstellt_von)
+      values (1, ${ENTWURF}, ${h(stamp + "p")}, now() + interval '12 hours', ${PLN}) returning id`;
+    check("6 Planer: legt Token an", !!t);
+    let e = await fehler(tx, "42501", (sp) => sp`insert into dienstplan.anzeige_tokens (organisation_id, plan_id, token_hash, gueltig_bis, erstellt_von)
+      values (1, ${ENTWURF}, ${h(stamp + "q")}, now() + interval '30 hours', ${PLN})`);
+    check("6 Planer: Token länger als 24 h → 42501", e.ok, e.got);
+    e = await fehler(tx, "42501", (sp) => sp`insert into dienstplan.anzeige_tokens (organisation_id, plan_id, token_hash, gueltig_bis, erstellt_von)
+      values (1, ${ENTWURF}, ${h(stamp + "r")}, now() + interval '1 hour', ${ADM})`);
+    check("6 Planer: Token im Namen eines anderen → 42501", e.ok, e.got);
+    e = await fehler(tx, "42501", (sp) => sp`insert into dienstplan.anzeige_tokens (organisation_id, plan_id, token_hash, gueltig_bis, erstellt_von)
+      values (1, ${ORG2}, ${h(stamp + "s")}, now() + interval '1 hour', ${PLN})`);
+    check("6 Planer: Token für Plan einer anderen Organisation → 42501", e.ok, e.got);
+    const f = await tx`update dienstplan.plaene set fokus_termin_id = ${tEntwurf} where id = ${ENTWURF} returning version`;
+    check("6 Planer: Fokus setzen, Version bleibt", f.length === 1 && f[0].version === (await planVersion(tx, ENTWURF)));
+  });
+  await als(mit, async (tx) => {
+    const e = await fehler(tx, "42501", (sp) => sp`insert into dienstplan.anzeige_tokens (organisation_id, plan_id, token_hash, gueltig_bis, erstellt_von)
+      values (1, ${FREI}, ${h(stamp + "m")}, now() + interval '1 hour', ${MIT})`);
+    check("6 Mitglied: kein Token anlegen (42501)", e.ok, e.got);
+    const u = await tx`update dienstplan.plaene set fokus_termin_id = ${tFrei} where id = ${FREI} returning id`;
+    check("6 Mitglied: Fokus setzen wirkt nicht", u.length === 0);
   });
 } finally {
   try {
