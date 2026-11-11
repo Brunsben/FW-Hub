@@ -17,6 +17,8 @@ export interface DpTerminThema {
   position: number;
   themaId: number | null;
   titel: string;
+  /** Kurztitel aus dem Katalog (Bild, enge Darstellungen); null bei Freitext oder ohne. */
+  kurztitel?: string | null;
   freitext: boolean;
   ausBlockId: number | null;
   verantwortliche: DpVerantwortlicher[];

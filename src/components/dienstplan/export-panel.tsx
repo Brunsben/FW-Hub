@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { dpApi, speichereDatei, type DateiAntwort } from "@/components/dienstplan/api";
 import { datumKurz } from "@/components/dienstplan/farben";
+import { DruckLinks } from "@/components/dienstplan/druck-links";
 
 type Profil = { id: number; name: string; nurFreigegeben: boolean };
 type Loeschen = { terminId: number; datum: string; zeit: string | null; titel: string; grund: "entfallen" | "geaendert" };
@@ -18,7 +19,7 @@ const zeit = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle:
 
 // Exporte aus der Eingabemaske (Spec 9, Phase 10/11): CSV nach Profil (z. B.
 // DIVERA) komplett oder nur Änderungen, .ics, Excel. Planer und Admin.
-export function ExportPanel({ jahr, entwurf, zusatz }: { jahr: number; entwurf: boolean; zusatz?: React.ReactNode }) {
+export function ExportPanel({ jahr, entwurf }: { jahr: number; entwurf: boolean }) {
   const [offen, setOffen] = useState(false);
   const [profile, setProfile] = useState<Profil[]>([]);
   const [laeufe, setLaeufe] = useState<Lauf[]>([]);
@@ -70,7 +71,7 @@ export function ExportPanel({ jahr, entwurf, zusatz }: { jahr: number; entwurf: 
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>Export {jahr}</SheetTitle>
-            <SheetDescription>Dateien für DIVERA, Google-Kalender, Excel{zusatz ? ", PDF und Smartphone" : ""}. Ausgefallene Termine stehen nicht in der CSV.</SheetDescription>
+            <SheetDescription>Dateien für DIVERA, Google-Kalender, Excel, PDF und Smartphone. Ausgefallene Termine stehen nicht in der CSV.</SheetDescription>
           </SheetHeader>
           <div className="grid gap-6 px-4 pb-6">
             <div className="grid gap-2">
@@ -124,7 +125,10 @@ export function ExportPanel({ jahr, entwurf, zusatz }: { jahr: number; entwurf: 
               <Button variant="outline" loading={busy === "xlsx"} onClick={() => void exportiere("xlsx", {}, "")}>Excel erzeugen (Halbjahre und Gesamt)</Button>
             </section>
 
-            {zusatz}
+            <section className="grid gap-3" aria-labelledby="ex-druck">
+              <h3 id="ex-druck" className="text-sm font-semibold">PDF und Bild fürs Handy</h3>
+              <DruckLinks jahr={jahr} halbjahr={halbjahr} />
+            </section>
 
             {meldung && <p role={meldung.ok ? "status" : "alert"} className="text-sm" data-testid="export-meldung">{meldung.text}</p>}
             {loeschliste && (

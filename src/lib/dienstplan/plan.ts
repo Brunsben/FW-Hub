@@ -96,7 +96,7 @@ export async function ladeTermine(tx: ScopedTx, plan: Pick<DpPlan, "id" | "jahr"
      order by t.datum, t.uhrzeit nulls first, t.id`);
   const themen = await tx.execute<Omit<DpTerminThema, "verantwortliche"> & { terminId: number }>(sql`
     select tt.id, tt.termin_id as "terminId", tt.position, tt.thema_id as "themaId",
-           coalesce(th.titel, tt.titel_freitext) as titel, tt.titel_freitext is not null as freitext,
+           coalesce(th.titel, tt.titel_freitext) as titel, th.kurztitel, tt.titel_freitext is not null as freitext,
            tt.aus_block_id as "ausBlockId"
       from dienstplan.termin_themen tt
       join dienstplan.termine t on t.id = tt.termin_id
@@ -127,7 +127,7 @@ export async function ladeTermine(tx: ScopedTx, plan: Pick<DpPlan, "id" | "jahr"
   const thProTermin = new Map<number, DpTerminThema[]>();
   for (const th of themen) {
     const liste = thProTermin.get(th.terminId) ?? [];
-    liste.push({ id: th.id, position: th.position, themaId: th.themaId, titel: th.titel, freitext: th.freitext, ausBlockId: th.ausBlockId, verantwortliche: vProThema.get(th.id) ?? [] });
+    liste.push({ id: th.id, position: th.position, themaId: th.themaId, titel: th.titel, kurztitel: th.kurztitel ?? null, freitext: th.freitext, ausBlockId: th.ausBlockId, verantwortliche: vProThema.get(th.id) ?? [] });
     thProTermin.set(th.terminId, liste);
   }
   const feiertage = feiertageNiedersachsen(plan.jahr);

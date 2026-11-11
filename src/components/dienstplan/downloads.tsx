@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { dpApi, speichereDatei, type DateiAntwort } from "@/components/dienstplan/api";
+import { DruckLinks } from "@/components/dienstplan/druck-links";
 
-// Downloads für Mitglieder (Spec 7.4): Kalender (.ics) für Jahr oder Halbjahr.
-// PDF und Bild für das Smartphone kommen mit Phase 11.
+// Downloads für Mitglieder (Spec 7.4): Kalender (.ics), PDF und Bild für das
+// Smartphone, für Halbjahr oder Jahr (Bild nur je Halbjahr).
 export function Downloads({ jahr }: { jahr: number }) {
   const heute = new Date();
   const [halbjahr, setHalbjahr] = useState<string>(heute.getFullYear() === jahr ? (heute.getMonth() < 6 ? "1" : "2") : "1");
@@ -27,7 +28,7 @@ export function Downloads({ jahr }: { jahr: number }) {
     <Card>
       <CardHeader>
         <CardTitle>Herunterladen</CardTitle>
-        <CardDescription>Plan {jahr} für den eigenen Kalender.</CardDescription>
+        <CardDescription>Plan {jahr} für Kalender, Ausdruck und Handy.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         <div className="grid gap-2">
@@ -37,6 +38,7 @@ export function Downloads({ jahr }: { jahr: number }) {
           </select>
         </div>
         <Button variant="outline" loading={busy === "ics"} onClick={() => void ics()}><CalendarPlus /> Kalender (.ics)</Button>
+        <DruckLinks jahr={jahr} halbjahr={halbjahr} />
         {fehler && <p role="alert" className="text-sm text-destructive">{fehler}</p>}
       </CardContent>
     </Card>

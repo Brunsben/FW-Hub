@@ -19,7 +19,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | 8 | Themenpool, Pflichtthemen-Hinweis, Ausgleichsanzeige, Mitgliederansicht | fertig (keine Migration) |
 | 9 | Versionen (Freigabe, manuell, Vergleich, Wiederherstellen) | fertig (Migration 0021 lokal angewendet, nicht auf dem Server) |
 | 10 | Exporte: CSV-Profile inkl. DIVERA, .ics, Excel | fertig (Migration 0022 lokal angewendet, nicht auf dem Server) |
-| 11 | PDF, Bild für Smartphone | offen |
+| 11 | PDF, Bild für Smartphone | fertig (keine Migration) |
 | 12 | Erinnerungen (E-Mail) – Release 2 | offen |
 | 13 | Katalog-Auswertung – Release 2 | offen |
 
@@ -117,6 +117,11 @@ Vor dem Ausrollen
    `node scripts/test-dienstplan-pool.mjs`, `node scripts/test-dienstplan-versionen.mjs`,
    `node scripts/test-dienstplan-versionen-lib.mjs`, `node scripts/test-dienstplan-export-lib.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-export.mjs`,
+   `node scripts/test-dienstplan-druck-lib.mjs`, mit Dev-Server `node scripts/test-dienstplan-druck.mjs`,
+   nach `npm run build` den Standalone-Server starten
+   (`cd .next/standalone && PORT=3104 node --env-file=../../.env.local server.js`)
+   und `TEST_BASE=http://127.0.0.1:3104 node scripts/test-dienstplan-druck.mjs`
+   (prüft PDF und Bild im Build wie im Docker-Image),
    `node scripts/kontrast.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
@@ -1264,7 +1269,53 @@ Rückgängig zurücknehmen.
   der Weg nach DIVERA.
 - Format der DIVERA-Spalte „Empfänger“ (siehe oben).
 
-## Phasen 11–13
+## Phase 11 – PDF und Bild für Smartphone
+
+### Entscheidungen
+- **PDF** (`@react-pdf/renderer` 4.9, Spec 9.2): `GET /plaene/[jahr]/export/pdf
+  ?halbjahr=1|2` (ohne: beide Halbjahre, je eine Seite; bei Bedarf Umbruch mit
+  wiederholtem Tabellenkopf). A4 hoch, Kopf mit Logo-Platzhalter (rotes Feld mit
+  den Initialen der Organisation, bis die SVG da ist), Titel, Organisation und
+  Stand; Tabelle Datum | Tag | Art | Uhrzeit | Thema | Verantwortlich,
+  Kategoriefarbe als 3-pt-Streifen am Zeilenanfang; Legende (nur vorkommende
+  Kategorien) und „Seite x von y“ im Fuß. Abgesagte Termine grau mit „entfällt:
+  Grund (Thema)“. Keine automatische Silbentrennung.
+- **Bild** (Spec 9.3): `GET /plaene/[jahr]/export/bild?halbjahr=1|2&thema=hell|dunkel&namen=0|1`,
+  PNG 1290 × 2796, oben 15 % und unten 10 % frei. Zeile: Wochentag, Datum,
+  Kürzel, Kurztitel (aus dem Themenkatalog, sonst Titel; gekürzt mit „…“),
+  optional Verantwortliche. Zeilenhöhe und Schrift passen sich der Terminzahl an
+  (übliches Halbjahr ≈ 26 Termine: 72 px Zeile). Abgesagte Termine abgeblendet.
+  Hell und dunkel mit den Farbwerten aus Spec 7.1.
+- **next/og statt satori + resvg direkt**: `ImageResponse` aus Next ist genau
+  satori + resvg (WASM), ist im Framework enthalten und braucht keine eigene
+  WASM-Datei im Standalone-Image. Der voreingestellte öffentliche Cache-Header
+  wird nicht übernommen: Antwort `private, no-store`.
+- **Schrift Inter** (SIL OFL) als WOFF in `public/fonts/` (400, 600, 700,
+  latin), Lizenz `public/fonts/Inter-OFL.txt`. Im Image liegt `public` unter
+  `/app/public`; gelesen über `process.cwd()`.
+- **Standalone-Image**: pdfkit (von react-pdf) lädt seine Standardschriften zur
+  Laufzeit per `require`; das Datei-Tracing nahm sie nicht mit (PDF → 500 im
+  Build, mit `next dev` unsichtbar). Behoben mit `outputFileTracingIncludes` in
+  `next.config.ts` und geprüft mit dem Standalone-Server (`test-dienstplan-druck`
+  gegen Port 3104: 16/16).
+- PDF und Bild öffnen im Browser (inline, kein Cache). Mitglieder nur
+  freigegebene Pläne (RLS), Planer auch Entwürfe (Titel „(Entwurf)“).
+- **Oberfläche**: Karte „Herunterladen“ in `/dienstplan` (Kalender, PDF, Bild
+  mit Haken „dunkel“ und „mit Verantwortlichen“, Hinweis zum Sichern in Fotos);
+  derselbe Abschnitt im Export-Fenster der Eingabemaske.
+- Tests: `test-dienstplan-druck-lib.mjs` (19), `test-dienstplan-druck.mjs` (16;
+  PDF-Kopf und Seitenzahl, eingebettete Schrift, PNG-Größe, Parameter, Rechte,
+  Cache-Header), Browser-Durchlauf auf Handybreite.
+
+### Abweichungen von der Spec
+- Logo: Platzhalter bis zur SVG (Spec 12 „Logo als SVG nachliefern“).
+- Bild: next/og (satori + resvg) statt der Pakete direkt, siehe oben.
+- „Geändert“-Fußnote im Export (Spec 8, „optional“) nicht umgesetzt.
+
+### Offene Fragen
+- Logo als SVG.
+
+## Phasen 12–13 (Release 2)
 
 ### Entscheidungen
 ### Abweichungen von der Spec
