@@ -13,13 +13,14 @@ import type { DpKategorie, DpPlan } from "@/lib/dienstplan/plan";
 import { plusTage, wochentag } from "@/lib/dienstplan/kalender";
 import { dpApi } from "@/components/dienstplan/api";
 import { datumKurz, klassenFuer, MONATE } from "@/components/dienstplan/farben";
+import { Geaendert } from "@/components/dienstplan/geaendert";
 
 // Mitgliederansicht (Spec 7.4): freigegebene Pläne lesen (Planer sehen auch
 // Entwürfe), aktuelle Woche hervorgehoben, vergangene Termine abgeblendet,
 // nächster Termin oben. Themenvorschlag einreichen und eigene Vorschläge sehen.
 // Links zu iCal-Abo, PDF und Bild kommen mit den Phasen 10 und 11.
 
-interface PlanDaten { plan: DpPlan; kategorien: DpKategorie[]; termine: DpTermin[] }
+interface PlanDaten { plan: DpPlan; kategorien: DpKategorie[]; termine: DpTermin[]; aenderungen: { termine: number[] } }
 interface Vorschlag { id: number; titel: string; status: "offen" | "uebernommen" | "verworfen"; vorgeschlagenAm: string }
 
 const STATUS = { offen: "offen", uebernommen: "übernommen", verworfen: "nicht übernommen" } as const;
@@ -62,6 +63,7 @@ export function Mitgliederansicht({ istPlaner }: { istPlaner: boolean }) {
   const termine = daten?.termine ?? [];
   const naechster = termine.find((t) => t.datum >= heute && !t.ausgefallen);
   const kategorien = new Map((daten?.kategorien ?? []).map((k) => [k.id, k]));
+  const geaendert = new Set(daten?.aenderungen?.termine ?? []);
   const monate = new Map<number, DpTermin[]>();
   for (const t of termine) {
     const m = Number(t.datum.slice(5, 7)) - 1;
@@ -92,7 +94,7 @@ export function Mitgliederansicht({ istPlaner }: { istPlaner: boolean }) {
                 <h2 id="naechster" className="text-lg font-semibold tracking-tight">Nächster Termin</h2>
                 <a href={`#monat-${Number(naechster.datum.slice(5, 7)) - 1}`} className="text-sm">Zum aktuellen Monat</a>
               </div>
-              <Zeile t={naechster} kategorie={kategorien.get(naechster.kategorieId)} gross />
+              <Zeile t={naechster} kategorie={kategorien.get(naechster.kategorieId)} gross geaendert={geaendert.has(naechster.id)} />
             </section>
           )}
           {[...monate.entries()].map(([m, liste]) => (
@@ -100,7 +102,7 @@ export function Mitgliederansicht({ istPlaner }: { istPlaner: boolean }) {
               <h2 id={`m-${m}`} className="text-lg font-semibold tracking-tight">{MONATE[m]}</h2>
               {liste.map((t) => (
                 <Zeile key={t.id} t={t} kategorie={kategorien.get(t.kategorieId)}
-                  vorbei={t.datum < heute} dieseWoche={t.datum >= montag && t.datum <= sonntag} />
+                  vorbei={t.datum < heute} dieseWoche={t.datum >= montag && t.datum <= sonntag} geaendert={geaendert.has(t.id)} />
               ))}
             </section>
           ))}
@@ -113,8 +115,8 @@ export function Mitgliederansicht({ istPlaner }: { istPlaner: boolean }) {
   );
 }
 
-function Zeile({ t, kategorie, vorbei = false, dieseWoche = false, gross = false }: {
-  t: DpTermin; kategorie?: DpKategorie; vorbei?: boolean; dieseWoche?: boolean; gross?: boolean;
+function Zeile({ t, kategorie, vorbei = false, dieseWoche = false, gross = false, geaendert = false }: {
+  t: DpTermin; kategorie?: DpKategorie; vorbei?: boolean; dieseWoche?: boolean; gross?: boolean; geaendert?: boolean;
 }) {
   const k = klassenFuer(kategorie?.farbe, t.ausgefallen);
   return (
@@ -129,6 +131,7 @@ function Zeile({ t, kategorie, vorbei = false, dieseWoche = false, gross = false
         <span className="text-sm">{kategorie?.name}</span>
         {dieseWoche && <Badge>Diese Woche</Badge>}
         {t.ort && <span className="text-sm">· {t.ort}</span>}
+        {geaendert && <Geaendert aktualisiertAm={t.aktualisiertAm} />}
       </div>
       {t.ausgefallen ? (
         <p className="mt-1 text-sm">entfällt{t.bemerkung ? `: ${t.bemerkung}` : ""}</p>

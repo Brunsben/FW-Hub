@@ -9,6 +9,7 @@ import {
   berechneHinweise, type DpHinweis, type DpTermin, type DpTerminThema, type DpVerantwortlicher,
 } from "@/lib/dienstplan/hinweise";
 import { DpFehler } from "@/lib/dienstplan/route";
+import { abbildAus, geaendertSeitFreigabe, type VersionInhalt } from "@/lib/dienstplan/versionen";
 
 // Datenbankzugriffe des Dienstplans. Alle Funktionen laufen in einer Transaktion
 // im Dienstplan-Scope (dienstplanRoute bzw. withDienstplanScope): RLS bestimmt,
@@ -83,9 +84,8 @@ export async function ladeAnzeigenamen(tx: ScopedTx): Promise<{ namen: Map<numbe
   return { namen: new Map([...map].map(([id, a]) => [id, a.text])), kameraden };
 }
 
-/** Vollständiger Plan für Eingabemaske, Präsentation und Mitgliederansicht. */
-export async function ladePlan(tx: ScopedTx, plan: DpPlan, organisationId: number) {
-  const kategorien = await ladeKategorien(tx, organisationId);
+/** Termine eines Plans mit Themen und Verantwortlichen (Anzeigenamen), ohne Hinweise. */
+export async function ladeTermine(tx: ScopedTx, plan: Pick<DpPlan, "id" | "jahr">): Promise<DpTermin[]> {
   const roh = await tx.execute<Omit<DpTermin, "feiertag" | "themen">>(sql`
     select t.id, t.datum::text as datum, to_char(t.uhrzeit, 'HH24:MI') as uhrzeit, t.dauer_minuten as "dauerMinuten",
            t.kategorie_id as "kategorieId", k.kuerzel, t.quelle::text as quelle, t.regel_id as "regelId",
@@ -113,9 +113,6 @@ export async function ladePlan(tx: ScopedTx, plan: DpPlan, organisationId: numbe
      where t.plan_id = ${plan.id}
      order by v.termin_thema_id, v.position, v.id`);
   const { namen } = await ladeAnzeigenamen(tx);
-  const pflicht = [...await tx.execute<{ id: number; titel: string; zielgruppe: string | null }>(sql`
-    select id, titel, zielgruppe from dienstplan.themen
-     where organisation_id = ${organisationId} and pflicht_jaehrlich and aktiv order by titel`)];
 
   const vProThema = new Map<number, DpVerantwortlicher[]>();
   for (const v of verantwortliche) {
@@ -134,13 +131,54 @@ export async function ladePlan(tx: ScopedTx, plan: DpPlan, organisationId: numbe
     thProTermin.set(th.terminId, liste);
   }
   const feiertage = feiertageNiedersachsen(plan.jahr);
-  const termine: DpTermin[] = roh.map((t) => ({ ...t, feiertag: feiertage.get(t.datum) ?? null, themen: thProTermin.get(t.id) ?? [] }));
+  return roh.map((t) => ({ ...t, feiertag: feiertage.get(t.datum) ?? null, themen: thProTermin.get(t.id) ?? [] }));
+}
+
+/** Inhalt der letzten Freigabe-Version (null ohne Freigabe oder ohne Leserecht, z. B. Anzeige). */
+export async function letzteFreigabe(tx: ScopedTx, planId: number): Promise<{ nummer: number; erstelltAm: string; inhalt: VersionInhalt } | null> {
+  const [v] = await tx.execute<{ nummer: number; erstelltAm: string; inhalt: VersionInhalt }>(sql`
+    select nummer, to_char(erstellt_am at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "erstelltAm", inhalt
+      from dienstplan.plan_versionen where plan_id = ${planId} and anlass = 'freigabe'
+     order by nummer desc limit 1`);
+  return v ?? null;
+}
+
+/**
+ * Speichert eine Version (Spec 8): Abbild aller Termine mit Texten zum Zeitpunkt.
+ * Sperrt den Plan, damit die Nummern lückenlos und eindeutig bleiben.
+ */
+export async function speichereVersion(
+  tx: ScopedTx, plan: Pick<DpPlan, "id" | "jahr">, kameradId: number, anlass: "freigabe" | "manuell", bezeichnung: string | null,
+): Promise<{ nummer: number }> {
+  expectRows(await tx.execute(sql`select id from dienstplan.plaene where id = ${plan.id} for update`), "Plan");
+  const inhalt = abbildAus(plan.jahr, await ladeTermine(tx, plan));
+  const [{ nummer }] = await tx.execute<{ nummer: number }>(sql`
+    select coalesce(max(nummer), 0) + 1 as nummer from dienstplan.plan_versionen where plan_id = ${plan.id}`);
+  expectRows(await tx.execute(sql`
+    insert into dienstplan.plan_versionen (plan_id, nummer, anlass, bezeichnung, inhalt, erstellt_von)
+    values (${plan.id}, ${nummer}, ${anlass}, ${bezeichnung}, ${JSON.stringify(inhalt)}::jsonb, ${kameradId}) returning id`), "Version");
+  return { nummer };
+}
+
+/** Vollständiger Plan für Eingabemaske, Präsentation und Mitgliederansicht. */
+export async function ladePlan(tx: ScopedTx, plan: DpPlan, organisationId: number) {
+  const kategorien = await ladeKategorien(tx, organisationId);
+  const termine = await ladeTermine(tx, plan);
+  const pflicht = [...await tx.execute<{ id: number; titel: string; zielgruppe: string | null }>(sql`
+    select id, titel, zielgruppe from dienstplan.themen
+     where organisation_id = ${organisationId} and pflicht_jaehrlich and aktiv order by titel`)];
   const hinweise: DpHinweis[] = berechneHinweise(termine, pflicht);
   // Vorjahresanzeige (Spec 7.2): nur Titel, über vorjahr_themen() (Migration 0020)
   const vj = [...await tx.execute<VorjahrTermin>(sql`
     select datum::text as datum, kuerzel, ausgefallen, titel from dienstplan.vorjahr_themen(${plan.jahr}::integer)`)];
   const vorjahr = { jahr: plan.jahr - 1, termine: vorjahrZuordnen(termine, vj) };
-  return { plan, kategorien, termine, hinweise, vorjahr };
+  // "geändert" seit der letzten Freigabe (Spec 8): berechnet, nicht gespeichert
+  const freigabe = plan.status === "freigegeben" ? await letzteFreigabe(tx, plan.id) : null;
+  const geaendert = freigabe
+    ? [...geaendertSeitFreigabe(freigabe.inhalt.termine, abbildAus(plan.jahr, termine).termine)]
+    : [];
+  const aenderungen = { freigabeVersion: freigabe?.nummer ?? null, termine: geaendert };
+  return { plan, kategorien, termine, hinweise, vorjahr, aenderungen };
 }
 
 // ── Generator (Spec 5.3) ─────────────────────────────────────────────────────

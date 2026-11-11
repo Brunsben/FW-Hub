@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
-import { ArrowDown, ArrowUp, GripVertical, LayoutGrid, List, MoveRight, Pencil, Plus, Redo2, RotateCcw, Trash2, Undo2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, History, LayoutGrid, List, MoveRight, Pencil, Plus, Redo2, RotateCcw, Trash2, Undo2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import type { DpHinweis, DpTermin, DpTerminThema } from "@/lib/dienstplan/hinwei
 import type { DpKategorie, DpPlan } from "@/lib/dienstplan/plan";
 import { dpApi } from "@/components/dienstplan/api";
 import { AnzeigeLink } from "@/components/dienstplan/anzeige-link";
+import { Geaendert } from "@/components/dienstplan/geaendert";
 import { kollision, useBeides, useZiehbar, useZiel, type ZiehDaten, type ZielDaten } from "@/components/dienstplan/dnd";
 import { Monatsraster } from "@/components/dienstplan/monatsraster";
 import { ersetzeId, STAPEL_MAX, unterschiede, type Eintrag, type Zustand } from "@/lib/dienstplan/rueckgaengig";
@@ -27,6 +28,7 @@ import { datumKurz, klassenFuer, MONATE } from "@/components/dienstplan/farben";
 interface PlanDaten {
   plan: DpPlan; kategorien: DpKategorie[]; termine: DpTermin[]; hinweise: DpHinweis[];
   vorjahr: { jahr: number; termine: Record<number, VorjahrTermin> };
+  aenderungen: { freigabeVersion: number | null; termine: number[] };
 }
 
 const felderVon = (z: Zustand) => ({
@@ -222,6 +224,7 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
   if (!daten) return <p className="text-sm text-muted-foreground">Plan wird geladen …</p>;
   const { plan, termine, hinweise } = daten;
   const entwurf = plan.status === "entwurf";
+  const geaendertSet = new Set(daten.aenderungen.termine);
 
   async function ablegen(ev: DragEndEvent) {
     setGezogen(null);
@@ -272,6 +275,7 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
       positionId={positionId}
       busy={busy}
       vorjahr={zeigeVorjahr ? vorjahrText(daten.vorjahr.termine[t.id], daten.vorjahr.jahr) : null}
+      geaendert={geaendertSet.has(t.id)}
       waehle={() => { setTerminId(t.id); if (t.id !== terminId) setPositionId(null); }}
       waehlePosition={(id) => { setTerminId(t.id); setPositionId(id); }}
       bearbeiten={() => setBearbeiten(t)}
@@ -317,9 +321,15 @@ export function Eingabemaske({ jahr, istAdmin }: { jahr: number; istAdmin: boole
             }}>Rhythmus ergänzen</Button>
           )}
           <Button size="sm" onClick={() => setBearbeiten("neu")}><Plus /> Termin</Button>
+          <Button variant="outline" size="sm" asChild><Link href={`/dienstplan/${jahr}/versionen`}><History /> Versionen</Link></Button>
           {istAdmin && (
             <Button size="sm" variant={entwurf ? "default" : "outline"} loading={busy}
-              onClick={() => aktion("PATCH", `/plaene/${jahr}`, { status: entwurf ? "freigegeben" : "entwurf" }, entwurf ? "Plan freigegeben" : "Freigabe zurückgenommen", false)}>
+              onClick={() => {
+                if (!confirm(entwurf
+                  ? `Plan ${jahr} freigeben? Alle Mitglieder sehen ihn dann; der Stand wird als Version gespeichert.`
+                  : `Freigabe von ${jahr} zurücknehmen? Mitglieder sehen den Plan dann nicht mehr.`)) return;
+                void aktion("PATCH", `/plaene/${jahr}`, { status: entwurf ? "freigegeben" : "entwurf" }, entwurf ? "Plan freigegeben, Version gespeichert" : "Freigabe zurückgenommen", false);
+              }}>
               {entwurf ? "Freigeben" : "Zurück auf Entwurf"}
             </Button>
           )}
@@ -477,8 +487,8 @@ function Hinweise({ hinweise, waehle }: { hinweise: DpHinweis[]; waehle: (termin
   );
 }
 
-function TerminKarte({ t, kategorie, gewaehlt, positionId, busy, vorjahr, waehle, waehlePosition, bearbeiten, verschieben, aktion }: {
-  t: DpTermin; kategorie?: DpKategorie; gewaehlt: boolean; positionId: number | null; busy: boolean; vorjahr: string | null;
+function TerminKarte({ t, kategorie, gewaehlt, positionId, busy, vorjahr, geaendert, waehle, waehlePosition, bearbeiten, verschieben, aktion }: {
+  t: DpTermin; kategorie?: DpKategorie; gewaehlt: boolean; positionId: number | null; busy: boolean; vorjahr: string | null; geaendert: boolean;
   waehle: () => void; waehlePosition: (id: number) => void; bearbeiten: () => void;
   verschieben: (p: DpTerminThema) => void; aktion: AktionFn;
 }) {
@@ -497,6 +507,7 @@ function TerminKarte({ t, kategorie, gewaehlt, positionId, busy, vorjahr, waehle
           <span className="text-sm text-muted-foreground">{kategorie?.name}</span>
           {t.feiertag && <span className="text-sm font-medium text-warning">{t.feiertag}</span>}
           {t.ort && <span className="text-sm text-muted-foreground">· {t.ort}</span>}
+          {geaendert && <Geaendert aktualisiertAm={t.aktualisiertAm} />}
         </button>
         <div className="flex gap-1">
           <Button size="icon-sm" variant="ghost" aria-label="Termin bearbeiten" onClick={bearbeiten}><Pencil /></Button>

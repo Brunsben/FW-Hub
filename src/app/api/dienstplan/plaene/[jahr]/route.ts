@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { expectRows } from "@/lib/db/rows";
 import { pruefePlanStatus } from "@/lib/dienstplan/eingabe";
 import { dienstplanRoute, DpFehler, leseBody, leseJahrParam } from "@/lib/dienstplan/route";
-import { ladePlan, planEtag, planOder404 } from "@/lib/dienstplan/plan";
+import { ladePlan, planEtag, planOder404, speichereVersion } from "@/lib/dienstplan/plan";
 
 type Ctx = { params: Promise<{ jahr: string }> };
 
@@ -22,9 +22,9 @@ export async function GET(req: Request, { params }: Ctx) {
 }
 
 // Status setzen (nur Dienstplan-Admin; zusätzlich Trigger plaene_schutz).
-//   { status: "freigegeben" } setzt freigegeben_am/-_von,
+//   { status: "freigegeben", bezeichnung? } setzt freigegeben_am/-_von und legt
+//     in derselben Transaktion eine Version (Anlass freigabe) an (Spec 8),
 //   { status: "entwurf" } nimmt die Freigabe zurück (Mitglieder sehen den Plan dann nicht mehr).
-// Die Version in plan_versionen bei der Freigabe kommt mit Phase 9.
 export async function PATCH(req: Request, { params }: Ctx) {
   return dienstplanRoute("Admin", async ({ s, tx }) => {
     const plan = await planOder404(tx, s.organisationId, leseJahrParam((await params).jahr));
@@ -38,8 +38,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
              freigegeben_am = ${freigabe ? sql`now()` : sql`null`},
              freigegeben_von = ${freigabe ? s.kameradId : null}
        where id = ${plan.id} returning id`), "Plan");
+    const version = freigabe ? await speichereVersion(tx, plan, s.kameradId, "freigabe", e.daten.bezeichnung) : null;
     const neu = await planOder404(tx, s.organisationId, plan.jahr);
-    return NextResponse.json({ plan: neu });
+    return NextResponse.json({ plan: neu, version: version?.nummer ?? null });
   });
 }
 

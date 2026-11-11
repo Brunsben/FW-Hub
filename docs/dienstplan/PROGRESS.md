@@ -17,7 +17,7 @@ Reihenfolge der Bearbeitung: 1, 2, 4 (Import), 3, 5, 6, 7, 8, danach 9–11.
 | 6 | Präsentationsansicht mit Live-Aktualisierung und Anzeige-Token | fertig (Migration 0019 lokal angewendet, nicht auf dem Server) |
 | 7 | Drag and Drop, Rückgängig, Vorjahresanzeige | fertig (Migration 0020 lokal angewendet, nicht auf dem Server) |
 | 8 | Themenpool, Pflichtthemen-Hinweis, Ausgleichsanzeige, Mitgliederansicht | fertig (keine Migration) |
-| 9 | Versionen (Freigabe, manuell, Vergleich, Wiederherstellen) | offen |
+| 9 | Versionen (Freigabe, manuell, Vergleich, Wiederherstellen) | fertig (Migration 0021 lokal angewendet, nicht auf dem Server) |
 | 10 | Exporte: CSV-Profile inkl. DIVERA, .ics, Excel | offen |
 | 11 | PDF, Bild für Smartphone | offen |
 | 12 | Erinnerungen (E-Mail) – Release 2 | offen |
@@ -114,7 +114,8 @@ Vor dem Ausrollen
    `node scripts/test-dienstplan-kalender.mjs`, `node scripts/test-dienstplan-eingabe.mjs`,
    mit Dev-Server `node scripts/test-dienstplan-api.mjs`, `node scripts/test-dienstplan-verwaltung.mjs`,
    `node scripts/test-dienstplan-anzeige.mjs`, `node scripts/test-dienstplan-rueckgaengig.mjs`,
-   `node scripts/test-dienstplan-pool.mjs`,
+   `node scripts/test-dienstplan-pool.mjs`, `node scripts/test-dienstplan-versionen.mjs`,
+   `node scripts/test-dienstplan-versionen-lib.mjs`,
    `node scripts/kontrast.mjs`,
    `bash -n scripts/server-import.sh`,
    `node scripts/test-mitglieder-lib.mjs`, `node scripts/test-mitglieder-rechte.mjs`,
@@ -139,6 +140,7 @@ Migrationen, Reihenfolge
 | 0018_dienstplan_schema | additiv | vor der App | Schema dienstplan (19 Tabellen, 39 Policies, Trigger, kameraden_namen()), Rechte fw_app, Seeds (Organisation 1, 7 Kategorien, 3 Regeln) |
 | 0020_dienstplan_vorjahr | additiv | **vor der App (Pflicht)** | Funktion vorjahr_themen() (SECURITY DEFINER, nur Titel); die App ruft sie bei jedem Laden eines Plans |
 | 0019_dienstplan_anzeige | additiv | **vor der App (Pflicht)** | Tabelle anzeige_tokens, Spalte plaene.fokus_termin_id, 6 Policies (Anzeige-Scope), Trigger anzeige_tokens_plan, kameraden_namen() ersetzt |
+| 0021_dienstplan_versionen_lesen | additiv | vor der App | Policy plan_versionen_lesen ersetzt: Mitglieder lesen Freigabe-Versionen freigegebener Pläne (Markierung „geändert“); Anzahl Policies bleibt 45 |
 
 **Reihenfolge: erst alle Migrationen, dann die App.** Die neue App liest
 `core.kameraden.dienst_rolle` beim Login (ganze Zeile) und das Erst-Setup
@@ -148,8 +150,8 @@ drei Migrationen unverändert weiter (nur neue Spalten, Funktionen nehmen eine
 Obermenge an, neues Schema).
 
 Alle ausstehenden Migrationen in einem Lauf: in `~/fw/FW-Hub` nach `git pull`
-`scripts/server-migrate.sh`. Erwartet bei 0016–0020: `Migrationen eingetragen:
-16 -> 21`, `Policies in core` unverändert (keine neuen Policies in core).
+`scripts/server-migrate.sh`. Erwartet bei 0016–0021: `Migrationen eingetragen:
+16 -> 22`, `Policies in core` unverändert (keine neuen Policies in core).
 0019 und 0020 müssen vor der neuen App laufen: Die App liest
 `plaene.fokus_termin_id` und ruft `dienstplan.vorjahr_themen()` bei jedem Laden
 eines Plans.
@@ -1116,7 +1118,61 @@ Rückgängig zurücknehmen.
 ### Offene Fragen
 - Keine.
 
-## Phasen 9–13
+## Phase 9 – Versionen
+
+### Entscheidungen
+- **Abbild** (`plan_versionen.inhalt`, `format: 1`): je Termin der vollständige
+  Zustand wie beim Rückgängig (Datum, Uhrzeit, Dauer, Kategorie, ausgefallen,
+  Ort, Bemerkung, Notizen, Themen mit Verweisen und Block, Verantwortliche) plus
+  Termin-id, Quelle, Regel, Rhythmusdatum und die Texte zum Zeitpunkt
+  (Thementitel, Anzeigenamen). Reine Logik in `src/lib/dienstplan/versionen.ts`.
+- **Freigabe** (PATCH Status, nur Admin) legt in derselben Transaktion eine
+  Version mit Anlass `freigabe` an (optional mit Bezeichnung). **Manuell**:
+  Planer und Admin mit Pflicht-Bezeichnung. Der Plan wird dabei gesperrt
+  (`for update`), die Nummern sind lückenlos je Plan. Die Freigabe fragt in der
+  Eingabemaske jetzt nach.
+- **Vergleich** zweier Stände (Version ↔ Version oder ↔ aktuell): neu, entfallen,
+  verschoben (Datum oder Uhrzeit), geändert (mit Einzelheiten: Thema,
+  Verantwortliche, Reihenfolge, Kategorie, abgesagt, Ort, Bemerkung, Notizen,
+  Dauer, Block). Zuordnung über die Termin-id, sonst über Datum und Kategorie.
+  Umbenennungen von Themen oder Anzeigenamen zählen nicht als Änderung
+  (verglichen werden die Verweise). Ohne Angabe: seit der letzten Freigabe.
+- **„Geändert am TT.MM.“** (Spec 8): berechnet in `ladePlan` gegen die letzte
+  Freigabe-Version, nur bei freigegebenen Plänen; dezenter grauer Punkt mit Text
+  in Eingabemaske und Mitgliederansicht. Das Datum ist `aktualisiert_am` des
+  Termins. Dafür lesen Mitglieder die Freigabe-Versionen freigegebener Pläne
+  (Migration 0021); manuelle Versionen bleiben Planern vorbehalten.
+- **Changelog nach Freigabe** (Spec 8) = Vergleich „seit Freigabe“ auf der
+  Versionen-Seite; keine eigene Protokolltabelle (die Spec nennt keine, und der
+  Vergleich zeigt dieselbe Information).
+- **Wiederherstellen** (nur Admin): sichert zuerst den aktuellen Stand als
+  manuelle Version „Vor Wiederherstellung von Version N“, setzt einen
+  freigegebenen Plan auf Entwurf und gleicht dann ab: Termine, die es noch gibt,
+  behalten ihre id (wichtig für stabile iCal-UIDs in Phase 10) und werden nur bei
+  Abweichung geschrieben; fehlende werden neu angelegt, überzählige gelöscht.
+  Keine Version wird gelöscht. Fehlt ein Thema im Katalog, wird es Freitext mit
+  dem Titel zum Zeitpunkt; fehlende Personen oder Blöcke entfallen (Hinweise in
+  der Antwort).
+- Das Schreiben eines Termin-Zustands ist jetzt eine gemeinsame Funktion
+  (`lib/dienstplan/zustand.ts`) für Rückgängig und Wiederherstellen.
+- Seite `/dienstplan/[jahr]/versionen` (Planer, Link „Versionen“ in der
+  Eingabemaske): Stand speichern, Verlauf, Ansehen (schreibgeschützt),
+  Vergleich mit zwei Auswahlfeldern, Wiederherstellen (nur Admin).
+- Tests: `test-dienstplan-versionen-lib.mjs` (23), `test-dienstplan-versionen.mjs`
+  (34), RLS Abschnitt 8 (112 gesamt), Browser-Durchlauf (Markierung, Vergleich,
+  Ansehen, Speichern, Wiederherstellen, Handybreite).
+
+### Abweichungen von der Spec
+- Die Präsentation zeigt keine „geändert“-Markierung (sie hebt Änderungen live
+  hervor; der Anzeige-Scope liest bewusst keine Versionen).
+- Importierte Pläne 2023–2026 haben keine Freigabe-Version (der Import legt
+  keine an); bei ihnen gibt es deshalb keine Markierung. Bei Bedarf in der
+  Versionen-Seite „Version speichern“.
+
+### Offene Fragen
+- Keine.
+
+## Phasen 10–13
 
 ### Entscheidungen
 ### Abweichungen von der Spec

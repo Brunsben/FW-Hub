@@ -93,11 +93,30 @@ export function pruefePlanNeu(b: Body): Pruefung<{ jahr: number; generieren: boo
   });
 }
 
-export function pruefePlanStatus(b: Body): Pruefung<{ status: "entwurf" | "freigegeben" }> {
+export function pruefePlanStatus(b: Body): Pruefung<{ status: "entwurf" | "freigegeben"; bezeichnung: string | null }> {
   return lauf(() => {
     if (b.status !== "entwurf" && b.status !== "freigegeben") raus("status muss entwurf oder freigegeben sein");
-    return { status: b.status as "entwurf" | "freigegeben" };
+    return { status: b.status as "entwurf" | "freigegeben", bezeichnung: optText(b.bezeichnung, "bezeichnung", 120) };
   });
+}
+
+// ── Versionen (Phase 9) ──────────────────────────────────────────────────────
+
+/** Manuelle Version: Bezeichnung Pflicht (z. B. "Stand nach GF-Sitzung"). */
+export function pruefeVersion(b: Body): Pruefung<{ bezeichnung: string }> {
+  return lauf(() => {
+    const bezeichnung = optText(b.bezeichnung, "bezeichnung", 120);
+    if (!bezeichnung) raus("Bezeichnung fehlt");
+    return { bezeichnung: bezeichnung! };
+  });
+}
+
+/** Versionsnummer aus der Adresse; "aktuell" nur, wenn erlaubt. */
+export function leseVersionNummer(wert: string | null, aktuellErlaubt: boolean): number | "aktuell" | null {
+  if (wert === null || wert === "") return null;
+  if (aktuellErlaubt && wert === "aktuell") return "aktuell";
+  const n = Number(wert);
+  return Number.isInteger(n) && n > 0 && n < 100000 ? n : null;
 }
 
 // ── Termine ──────────────────────────────────────────────────────────────────

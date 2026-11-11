@@ -148,6 +148,13 @@
       "when": 1794406315995,
       "tag": "0020_dienstplan_vorjahr",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794433339112,
+      "tag": "0021_dienstplan_versionen_lesen",
+      "breakpoints": true
     }
   ]
 }

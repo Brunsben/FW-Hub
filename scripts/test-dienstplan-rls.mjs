@@ -371,6 +371,36 @@ try {
     const e = await fehler(tx, "42501", (sp) => vj(sp, 2099));
     check("7 Ohne Scope: vorjahr_themen → 42501", e.ok, e.got);
   });
+
+  // ── 8. Versionen lesen (Migration 0021) ────────────────────────────────────
+  // Je Plan eine manuelle und eine Freigabe-Version (als Owner angelegt).
+  const ver = async (planId, nummer, anlass) =>
+    owner`insert into dienstplan.plan_versionen (plan_id, nummer, anlass, inhalt, erstellt_von) values (${planId}, ${nummer}, ${anlass}, '{"termine":[]}', ${ADM})`;
+  for (const pid of [ENTWURF, FREI]) { await ver(pid, 1, "manuell"); await ver(pid, 2, "freigabe"); }
+  await ver(ORG2, 1, "freigabe");
+  const HF = h(stamp + "-frei");
+  await owner`insert into dienstplan.anzeige_tokens (organisation_id, plan_id, token_hash, gueltig_bis, erstellt_von)
+    values (1, ${FREI}, ${HF}, now() + interval '1 hour', ${PLN})`;
+  const versionen = (tx) => tx`select plan_id, nummer, anlass from dienstplan.plan_versionen order by plan_id, nummer`;
+  await als(mit, async (tx) => {
+    const v = await versionen(tx);
+    check("8 Mitglied: nur die Freigabe-Version des freigegebenen Plans", v.length === 1 && v[0].plan_id === FREI && v[0].anlass === "freigabe", JSON.stringify(v));
+    const e = await fehler(tx, "42501", (sp) => sp`insert into dienstplan.plan_versionen (plan_id, nummer, anlass, inhalt, erstellt_von) values (${FREI}, 9, 'manuell', '{}', ${MIT})`);
+    check("8 Mitglied: Version anlegen → 42501", e.ok, e.got);
+  });
+  await als(pln, async (tx) => {
+    const v = await versionen(tx);
+    check("8 Planer: alle Versionen der eigenen Organisation (4), keine der Organisation 2", v.length === 4 && v.every((x) => x.plan_id !== ORG2), JSON.stringify(v));
+  });
+  await als(G("Mitglied", 2, MIT2), async (tx) => {
+    check("8 Mitglied Organisation 2: Plan im Entwurf → keine Version", (await versionen(tx)).length === 0);
+  });
+  await als(A(HF), async (tx) => {
+    check("8 Anzeige (Token freigegebener Plan): keine Versionen", (await versionen(tx)).length === 0);
+  });
+  await als({}, async (tx) => {
+    check("8 Ohne Scope: keine Versionen", (await versionen(tx)).length === 0);
+  });
 } finally {
   try {
     if (ids.plan.length) await owner`delete from dienstplan.plaene where id in ${owner(ids.plan)}`;
