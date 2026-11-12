@@ -5,7 +5,7 @@ import { Mitgliederansicht } from "@/components/dienstplan/mitgliederansicht";
 export const dynamic = "force-dynamic";
 
 // Mitgliederansicht (Spec 7.4). Jede angemeldete Person; Mitglieder sehen nur
-// freigegebene Pläne (RLS). Bis zur Freischaltung nicht in der Kopfzeile.
+// freigegebene Pläne (RLS). In Kopfzeile, Handy-Menü und Kacheln für alle (C2).
 export default async function DienstplanPage() {
   const s = await requireDienstplanSeite("Mitglied");
   return (

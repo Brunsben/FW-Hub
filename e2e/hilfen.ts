@@ -10,20 +10,25 @@ import { schutz } from "../scripts/lib/schutz.mjs";
 export const BASE = process.env.E2E_BASE ?? "http://localhost:3100";
 schutz({ db: ["MIGRATE_DATABASE_URL"], base: BASE });
 
-export const owner = postgres(process.env.MIGRATE_DATABASE_URL!, { max: 1, onnotice: () => {} });
+// idle_timeout: Die Verbindung schließt sich selbst, wenn keine Spec sie mehr nutzt
+// (mehrere Spec-Dateien teilen sie sich im selben Worker).
+export const owner = postgres(process.env.MIGRATE_DATABASE_URL!, { max: 1, idle_timeout: 2, onnotice: () => {} });
 export const STEMPEL = `e2e${Date.now().toString(36)}`;
 export const JAHR = 2076;
 
 export const ids = { kameraden: [] as number[], plaene: [] as number[] };
 
 /** Testkonto: globaler Admin (CSV-Import) und Dienstplan-Admin. */
-export async function testkonto() {
-  const name = `${STEMPEL}-admin`;
+export const testkonto = () => konto("admin", { app: "Admin", dienst: "Admin" });
+
+/** Testkonto mit App-Rolle und Dienstplan-Rolle (null = ohne Rolle, gilt als Mitglied). */
+export async function konto(suffix: string, o: { app: "Admin" | "User"; dienst: "Admin" | "Planer" | null }) {
+  const name = `${STEMPEL}-${suffix}`;
   const pin = randomBytes(9).toString("base64url");
   const [k] = await owner<{ id: number }[]>`
-    insert into core.kameraden (name, vorname, dienst_rolle) values (${name}, 'E2E', 'Admin') returning id`;
+    insert into core.kameraden (name, vorname, dienst_rolle) values (${name}, 'E2E', ${o.dienst}) returning id`;
   ids.kameraden.push(k.id);
-  await owner`insert into core.benutzer (benutzername, pin, rolle, kamerad_id) values (${name}, ${await bcrypt.hash(pin, 10)}, 'Admin', ${k.id})`;
+  await owner`insert into core.benutzer (benutzername, pin, rolle, kamerad_id) values (${name}, ${await bcrypt.hash(pin, 10)}, ${o.app}, ${k.id})`;
   return { name, pin, kameradId: k.id };
 }
 
@@ -87,6 +92,7 @@ export async function aufraeumen() {
   const [rest] = await owner<{ p: number; k: number }[]>`select
     (select count(*)::int from dienstplan.plaene where organisation_id = 1 and jahr = ${JAHR}) p,
     (select count(*)::int from core.kameraden where name like ${STEMPEL + "%"}) k`;
-  await owner.end({ timeout: 5 });
+  ids.kameraden.length = 0;
+  ids.plaene.length = 0;
   return rest;
 }
