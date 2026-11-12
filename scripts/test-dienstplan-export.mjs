@@ -84,7 +84,7 @@ try {
   const [tt1] = await owner`insert into dienstplan.termin_themen (termin_id, position, thema_id) values (${t1}, 1, ${th.id}) returning id`;
   await owner`insert into dienstplan.termin_verantwortliche (termin_thema_id, kamerad_id, position) values (${tt1.id}, ${planer.kameradId}, 1)`;
   const t2 = await termin(pJ, `${JAHR}-07-06`, "19:30", "Z");
-  const t3 = await termin(pJ, `${JAHR}-03-01`, null, "D", { ausgefallen: true });
+  await termin(pJ, `${JAHR}-03-01`, null, "D", { ausgefallen: true });
   const t4 = await termin(pJ, `${JAHR}-12-04`, "22:00", "K");
   await termin(pE, `${ENTWURF}-02-02`, "19:30", "D");
 
