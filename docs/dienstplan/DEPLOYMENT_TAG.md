@@ -273,9 +273,9 @@ das: Planer arbeiten über die direkte Adresse, der Fernseher über den Anzeige-
 | # | Schritt | Wer | Dauer |
 |---|---|---|---|
 | C1 | Abnahme: Planung 2027 einmal komplett im Probelauf (Laptop + zweiter Bildschirm), danach Freigabe und Exporte nach DIVERA und Google auf dem in B10 ermittelten Weg. | Du | 1–2 h |
-| C2 | Freischaltung im Code: `sichtbareModule()` (app-header.tsx), `MODUL_ICONS`, `ModulKey` (module-guard.ts), Profilzeile „Dienstplan“; Tests, Commit, Push. | Claude | 30–45 min |
-| C3 | Zusammenführen und ausrollen wie A3, B2 (keine neue Migration erwartet) und B4. | Du | 30 min |
-| C4 | Kopfzeile, Handy-Menü und Startseiten-Kachel zeigen „Dienstplan“; Konto ohne Rolle sieht nur die Mitgliederansicht. | Du | 10 min |
+| C2 | ✅ **Erledigt am 12.11.2026, Commit `4249b34`.** Freischaltung im Code: `sichtbareModule()` (app-header.tsx), `MODUL_ICONS`, `ModulKey` (module-guard.ts), Profilzeile „Dienstplan“ (ohne Rolle „Mitglied“). Menüpunkt für jedes Konto nach „Funktechnik“, Ziel `/dienstplan`; Planung/Verwaltung nur Planer/Admin (sonst `/?kein_zugriff=dienstplan`). Keine Migration. Tests inkl. E2E (13/13 auf Dev und Produktions-Build). | Claude | – |
+| C3 | `feature/dienstplan` per Pull Request nach `main` (CI grün). Auf dem Server in `~/fw/FW-Hub` `git pull`, dann `scripts/server-migrate.sh`: erwartet **keine** neue Migration (`23 -> 23`). In `~/fw/fwhub-stack` `docker compose build portal && docker compose up -d portal` (nie `-v`), `/api/health` ok. Vorher Backup (B1) und Audit-Punkt der Kurz-Checkliste. | Du | 30 min |
+| C4 | Kopfzeile, Handy-Menü und Startseiten-Kachel zeigen „Dienstplan“ (nach Funktechnik). Konto ohne Rolle: Menüpunkt führt zur Mitgliederansicht, `/dienstplan/planung` und `/dienstplan/verwaltung` leiten auf die Startseite mit „Kein Zugriff auf das Modul Dienstplan“. `/profil` zeigt die Zeile „Dienstplan“ (Rolle bzw. „Mitglied“). Bereits angemeldete Benutzer sehen den Menüpunkt beim nächsten Seitenaufruf (keine Neuanmeldung nötig). | Du | 10 min |
 
 ## Rückweg
 
