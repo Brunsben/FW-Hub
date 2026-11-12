@@ -150,5 +150,8 @@ data/
 *.xlsx
 *.csv
 zuordnung*.json
+# Datenbank-Dumps (scripts/db-backup.sh)
+backups/
+*.dump
 # macOS
 .DS_Store

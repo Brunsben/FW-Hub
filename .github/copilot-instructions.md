@@ -320,6 +320,19 @@ prüfen, dass dort tatsächlich aktuelle Dateien liegen. Die Dumps enthalten
 personenbezogene Daten und PIN-Hashes. Kopien nur auf Ziele mit
 eingeschränktem Zugriff legen, am besten verschlüsselt.
 
+### Lokal: Backup und Restore-Test
+- `scripts/db-backup.sh [--ziel <dir>]`: `pg_dump -Fc` nach
+  `backups/<db>_JJJJ-MM-TT_HHMMSS.dump` (Verzeichnis 700, Datei 600, vorher mit
+  `pg_restore --list` geprüft). Verbindung BACKUP_DATABASE_URL, sonst
+  MIGRATE_DATABASE_URL (aus `.env.local`), nur lokale Hosts; das Passwort geht nur
+  über `PGPASSWORD` an die Werkzeuge (`scripts/lib/pg-umgebung.mjs`)
+- `scripts/db-restore.sh <dump> <neue_db> [--aufraeumen]`: nur in eine neue
+  Datenbank (nie die laufende), `pg_restore --exit-on-error`, danach Vergleich
+  Quelle/Ziel (Migrationen, Kameraden, Benutzer, Policies core/dienstplan, Pläne,
+  Termine, Trigger), Exit 1 bei Abweichung. `--aufraeumen` löscht die Testdatenbank
+- Auf dem Server weiter `scripts/server-backup.sh` (siehe oben)
+- `backups/` und `*.dump` stehen in `.gitignore` und im Pre-Commit-Hook
+
 ### Ausrollen Härtung core.kameraden/benutzer (Migrationen 0012/0013)
 Ergebnis vom 08.11.2026: 0012 und 0013 ausgerollt (14 Migrationen, 10 Policies
 in core), Spaltenrechte geprüft. Weitere Smoke-Tests sind hier nicht
