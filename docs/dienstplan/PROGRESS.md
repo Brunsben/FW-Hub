@@ -1325,6 +1325,13 @@ Rückgängig zurücknehmen.
 
 ## Phasen 12–13 (Release 2)
 
+Vormerkungen für Release 2:
+- Phase 12 (Erinnerungen per E-Mail): `nodemailer` >= 10.1.4 neu einbinden
+  (`npm install nodemailer@^10.1.4` und passende Typen). Die unbenutzte
+  Abhängigkeit 9.0.5 wurde am 12.11.2026 entfernt (npm audit: hohe Meldungen im
+  Adressparser, behoben erst ab 10.1.4). SMTP-Variablen dann in `.env.example`
+  dokumentieren.
+
 ### Entscheidungen
 ### Abweichungen von der Spec
 ### Offene Fragen

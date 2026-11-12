@@ -29,12 +29,8 @@ Zum Abhaken am Tag selbst. Einzelheiten in den genannten Schritten unten.
   Exit 0. Bei Abweichung **anhalten** (Rollback-Weg unten).
 - [ ] **Vor dem Docker-Build: Next 16.4.6; `npm audit --omit=dev` ohne
   kritische/hohe Meldungen (bekannte Ausnahmen begründet).** Im Repo:
-  `npm ls next` → `next@16.4.6`, dann `npm audit --omit=dev`. Erlaubt sind nur
-  diese Ausnahmen (Stand 12.11.2026, keine kritische Meldung):
-  - `nodemailer` 9.0.5 (hoch, Denial of Service im Adressparser u. a.): wird im
-    Code nirgends importiert (kein E-Mail-Versand in Release 1). Behebbar nur mit
-    Major-Update 10.x oder durch Entfernen der unbenutzten Abhängigkeit –
-    Entscheidung bei Ben.
+  `npm ls next` → `next@16.4.6`, dann `npm audit --omit=dev`. Erlaubt ist nur
+  diese Ausnahme (Stand 12.11.2026, keine kritische Meldung):
   - `source-map-js` 1.2.1 (hoch, DoS bei manipulierten Source-Maps): nur im Build
     über PostCSS/Tailwind, verarbeitet keine Eingaben von außen und läuft nicht
     im Request-Pfad.

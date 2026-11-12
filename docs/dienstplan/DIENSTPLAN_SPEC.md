@@ -510,6 +510,9 @@ Bisheriger Ablauf: .ics-Datei wird in einen freigegebenen Google-Kalender import
 - Nur freigegebene Pläne, keine ausgefallenen Termine. Bei Änderung von Datum oder Verantwortlichen nach einem Versand: neue Erinnerung mit Hinweis „geändert“.
 - Kanäle, in dieser Reihenfolge prüfen und umsetzen:
   1. E-Mail (SMTP, z. B. über den bestehenden M365-Tenant). Voraussetzung: E-Mail-Adresse in der Mitgliederverwaltung.
+     Umsetzung mit `nodemailer` **>= 10.1.4** (neu einbinden; die frühere, nie
+     benutzte Abhängigkeit 9.x wurde am 12.11.2026 wegen Sicherheitsmeldungen
+     entfernt, Fixes erst ab 10.1.4).
   2. DIVERA 24/7: prüfen, ob die DIVERA-API das Anlegen von Terminen oder gezielte Mitteilungen an einzelne Personen erlaubt. Falls ja, ist das der naheliegende Kanal, weil alle die App ohnehin nutzen, und könnte auch den CSV-Umweg ersetzen.
   3. WhatsApp nur über die offizielle WhatsApp Business Platform (Cloud API von Meta): erfordert Meta-Business-Konto, eigene Telefonnummer, freigegebene Nachrichtenvorlagen und ist pro Nachricht kostenpflichtig. Inoffizielle Bibliotheken (whatsapp-web.js, Baileys u. ä.) verstoßen gegen die Nutzungsbedingungen und riskieren die Sperrung der Nummer, daher ausgeschlossen.
 - Abmeldung je Person möglich (Einstellung im Profil).
