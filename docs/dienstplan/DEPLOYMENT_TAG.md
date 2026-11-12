@@ -27,6 +27,11 @@ Zum Abhaken am Tag selbst. Einzelheiten in den genannten Schritten unten.
   Erwartet `Migrationen eingetragen: 16 -> 23`, `Policies in core` unverändert,
   `select count(*) from pg_policies where schemaname = 'dienstplan';` = **50**,
   Exit 0. Bei Abweichung **anhalten** (Rollback-Weg unten).
+- [ ] **Vor dem Docker-Build: Next 16.4.6, npm audit ohne kritische Meldungen.**
+  Im Repo: `npm ls next` → `next@16.4.6`; `npm audit` zeigt für `next` keine
+  Meldung. (Stand 12.11.2026: einzige kritische Meldung ist `proxy-addr` über
+  das Entwicklungswerkzeug `shadcn`, nicht Teil der App.) Ältere Next-Versionen
+  haben kritische Lücken, u. a. in `next/og` (Handybild).
 - [ ] **4. Docker-Build** (A4, vorher auf Windows erprobt): auf dem Server in
   `~/fw/fwhub-stack` `docker compose build portal && docker compose up -d portal`
   (nie `-v`); `/api/health` ok, kein Fehler des Start-Schutzes im Log.
@@ -72,7 +77,7 @@ gleich, Policies in dienstplan **50**.
 | A1 | Lokale Prüfung auf dem Stand, der ausgerollt wird: Testliste aus PROGRESS „Vor dem Ausrollen“, inkl. Standalone-Test für PDF/Bild und `npm run test:e2e` (Klickliste im Browser). Mac: alle grün am 12.11.2026. | Claude | – |
 | A2 | Deine lokale Durchklick-Liste (Bericht vom 11.11.2026, „Selbst durchklicken“). Auffälligkeiten an Claude; kleinere Fehler beheben wir nach dem Deployment. | Du | 60–90 min |
 | A3 | `feature/dienstplan` nach `main` zusammenführen (Pull Request, CI `ci.yml` und `security.yml` grün). Der Server baut aus `~/fw/FW-Hub`. | Du | 15 min |
-| A4 | Windows-Rechner: `git pull`, dann `docker build .` und `docker build --target import .`. Beide müssen durchlaufen (auf dem Mac gibt es kein Docker). Bei Fehlern: Ausgabe an Claude. | Du | 20–30 min |
+| A4 | Vorher prüfen: `npm ls next` = 16.4.6, `npm audit` ohne kritische Meldung für `next`. Dann Windows-Rechner: `git pull`, dann `docker build .` und `docker build --target import .`. Beide müssen durchlaufen (auf dem Mac gibt es kein Docker). Bei Fehlern: Ausgabe an Claude. | Du | 20–30 min |
 | A5 | Excel `Dienstplan 2026.xlsx` auf den Server: `~/fw/FW-Hub/data/import/` anlegen (`mkdir -p`, `chmod 700`), Datei per `scp` hinein. Nie in ein anderes Verzeichnis des Repos. | Du | 10 min |
 | A6 | Bereitlegen: Anwesenheitsliste als CSV aus der Kreis-Mitgliederverwaltung (Kameraden-Import), Liste Dienstplan-Admin/Planer, Ausgleichsliste (Gruppenführer), Ausbilder-Kürzel aus dem Excel, die als Spitzname gepflegt werden müssen. | Du | 15 min |
 | A7 | Testziele für die Exporte: in Google einen leeren Kalender „Dienstplan Test“ anlegen (nicht den Mitglieder-Kalender); in DIVERA klären, wie ein Testtermin nur bei dir landet (Empfänger nur du bzw. eigene Testgruppe). | Du | 10 min |
