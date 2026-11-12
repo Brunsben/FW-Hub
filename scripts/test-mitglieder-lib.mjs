@@ -27,7 +27,7 @@ check("anlegen: ungültige E-Mail", st({ vorname: "A", name: "B", email: "keine 
 check("anlegen: aktiv muss boolean sein", st({ vorname: "A", name: "B", aktiv: "ja" }).ok, false);
 
 // Abgelehnte Felder: Rollen und Karten-ID (mit Hinweis auf den richtigen Ort)
-for (const feld of ["psaRolle", "foodRolle", "fkRolle", "funkRolle", "psa_rolle", "food_rolle", "fk_rolle", "funk_rolle", "rollen"]) {
+for (const feld of ["psaRolle", "foodRolle", "fkRolle", "funkRolle", "dienstRolle", "psa_rolle", "food_rolle", "fk_rolle", "funk_rolle", "dienst_rolle", "rollen"]) {
   check(`Feld ${feld} wird abgelehnt (anlegen)`, st({ vorname: "A", name: "B", [feld]: "Admin" }), { ok: false, fehler: FEHLER_ROLLEN });
 }
 check("Rollen im Body werden auch beim Ändern abgelehnt", st({ dienstgrad: "X", psaRolle: "Admin" }, "aendern"), { ok: false, fehler: FEHLER_ROLLEN });
@@ -47,6 +47,13 @@ check("ändern: leerer Body", st({}, "aendern").ok, false);
 check("ändern: nur unbekannte Felder", st({ quatsch: "Admin", pin: "1" }, "aendern").ok, false);
 check("ändern: Vorname darf nicht leer werden", st({ vorname: "" }, "aendern").ok, false);
 check("ändern: Dienstgrad darf leer werden (null)", st({ dienstgrad: "" }, "aendern"), { ok: true, daten: { dienstgrad: null } });
+
+// Spitzname (Migration 0016)
+check("Spitzname und Haken werden übernommen", st({ spitzname: " HGL ", spitznameAnzeigen: true }, "aendern"), { ok: true, daten: { spitzname: "HGL", spitznameAnzeigen: true } });
+check("Spitzname leer wird null", st({ spitzname: "" }, "aendern"), { ok: true, daten: { spitzname: null } });
+check("Spitzname zu lang", st({ spitzname: "x".repeat(31) }, "aendern").ok, false);
+check("spitznameAnzeigen muss boolean sein", st({ spitznameAnzeigen: "ja" }, "aendern").ok, false);
+check("anlegen mit Spitzname", st({ vorname: "A", name: "B", spitzname: "AB" }), { ok: true, daten: { vorname: "A", name: "B", spitzname: "AB" } });
 
 // Login
 const lg = (b) => pruefeLogin(b, 6);

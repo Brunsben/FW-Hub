@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
         food_rolle: kamerad.foodRolle,
         fk_rolle: kamerad.fkRolle,
         funk_rolle: kamerad.funkRolle,
+        dienst_rolle: kamerad.dienstRolle,
       },
     });
   } catch (e) {

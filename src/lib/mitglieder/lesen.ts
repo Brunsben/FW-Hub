@@ -37,6 +37,7 @@ export interface MitgliedRollen {
   food: string | null;
   fk: string | null;
   funk: string | null;
+  dienst: string | null;
 }
 
 export interface Mitglied {
@@ -46,6 +47,8 @@ export interface Mitglied {
   dienstgrad: string | null;
   email: string | null;
   personalnummer: string | null;
+  spitzname: string | null;
+  spitznameAnzeigen: boolean;
   aktiv: boolean;
   /** Nur für Küchen-Admins. */
   kartenId?: string | null;
@@ -91,6 +94,8 @@ function projiziere(user: JwtPayload, z: Zeile): Mitglied {
     dienstgrad: z.k.dienstgrad,
     email: z.k.email,
     personalnummer: z.k.personalnummer,
+    spitzname: z.k.spitzname,
+    spitznameAnzeigen: z.k.spitznameAnzeigen,
     aktiv: z.k.aktiv,
   };
   if (kannKartenIdSehen(user)) m.kartenId = z.k.kartenId;
@@ -105,6 +110,7 @@ function projiziere(user: JwtPayload, z: Zeile): Mitglied {
       food: z.k.foodRolle,
       fk: z.k.fkRolle,
       funk: z.k.funkRolle,
+      dienst: z.k.dienstRolle,
     };
   }
   return m;

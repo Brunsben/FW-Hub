@@ -1,6 +1,7 @@
 import { PSA_ROLES } from "@/lib/psa-auth";
 import { FOOD_ROLES } from "@/lib/food-auth";
 import { FUNK_ROLES } from "@/lib/funk-auth";
+import { DIENST_ROLES } from "@/lib/dienstplan/auth";
 
 // Erlaubte Werte je Rollenspalte. Quelle sind die Modul-Auth-Dateien, damit
 // Admin-API und Modul-Prüfung nie auseinanderlaufen.
@@ -16,6 +17,7 @@ export const MODUL_ROLLEN = {
   foodRolle: FOOD_ROLES as readonly string[],
   fkRolle: FK_ROLES as readonly string[],
   funkRolle: FUNK_ROLES as readonly string[],
+  dienstRolle: DIENST_ROLES as readonly string[],
 } as const;
 
 export type RollenSpalte = keyof typeof MODUL_ROLLEN;

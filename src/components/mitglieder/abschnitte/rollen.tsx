@@ -4,7 +4,7 @@ import { ladeMitgliedGecacht } from "@/lib/mitglieder/lesen";
 import { kannRollenSehenUndBearbeiten } from "@/lib/mitglieder/rechte";
 import { MODUL_ROLLEN } from "@/lib/rollen";
 
-// Modulrollen (PSA, Küche, Führerschein, Funk): nur globale Admins, sehen und
+// Modulrollen (PSA, Küche, Führerschein, Funk, Dienstplan): nur globale Admins, sehen und
 // ändern. Geschrieben wird ausschließlich über core.set_kamerad_rollen; fw_app
 // hat auf diese Spalten kein INSERT/UPDATE.
 export const rollenAbschnitt: MitgliedAbschnitt = {
@@ -27,12 +27,14 @@ export const rollenAbschnitt: MitgliedAbschnitt = {
           foodRolle: m.rollen.food,
           fkRolle: m.rollen.fk,
           funkRolle: m.rollen.funk,
+          dienstRolle: m.rollen.dienst,
         }}
         erlaubt={{
           psaRolle: [...MODUL_ROLLEN.psaRolle],
           foodRolle: [...MODUL_ROLLEN.foodRolle],
           fkRolle: [...MODUL_ROLLEN.fkRolle],
           funkRolle: [...MODUL_ROLLEN.funkRolle],
+          dienstRolle: [...MODUL_ROLLEN.dienstRolle],
         }}
       />
     );

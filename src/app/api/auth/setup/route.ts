@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
               food_rolle: "Admin",
               fk_rolle: "Admin",
               funk_rolle: "Admin",
+              dienst_rolle: "Admin",
             },
           )}::jsonb)`,
         );
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
         food_rolle: "Admin",
         fk_rolle: "Admin",
         funk_rolle: "Admin",
+        dienst_rolle: "Admin",
       },
     });
   } catch (e) {

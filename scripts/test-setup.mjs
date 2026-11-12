@@ -13,7 +13,7 @@
 //          JWT (Admin, tv 0, alle Modulrollen), Kacheln, danach /setup → /login, zweites Setup → 400.
 // Am Ende wird der Server beendet und die Wegwerf-Datenbank gelöscht. fwhub_dev wird nie verändert.
 // Bricht ab (Exit 2), wenn eine der Datenbank-URLs nicht lokal ist. Secrets werden nie ausgegeben.
-import { execSync, spawn } from "node:child_process";
+import { beendeProzess, starteProzess } from "./lib/prozess.mjs";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -37,7 +37,7 @@ let fail = 0;
 const check = (n, c, i = "") => { if (!c) fail++; console.log(`${c ? "OK  " : "FEHLER"} ${n}${i ? " — " + i : ""}`); };
 const adm = postgres(toDb(process.env.MIGRATE_DATABASE_URL, "postgres"), { max: 1, onnotice: () => {} });
 let owner = null, app = null, child = null, log = "";
-const stop = () => { if (child) { try { execSync(`taskkill /PID ${child.pid} /T /F`, { stdio: "ignore" }); } catch { /* beendet */ } child = null; } };
+const stop = () => { if (child) { beendeProzess(child); child = null; } };
 
 try {
   await adm.unsafe(`drop database if exists ${COPY_DB}`);
@@ -54,8 +54,8 @@ try {
   const stamm = core.table("kameraden", { name: pg.text("name").notNull(), vorname: pg.text("vorname").notNull(), dienstgrad: pg.text("dienstgrad"), email: pg.text("email"), personalnummer: pg.text("personalnummer"), aktiv: pg.boolean("aktiv").notNull().default(true) });
   const voll = core.table("kameraden", { id: pg.serial("id").primaryKey() });
   const q = drizzle(app).insert(stamm).values({ vorname: "Test", name: "Setup" }).returning({ id: voll.id }).toSQL();
-  check("Teilsicht-INSERT nennt nur Stammdaten-Spalten (nicht karten_id oder Rollen)", !/karten_id|psa_rolle|food_rolle|funk_rolle|fk_rolle/.test(q.sql), q.sql);
-  const R = { psa_rolle: "Admin", food_rolle: "Admin", fk_rolle: "Admin", funk_rolle: "Admin" };
+  check("Teilsicht-INSERT nennt nur Stammdaten-Spalten (nicht karten_id oder Rollen)", !/karten_id|psa_rolle|food_rolle|funk_rolle|fk_rolle|dienst_rolle/.test(q.sql), q.sql);
+  const R = { psa_rolle: "Admin", food_rolle: "Admin", fk_rolle: "Admin", funk_rolle: "Admin", dienst_rolle: "Admin" };
   let ok = null, verweigert = null;
   await app.begin(async (tx) => {
     await tx`select set_config('app.kamerad_id','0',true)`; await tx`select set_config('app.app_rolle','Admin',true)`;
@@ -63,7 +63,7 @@ try {
     await tx`select core.set_kamerad_rollen(${k.id}::integer, ${JSON.stringify(R)}::jsonb)`;
     const [kam] = await tx`select * from core.kameraden where id = ${k.id}`;
     const [b] = await tx`insert into core.benutzer (benutzername, pin, rolle, kamerad_id, aktiv) values ('test-setup','x','Admin',${kam.id},true) returning id, token_version`;
-    ok = kam.psa_rolle === "Admin" && kam.food_rolle === "Admin" && kam.fk_rolle === "Admin" && kam.funk_rolle === "Admin" && b.token_version === 0;
+    ok = kam.psa_rolle === "Admin" && kam.food_rolle === "Admin" && kam.fk_rolle === "Admin" && kam.funk_rolle === "Admin" && kam.dienst_rolle === "Admin" && b.token_version === 0;
     // Aus einem normalen Scope (psa_rolle statt app_rolle) darf dieselbe Folge nicht gehen
     await tx`select set_config('app.app_rolle','',true)`; await tx`select set_config('app.psa_rolle','Admin',true)`;
     verweigert = await tx.savepoint((sp) => sp`insert into core.benutzer (benutzername, pin, rolle, kamerad_id) values ('x2','x','Admin',${kam.id})`).then(() => "ok", (e) => e.code);
@@ -74,7 +74,7 @@ try {
   check("Datenbank nach dem Rollback weiterhin leer", (await owner`select count(*)::int n from core.benutzer`)[0].n === 0);
 
   // ── Teil 2: HTTP gegen einen eigenen Dev-Server ──
-  child = spawn(process.execPath, [`${P}/node_modules/next/dist/bin/next`, "dev", "--webpack", "-p", String(PORT)], { cwd: P, env, stdio: ["ignore", "pipe", "pipe"] });
+  child = starteProzess(process.execPath, [`${P}/node_modules/next/dist/bin/next`, "dev", "--webpack", "-p", String(PORT)], { cwd: P, env, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.on("data", (d) => (log += d)); child.stderr.on("data", (d) => (log += d));
   for (let i = 0; i < 120; i++) { try { if ((await fetch(`${BASE}/login`)).status === 200) break; } catch { /* startet noch */ } await new Promise((r) => setTimeout(r, 1000)); }
   check("Dev-Server auf 3101 bereit (kein weiterer next dev im Projekt aktiv)", !/Another next dev server/.test(log));
@@ -91,7 +91,7 @@ try {
   r = await setup({ vorname: "Test", name: "Setup", benutzername: "test-setup", pin: "192837" });
   check("Setup → 200 mit Cookie, ohne Hash in der Antwort", r.status === 200 && r.cookie.startsWith("fw_jwt=") && !/\$2[aby]\$/.test(r.text), `${r.status}`);
   const c = JSON.parse(Buffer.from(r.cookie.split("=")[1].split(".")[1], "base64url").toString());
-  check("Setup-JWT: app_rolle Admin, benutzer_id, tv 0, alle Modulrollen Admin", c.app_role === "Admin" && Number.isInteger(c.benutzer_id) && c.tv === 0 && c.psa_rolle === "Admin" && c.food_rolle === "Admin" && c.funk_rolle === "Admin");
+  check("Setup-JWT: app_rolle Admin, benutzer_id, tv 0, alle Modulrollen Admin", c.app_role === "Admin" && Number.isInteger(c.benutzer_id) && c.tv === 0 && c.psa_rolle === "Admin" && c.food_rolle === "Admin" && c.funk_rolle === "Admin" && c.dienst_rolle === "Admin");
   s = await seite("/", r.cookie);
   const k = [...s.html.matchAll(/data-kachel="([a-z]+)"/g)].map((m) => m[1]).sort();
   check("Nach Setup: / zeigt PSA, Küche, Funk und Mitglieder", s.status === 200 && JSON.stringify(k) === JSON.stringify(["food", "funk", "mitglieder", "psa"]), JSON.stringify(k));

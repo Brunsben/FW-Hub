@@ -30,6 +30,7 @@ export async function GET() {
         foodRolle: kameraden.foodRolle,
         fkRolle: kameraden.fkRolle,
         funkRolle: kameraden.funkRolle,
+        dienstRolle: kameraden.dienstRolle,
       })
       .from(benutzer)
       .innerJoin(kameraden, eq(kameraden.id, benutzer.kameradId))

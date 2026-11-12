@@ -36,7 +36,22 @@ COPY drizzle/meta/_journal.json ./drizzle/meta/_journal.json
 USER node
 ENTRYPOINT ["node", "scripts/migrate.mjs"]
 
-# ── Stage 4: Produktion ─────────────────────────────────
+# ── Stage 4: Dienstplan-Import (einmalig) ───────────────
+# Excel-Import der Dienstpläne (Phase 4). Server: scripts/server-import.sh (baut
+# dieses Image und startet es im Netz fw-network). node_modules kommen aus der
+# deps-Stage, also exakt aus package-lock.json. Enthält nur das Importskript und
+# seine Bibliotheken: Excel und zuordnung.json werden NIE ins Image kopiert, sondern
+# zur Laufzeit read-only gemountet (data/ steht in .dockerignore). Steht vor der
+# Produktions-Stage, der Portal-Build bleibt unberührt.
+FROM node:22-alpine AS import
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY scripts/dienstplan-import.mjs ./scripts/dienstplan-import.mjs
+COPY scripts/lib/dienstplan-import.mjs scripts/lib/schutz.mjs ./scripts/lib/
+USER node
+ENTRYPOINT ["node", "scripts/dienstplan-import.mjs"]
+
+# ── Stage 5: Produktion ─────────────────────────────────
 FROM node:22-alpine AS runner
 WORKDIR /app
 

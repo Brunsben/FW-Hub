@@ -12,7 +12,7 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
   (kein PostgREST)
 - Auth: eigenes JWT-System (KEIN Auth.js/NextAuth), ein Login für alle
   Module, pro-Modul-Rollen-Claims im Payload (psa_rolle, food_rolle,
-  fk_rolle, funk_rolle), jedes Modul liest nur seinen eigenen Claim
+  fk_rolle, funk_rolle, dienst_rolle), jedes Modul liest nur seinen eigenen Claim
 - Rollenscoped Postgres-Verbindungen + Row-Level-Security als zusätzliche
   Absicherung
 - shadcn/ui + Tailwind als gemeinsame Komponentenbibliothek
@@ -22,7 +22,8 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
 
 ## Datenbank
 - Gemeinsame Postgres-Instanz, Schema core (kameraden, benutzer,
-  login_attempts) plus ein Schema pro Modul (psa, fw_food, fk, fw_funk)
+  login_attempts) plus ein Schema pro Modul (psa, fw_food, fk, fw_funk,
+  dienstplan)
 - Schema pv_monitoring (PV-Anlagen-Daten) wird NICHT angefasst
 
 ### Rollen und Verbindungen
@@ -47,6 +48,9 @@ EINER Next.js-Codebasis, keine separaten Repos/Deployments pro Modul.
 - Neue Tabellen in core, psa oder fw_funk bekommen über ALTER DEFAULT
   PRIVILEGES automatisch Rechte für fw_app. Tabellen, die nur fw_auth gehören,
   danach mit REVOKE bereinigen (siehe drizzle/manual/create-fw-app-role.sql).
+- Schema dienstplan hat KEINE Default Privileges: Jede Migration vergibt die
+  Rechte für ihre neuen Tabellen selbst (GRANT, siehe 0018).
+  create-fw-app-role.sql fasst dienstplan nicht an.
 
 ### RLS-Scopes (src/lib/db/scoped.ts)
 Jeder Zugriff auf RLS-Tabellen (core.kameraden, core.benutzer,
@@ -87,6 +91,24 @@ Scopes:
   einem ungeprüften Benutzer
 - withGlobalAdminPsaScope(user): wie oben plus app.psa_rolle='Admin'. Nur für
   globale Admin-Aktionen auf PSA-Tabellen (Stück-Löschen)
+- withDienstplanAnzeigeScope(tokenHash): Präsentation ohne Login (Migration
+  0019). Setzt nur app.dienst_rolle='Anzeige' und app.dienst_anzeige (SHA-256
+  des Anzeige-Tokens); sichtbar ist dann nur der Plan des gültigen Tokens, nur
+  lesend. Nur über anzeigeRoute (lib/dienstplan/anzeige.ts), einziger Pfad
+  /api/dienstplan/anzeige/[jahr]. Nicht für weitere Pfade verwenden
+- withDienstplanAboScope(tokenHash): iCal-Abo ohne Login (Migration 0022). Ruft
+  dienstplan.abo_scope(hash) auf; die Datenbank prüft das Token (ical_abos,
+  nicht widerrufen), zählt den Abruf und setzt für die Transaktion den
+  Lesescope Mitglied der Organisation des Tokens (app.kamerad_id = 0), also nur
+  freigegebene Pläne. Ungültig → null (Route 404). Einziger Pfad
+  /api/dienstplan/abo/[token] (lib/dienstplan/abo.ts). Nicht für weitere Pfade
+  verwenden
+- withDienstplanScope({ kameradId, dienstRolle, organisationId }): setzt
+  app.kamerad_id, app.dienst_rolle und app.dienst_org für alle Tabellen in
+  dienstplan (Migration 0018). Immer aus requireDienstplanSession()
+  (lib/dienstplan/auth.ts) bilden. Ohne dienst_rolle gilt eine angemeldete
+  Person als Mitglied. Namen von Kameraden liest das Modul nur über
+  dienstplan.kameraden_namen() (Namensfelder und aktiv), nie core.kameraden
 - Schreibende Transaktionen auf RLS-Tabellen prüfen die Zahl der
   betroffenen Zeilen (expectRows). 0 Zeilen bedeutet Abbruch, kein stiller
   Erfolg
@@ -100,7 +122,8 @@ Scopes:
 - token_version erhöhen bei Deaktivierung, PIN-Änderung (eigene oder
   Admin-Reset), Rollenänderung (App-Rolle oder Modulrollen) und "überall
   abmelden". Alte Tokens sind damit beim nächsten Request ungültig
-- Modulrollen-Spalten in core.kameraden schreibt NUR
+- Modulrollen-Spalten in core.kameraden (psa_rolle, food_rolle, fk_rolle,
+  funk_rolle, dienst_rolle) schreibt NUR
   /api/admin/rollen/[kameradId] (globaler Admin) über die SECURITY-DEFINER-
   Funktion core.set_kamerad_rollen (prüft app.app_rolle='Admin', erhöht
   token_version der Benutzer). fw_app hat auf diese Spalten kein INSERT/UPDATE
@@ -113,7 +136,10 @@ Scopes:
 
 ### core.kameraden / core.benutzer: Rechte (Migrationen 0012/0013)
 - Spaltenrechte fw_app auf core.kameraden: INSERT/UPDATE nur auf name, vorname,
-  dienstgrad, email, personalnummer, aktiv (UPDATE zusätzlich updated_at).
+  dienstgrad, email, personalnummer, spitzname, spitzname_anzeigen (seit 0016),
+  aktiv (UPDATE zusätzlich updated_at). Neue Spalten bekommen diese Rechte nicht
+  automatisch: In der Migration GRANT INSERT/UPDATE (spalte) ergänzen und die
+  Spalte in core.kameraden_audit aufnehmen.
   Kein DELETE. karten_id nur über core.set_karten_id (Food-Admin), Rollen nur
   über core.set_kamerad_rollen (globaler Admin). SELECT bleibt tabellenweit,
   begrenzt durch RLS
@@ -294,6 +320,19 @@ prüfen, dass dort tatsächlich aktuelle Dateien liegen. Die Dumps enthalten
 personenbezogene Daten und PIN-Hashes. Kopien nur auf Ziele mit
 eingeschränktem Zugriff legen, am besten verschlüsselt.
 
+### Lokal: Backup und Restore-Test
+- `scripts/db-backup.sh [--ziel <dir>]`: `pg_dump -Fc` nach
+  `backups/<db>_JJJJ-MM-TT_HHMMSS.dump` (Verzeichnis 700, Datei 600, vorher mit
+  `pg_restore --list` geprüft). Verbindung BACKUP_DATABASE_URL, sonst
+  MIGRATE_DATABASE_URL (aus `.env.local`), nur lokale Hosts; das Passwort geht nur
+  über `PGPASSWORD` an die Werkzeuge (`scripts/lib/pg-umgebung.mjs`)
+- `scripts/db-restore.sh <dump> <neue_db> [--aufraeumen]`: nur in eine neue
+  Datenbank (nie die laufende), `pg_restore --exit-on-error`, danach Vergleich
+  Quelle/Ziel (Migrationen, Kameraden, Benutzer, Policies core/dienstplan, Pläne,
+  Termine, Trigger), Exit 1 bei Abweichung. `--aufraeumen` löscht die Testdatenbank
+- Auf dem Server weiter `scripts/server-backup.sh` (siehe oben)
+- `backups/` und `*.dump` stehen in `.gitignore` und im Pre-Commit-Hook
+
 ### Ausrollen Härtung core.kameraden/benutzer (Migrationen 0012/0013)
 Ergebnis vom 08.11.2026: 0012 und 0013 ausgerollt (14 Migrationen, 10 Policies
 in core), Spaltenrechte geprüft. Weitere Smoke-Tests sind hier nicht
@@ -451,7 +490,9 @@ Alle Skripte, die Daten schreiben oder löschen, rufen `schutz()` aus
 scripts/lib/schutz.mjs auf: Jede benutzte Verbindungs-URL (DATABASE_URL,
 AUTH_DATABASE_URL, MIGRATE_DATABASE_URL, TEST_BASE) muss gesetzt und lokal sein,
 sonst Exit 2 vor dem ersten Verbindungsaufbau (nur Namen in der Meldung, nie
-Werte). Neue Testskripte binden den Helfer ein. Sie legen Testdaten mit Zeitstempel-Präfix an und räumen nur
+Werte). Neue Testskripte binden den Helfer ein. Skripte, die selbst einen Server
+starten, nutzen scripts/lib/prozess.mjs (beendet den ganzen Prozessbaum, unter
+Windows mit taskkill, sonst über die Prozessgruppe). Sie legen Testdaten mit Zeitstempel-Präfix an und räumen nur
 über gemerkte IDs auf. "Dev-Server" heißt `npx next dev --webpack -p 3100`.
 | Skript | Prüft | Dev-Server |
 |---|---|---|
@@ -460,11 +501,32 @@ Werte). Neue Testskripte binden den Helfer ein. Sie legen Testdaten mit Zeitstem
 | test-sitzungen.mjs | JWT-Claims, /api/admin/*, Token-Widerruf, PIN, Abmelden, Selbstschutz, Logout, Startseite/Kacheln, ungültige JWTs | ja |
 | test-food.mjs | Karten-ID-Route, set_karten_id, CSV-Import/-Export, Funk-Scope, /food/admin/heute | ja |
 | test-mitglieder.mjs, -rechte.mjs, -lib.mjs | Mitgliederverwaltung (API, Seiten, Profil), Rechteregeln, Validierung | ja / nein / nein |
+| test-mitglieder-import-lib.mjs, test-mitglieder-import.mjs | CSV-Import von Kameraden: Kodierung, Tabelle und Anwesenheitsliste, Abgleich (ohne Server); Route mit Rechten, Vorschau, Übernahme, veralteter Auswahl, Protokoll | nein / ja |
+| test-anzeigename.mjs | Anzeigename-Regel (Spitzname, Nachname, Vornamen-Präfix, identische Namen, externe Personen) | nein |
 | test-login-sperre.mjs, test-login-deaktiviert.mjs, test-client-ip.mjs | Login-Sperre, deaktivierte Konten, Client-IP | ja / ja / nein |
 | test-ui-a.mjs | Seitenrahmen, Kopfzeile, Umschalter, Seiten außerhalb des Rahmens | ja |
 | test-migr-bis.mjs | Staffelung 0011 bis 0015 in einer Wegwerf-Datenbank (legt fwhub_migr_test an und löscht sie) | nein |
+| test-dienstplan-rls.mjs | RLS aller Tabellen in dienstplan je Rolle und Organisation, Trigger (Version, Freigabeschutz), kameraden_namen(), dienst_rolle in core, Anzeige-Scope (Token gültig, abgelaufen, unbekannt), vorjahr_themen() je Rolle, Versionen lesen (0021), ical_abos und abo_scope() (0022) | nein |
+| test-dienstplan-auth.mjs | Alle Routen unter /api/dienstplan ohne Login → 401 (findet die Routen selbst; Token-Routen: 401/403), Claim dienst_rolle, Rollenvergabe | ja |
+| test-dienstplan-kalender.mjs, test-dienstplan-eingabe.mjs | Rhythmus, Feiertage Niedersachsen, Akzeptanztest 2026 (Regeln aus der DB, nur lesend); Eingabeprüfung und Hinweise der API | nein / nein |
+| test-dienstplan-verwaltung.mjs | Neues Jahr mit Vorschau und Zwischendienst-Versatz (Regel wird aufgeteilt, danach wiederhergestellt), Kategorien, Rhythmusregeln, Bereiche je Rolle, Dienstplan-Seiten je Rolle | ja |
+| test-dienstplan-api.mjs | Dienstplan-API: Pläne, Generator (idempotent), Termine, Themen am Termin, Verantwortliche, Kataloge, Rechte je Rolle, ETag/304, Hinweise | ja |
+| test-dienstplan-anzeige.mjs | Präsentation: Anzeige-Links (12 h, nur Hash gespeichert), Token-Route ohne/falsch/abgelaufen 401, anderer Plan 403, ohne Notizen, Fokus und ETag/304, Beenden | ja |
+| test-dienstplan-rueckgaengig.mjs | Phase 7: Termin-Zustand (Rückgängig, 409 bei fremder Änderung), Kopie einer Themenposition, Verschieben an Position, Datum ändern, Vorjahr in Plan- und Token-Route je Status | ja |
+| test-dienstplan-pool.mjs | Phase 8: Themenpool (Sichtbarkeit je Rolle, verwerfen, übernehmen mit/ohne Termin, gleicher Titel), Ausgleichsliste und Zählung je Plan mit Vorjahr, Pflichtthemen-Vorschlag (Katalog wird wiederhergestellt), /dienstplan | ja |
+| test-dienstplan-versionen-lib.mjs, test-dienstplan-versionen.mjs | Phase 9: Abbild, Vergleich, „geändert seit Freigabe“, Wiederherstellplan (ohne Server); Versionen-API: manuell, bei Freigabe, Liste, Ansehen, Vergleich, Markierung für Mitglieder, Wiederherstellen (sichert vorher, ids bleiben), Rechte | nein / ja |
+| test-dienstplan-export-lib.mjs, test-dienstplan-export.mjs | Phase 10: Termindaten, Formate, CSV-Quoting, Kodierung, Profilprüfung, Änderungsexport, iCal (ohne Server); Exportprofile (Rechte), CSV DIVERA komplett/Änderungen mit Löschliste, .ics je Rolle, Excel (Blätter, Farben, Druck), iCal-Abo (Feed ohne Login, Zähler, widerrufen → 404) | nein / ja |
+| test-dienstplan-druck-lib.mjs, test-dienstplan-druck.mjs | Phase 11: Druckzeilen, Legende, Bildmaße (ohne Server); PDF (Seiten, Schrift eingebettet) und Bild (PNG 1290 × 2796) je Rolle, Parameter, Cache. Auch gegen den Standalone-Build laufen lassen (`TEST_BASE`), weil das Datei-Tracing nur dort greift | nein / ja |
+| e2e/dienstplan-release.spec.ts (`npm run test:e2e`, Playwright mit installiertem Chrome) | Klickliste Release 1 im Browser: CSV-Import-Vorschau (Windows-1252, Umlaute) und Übernahme, Freigabe, „geändert am“, CSV-Export DIVERA komplett und Änderungen mit Löschliste, .ics, Excel, PDF 200/application/pdf, Bild 1290 × 2796, Versionen speichern/vergleichen/wiederherstellen, /dienstplan bei 390 px ohne Querscrollen; legt Testkonto und Plan 2076 an und löscht beides. Testdatei nur im Speicher. Mit `E2E_BASE` gegen einen laufenden Server (z. B. Standalone) | startet ihn selbst (3100) |
+| test-dienstplan-import-lib.mjs, test-dienstplan-import.mjs | Excel-Import Dienstplan: Analyse-Regeln (ohne DB) bzw. Ende zu Ende als fw_app mit erzeugter Excel (Jahre 2091/2092), Localhost-Sperre von `--testdaten` | nein / nein |
 | test-setup.mjs | Erst-Einrichtung /setup in einer Wegwerf-Kopie von fwhub_dev mit leerem core.benutzer (eigener Dev-Server auf 3101; den Dev-Server auf 3100 vorher beenden) | eigener |
 | test-startschutz.mjs | Datenbank-Startschutz: `next start` bricht bei fehlender/falscher Rolle ab, `next dev` warnt nur, keine URLs oder Passwörter in der Ausgabe (Ports 3102/3103, braucht `npm run build`, Dev-Server auf 3100 vorher beenden) | eigener |
+`scripts/dienstplan-import.mjs` ist kein Testskript, sondern das Werkzeug für den
+einmaligen Excel-Import (auch gegen Produktion) und ruft darum `schutz()` nicht auf.
+Nur sein Modus `--testdaten` (legt Kameraden an) bricht ohne lokale DATABASE_URL ab.
+Auf dem Server läuft es über `scripts/server-import.sh` (Dockerfile-Stage `import`,
+Excel und zuordnung.json nur read-only gemountet; `data/` steht in .dockerignore).
+Ablauf und Klärung: docs/dienstplan/PROGRESS.md, Phase 4 und Deployment-Checkliste.
 Der Letzte-Admin-Schutz ist auf Datenbankebene in test-haertung (1e/1f) geprüft.
 Über die API ist er seit 0015 nicht mehr erreichbar: Kameraden deaktivieren darf nur
 ein globaler Admin, und der Selbstschutz greift davor (test-sitzungen).
@@ -491,6 +553,9 @@ ein globaler Admin, und der Selbstschutz greift davor (test-sitzungen).
   bg-destructive, bg-success, border-warning usw.). Keine festen Farbklassen
   (bg-white, text-gray-*, bg-green-600 …) und keine Hex-Werte in Komponenten.
   Einzige Ausnahme: die QR-Code-Ruhezone (bg-white, sonst nicht scanbar)
+- Dienstplan-Kategoriefarben: Tokens `--dp-<farbe>` (Spec 7.1), nur als Akzentstreifen
+  und 12-%-Tönung; Klassen nur über die Tabelle in components/dienstplan/farben.ts
+  (Tailwind erzeugt nur wörtlich vorkommende Klassen). Text darauf bleibt foreground
 - Hell- und Dunkelwerte stehen in `:root` und `.dark`. Neue Tokens in beiden
   Blöcken UND in `@theme inline` anlegen, Textkontrast mindestens 4,5:1
   (WCAG AA) in beiden Themes prüfen
@@ -549,6 +614,7 @@ Frontend-Formulare) — siehe invariant-checker.agent.md für das Vorgehen.
 | PSA-Verwaltung | /psa | psa-verwaltung (Vue 3 + PostgREST) | Migration ausstehend |
 | Küche/FoodBot | /food | FoodBot (Flask/SQLite) | Migration ausstehend, RFID auf HID-Tastatur-Emulation |
 | Führerscheinkontrolle | /fk | FK-App | Struktur bereits übernommen, Business-Logik-Migration ausstehend |
+| Dienstplan | /dienstplan | Neu, siehe docs/dienstplan/DIENSTPLAN_SPEC.md | In Arbeit auf feature/dienstplan, Stand in docs/dienstplan/PROGRESS.md. Für Nutzer erst nach Release 1 sichtbar |
 | Funktechnik | /funk | Neu, siehe FUNK_APP_SPEC.md | Datenmodell spezifiziert, Implementierung ausstehend. Referenz für Auth-Pattern: Funk-App/lib/funk-auth.ts (dort korrekt gegen Kameraden.id gebaut) — Funk-App selbst NICHT weiterverwenden, nur als Vorlage lesen |
 
 ## Mitgliederverwaltung (/mitglieder)
@@ -601,10 +667,32 @@ verlinken auf /mitglieder/[id] (`MitgliedLink`, Ziel aus `mitgliedLinkZiel`).
   die Größenspalten). Der Profil-Abschnitt ist darauf vorbereitet
   (`bearbeiten` wird durchgereicht, `kannPsaAbschnittBearbeiten` bleibt
   PSA-Verwaltung)
+- **CSV-Import (nur globaler Admin):** `/mitglieder` → „CSV importieren“,
+  `POST /api/mitglieder/import` (Logik in `lib/mitglieder/csv-import.ts`). Tabelle
+  `Nachname;Vorname;Spitzname;Personalnummer` oder Anwesenheitsliste des Kreises
+  (Windows-1252). Vorschau, dann Übernahme der gewählten Zeilen in einer
+  Transaktion (Server rechnet die Vorschau neu). Legt nur an oder füllt leere
+  Personalnummern/Spitznamen; überschreibt und deaktiviert nie
 - **Änderungsprotokoll:** Abschnitt "Änderungsverlauf" (nur globale Admins) aus
   `core.mitglieder_audit`
+- **Anzeigename (Migration 0016):** `src/lib/mitglieder/anzeigename.ts` erzeugt
+  den kurzen Namen für enge Darstellungen (Dienstplan, Exporte), modulübergreifend.
+  Regel: Spitzname, wenn `spitzname_anzeigen`; sonst Nachname, wenn unter den
+  aktiven Kameraden eindeutig; sonst "Nachname, " plus kürzestes eindeutiges
+  Vornamen-Präfix ("Esters, Mar."). Gleicher Vor- und Nachname ist nicht
+  unterscheidbar: Der Stammdaten-Abschnitt zeigt dann den Hinweis, einen
+  Spitznamen zu vergeben. Spitzname und Haken pflegt der globale Admin in den
+  Stammdaten. Der Name wird immer gegen ALLE aktiven Kameraden berechnet; wer nur
+  die eigene Zeile sieht (Profil), bekommt ihn nicht angezeigt
 - **Tests:** `scripts/test-mitglieder-rechte.mjs` und `test-mitglieder-lib.mjs`
   (ohne Server), `scripts/test-mitglieder.mjs` (API und Seiten, mit Dev-Server)
+
+## Personendaten nie ins Repo
+`data/` (in jedem Ordner), `*.xlsx`, `*.csv` und `zuordnung*.json` stehen in
+`.gitignore`. Zusätzlich bricht der Pre-Commit-Hook `scripts/git-hooks/pre-commit`
+jeden Commit mit solchen Dateien ab, auch nach `git add -f`. Einmal je Klon
+einrichten: `npm run hooks:install` (setzt `core.hooksPath`). Testdateien
+(z. B. CSV für Importtests) erzeugen die Tests zur Laufzeit im Temp-Verzeichnis.
 
 ## Grundregel für ALLE Agents: Erst verifizieren, dann berichten
 Nach JEDER Datei-Operation (Schreiben, Kopieren, Umbenennen, Löschen) den

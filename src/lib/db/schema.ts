@@ -26,6 +26,10 @@ export const kameraden = core.table("kameraden", {
   dienstgrad: text("dienstgrad"),
   email: text("email"),
   personalnummer: text("personalnummer"),
+  // Spitzname für den Anzeigenamen (lib/mitglieder/anzeigename.ts). Erscheint
+  // nur mit spitzname_anzeigen = true statt des automatisch erzeugten Namens.
+  spitzname: text("spitzname"),
+  spitznameAnzeigen: boolean("spitzname_anzeigen").notNull().default(false),
   // RFID-Karten-ID — modulübergreifend (FoodBot liest sie); daher in core.
   kartenId: text("karten_id"),
   aktiv: boolean("aktiv").notNull().default(true),
@@ -34,6 +38,9 @@ export const kameraden = core.table("kameraden", {
   foodRolle: text("food_rolle"),
   fkRolle: text("fk_rolle"),
   funkRolle: text("funk_rolle"),
+  // Dienstplan: Admin | Planer | Mitglied. NULL gilt im Modul als Mitglied
+  // (lib/dienstplan/auth.ts), die Rolle wird nur für Admin und Planer vergeben.
+  dienstRolle: text("dienst_rolle"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Pre-Commit-Hook FW-Hub: bricht Commits ab, die Personendaten enthalten können.
+# Gesperrt: alles unter data/ und backups/ (in jedem Ordner), *.xlsx, *.csv,
+# zuordnung*.json, *.dump.
+# Geprüft werden die gestagten Dateien (hinzugefügt, kopiert, geändert,
+# umbenannt), Groß-/Kleinschreibung egal. Einrichten: npm run hooks:install
+# (setzt core.hooksPath auf scripts/git-hooks). Läuft mit sh unter macOS,
+# Linux und Git für Windows.
+treffer=$(git diff --cached --name-only --diff-filter=ACMR -z | tr '\0' '\n' | grep -iE '(^|/)(data|backups)/|\.xlsx$|\.csv$|\.dump$|(^|/)zuordnung[^/]*\.json$')
+if [ -n "$treffer" ]; then
+  echo "Commit abgebrochen: Diese Dateien dürfen nicht ins Repo (Personendaten):" >&2
+  echo "$treffer" | sed 's/^/  /' >&2
+  echo "Mit 'git restore --staged <datei>' aus dem Commit nehmen." >&2
+  exit 1
+fi
+exit 0

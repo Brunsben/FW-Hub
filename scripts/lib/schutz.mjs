@@ -9,10 +9,11 @@
 // mit Exit 2, bevor eine Verbindung aufgebaut wird. In der Meldung stehen nur Namen, nie Werte.
 const LOKAL = ["localhost", "127.0.0.1", "[::1]", "::1"];
 
-function istLokal(wert) {
+export function istLokal(wert) {
   try { return LOKAL.includes(new URL(wert).hostname); } catch { return false; }
 }
 
+/** @param {{ db?: string[], base?: string | null }} [optionen] */
 export function schutz({ db = [], base = null } = {}) {
   const fehler = [];
   for (const name of db) {

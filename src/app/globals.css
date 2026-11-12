@@ -33,6 +33,17 @@
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
+  /* Dienstplan: Kategoriefarben (Spec 7.1), nur für Akzentstreifen und getönte Flächen */
+  --color-dp-blue: var(--dp-blue);
+  --color-dp-teal: var(--dp-teal);
+  --color-dp-orange: var(--dp-orange);
+  --color-dp-indigo: var(--dp-indigo);
+  --color-dp-pink: var(--dp-pink);
+  --color-dp-purple: var(--dp-purple);
+  --color-dp-red: var(--dp-red);
+  --color-dp-yellow: var(--dp-yellow);
+  --color-dp-green: var(--dp-green);
+  --color-dp-gray: var(--dp-gray);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -79,6 +90,19 @@
   --success: #15803d;
   --success-foreground: #ffffff;
   --warning: #b45309;
+  /* Dienstplan-Kategorien (Apple-Systemfarben, Spec 7.1). Text darauf bleibt
+     --foreground auf ca. 12 % Tönung (scripts/kontrast.mjs), die Farbe trägt nie
+     allein Information: das Kürzel steht immer dabei. */
+  --dp-blue: #007aff;
+  --dp-teal: #30b0c7;
+  --dp-orange: #ff9500;
+  --dp-indigo: #5856d6;
+  --dp-pink: #ff2d55;
+  --dp-purple: #af52de;
+  --dp-red: #ff3b30;
+  --dp-yellow: #ffcc00;
+  --dp-green: #34c759;
+  --dp-gray: #8e8e93;
   --border: #e5e7eb;
   /* Eingabefeld-Rand: 3,76:1 gegen Hintergrund/Karte (vorher #e5e7eb = 1,24:1,
      WCAG 1.4.11 verlangt 3:1 für Bedienelemente) */
@@ -121,6 +145,16 @@
   --success: #4ade80;
   --success-foreground: #052e16;
   --warning: #fbbf24;
+  --dp-blue: #0a84ff;
+  --dp-teal: #40c8e0;
+  --dp-orange: #ff9f0a;
+  --dp-indigo: #5e5ce6;
+  --dp-pink: #ff375f;
+  --dp-purple: #bf5af2;
+  --dp-red: #ff453a;
+  --dp-yellow: #ffd60a;
+  --dp-green: #30d158;
+  --dp-gray: #8e8e93;
   --border: #374151;
   /* 4,46:1 gegen Hintergrund, 3,69:1 gegen Karte (vorher #4b5563 = 1,94:1) */
   --input: #778091;

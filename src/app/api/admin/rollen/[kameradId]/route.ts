@@ -12,10 +12,11 @@ const SPALTE_ZU_DB: Record<RollenSpalte, string> = {
   foodRolle: "food_rolle",
   fkRolle: "fk_rolle",
   funkRolle: "funk_rolle",
+  dienstRolle: "dienst_rolle",
 };
 
 // EINZIGE Route, die die Rollenspalten von core.kameraden schreibt
-// (psa_rolle, food_rolle, fk_rolle, funk_rolle). Alle anderen Routen ignorieren
+// (psa_rolle, food_rolle, fk_rolle, funk_rolle, dienst_rolle). Alle anderen Routen ignorieren
 // sie. Nur globaler Admin. null/"" entfernt die Modulrolle.
 // Danach token_version aller verknüpften Benutzer erhöhen: Die neuen Claims
 // gelten erst nach erneutem Login, alte Tokens werden sofort ungültig.
@@ -82,6 +83,7 @@ export async function PATCH(
           foodRolle: kameraden.foodRolle,
           fkRolle: kameraden.fkRolle,
           funkRolle: kameraden.funkRolle,
+          dienstRolle: kameraden.dienstRolle,
         })
         .from(kameraden)
         .where(eq(kameraden.id, kameradId));

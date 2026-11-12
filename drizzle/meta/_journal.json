@@ -113,6 +113,55 @@
       "when": 1794158736213,
       "tag": "0015_kameraden_nur_admin_schreibt",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794358688949,
+      "tag": "0016_kameraden_spitzname",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794360279431,
+      "tag": "0017_kameraden_dienst_rolle",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794360357395,
+      "tag": "0018_dienstplan_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794405149116,
+      "tag": "0019_dienstplan_anzeige",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794406315995,
+      "tag": "0020_dienstplan_vorjahr",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794433339112,
+      "tag": "0021_dienstplan_versionen_lesen",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794433934896,
+      "tag": "0022_dienstplan_exporte",
+      "breakpoints": true
     }
   ]
 }

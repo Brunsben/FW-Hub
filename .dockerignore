@@ -9,6 +9,10 @@
 .vscode
 **/*.md
 
+# Daten mit Personenbezug (Excel-Import, Klärungsbericht, Zuordnung): nie im
+# Build-Kontext, nie im Image. Der Import mountet sie zur Laufzeit.
+data/
+
 # Abhängigkeiten und Build-Ausgaben (werden im Image neu erzeugt)
 node_modules
 .next
