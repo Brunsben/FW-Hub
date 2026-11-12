@@ -13,6 +13,7 @@ export function istLokal(wert) {
   try { return LOKAL.includes(new URL(wert).hostname); } catch { return false; }
 }
 
+/** @param {{ db?: string[], base?: string | null }} [optionen] */
 export function schutz({ db = [], base = null } = {}) {
   const fehler = [];
   for (const name of db) {
