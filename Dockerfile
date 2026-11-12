@@ -1,12 +1,12 @@
 # ── Stage 1: Abhängigkeiten ──────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:25-alpine AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
 RUN npm ci
 
 # ── Stage 2: Build ───────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -25,7 +25,7 @@ RUN npm run build
 # die das Skript braucht, in den Versionen aus package-lock.json. Steht VOR der
 # Produktions-Stage: Ohne --target baut Docker die LETZTE Stage (runner), der
 # Portal-Build bleibt davon unberührt.
-FROM node:22-alpine AS migrate
+FROM node:25-alpine AS migrate
 WORKDIR /app
 COPY package-lock.json ./
 RUN npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund     $(node -p "['postgres','drizzle-orm'].map(n => n + '@' + require('./package-lock.json').packages['node_modules/' + n].version).join(' ')")     && rm package-lock.json
@@ -43,7 +43,7 @@ ENTRYPOINT ["node", "scripts/migrate.mjs"]
 # seine Bibliotheken: Excel und zuordnung.json werden NIE ins Image kopiert, sondern
 # zur Laufzeit read-only gemountet (data/ steht in .dockerignore). Steht vor der
 # Produktions-Stage, der Portal-Build bleibt unberührt.
-FROM node:22-alpine AS import
+FROM node:25-alpine AS import
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY scripts/dienstplan-import.mjs ./scripts/dienstplan-import.mjs
@@ -52,7 +52,7 @@ USER node
 ENTRYPOINT ["node", "scripts/dienstplan-import.mjs"]
 
 # ── Stage 5: Produktion ─────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:25-alpine AS runner
 WORKDIR /app
 
 RUN apk add --no-cache libc6-compat
