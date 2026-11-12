@@ -1274,8 +1274,8 @@ Rückgängig zurücknehmen.
 ### Entscheidungen
 - **PDF** (`@react-pdf/renderer` 4.9, Spec 9.2): `GET /plaene/[jahr]/export/pdf
   ?halbjahr=1|2` (ohne: beide Halbjahre, je eine Seite; bei Bedarf Umbruch mit
-  wiederholtem Tabellenkopf). A4 hoch, Kopf mit Logo-Platzhalter (rotes Feld mit
-  den Initialen der Organisation, bis die SVG da ist), Titel, Organisation und
+  wiederholtem Tabellenkopf). A4 hoch, Kopf mit Logo-Symbol der Feuerwehr
+  (seit 12.11.2026, siehe Abweichungen), Titel, Organisation und
   Stand; Tabelle Datum | Tag | Art | Uhrzeit | Thema | Verantwortlich,
   Kategoriefarbe als 3-pt-Streifen am Zeilenanfang; Legende (nur vorkommende
   Kategorien) und „Seite x von y“ im Fuß. Abgesagte Termine grau mit „entfällt:
@@ -1285,7 +1285,8 @@ Rückgängig zurücknehmen.
   Kürzel, Kurztitel (aus dem Themenkatalog, sonst Titel; gekürzt mit „…“),
   optional Verantwortliche. Zeilenhöhe und Schrift passen sich der Terminzahl an
   (übliches Halbjahr ≈ 26 Termine: 72 px Zeile). Abgesagte Termine abgeblendet.
-  Hell und dunkel mit den Farbwerten aus Spec 7.1.
+  Hell und dunkel mit den Farbwerten aus Spec 7.1; links neben dem Titel das
+  Logo-Symbol (rot bzw. weiß).
 - **next/og statt satori + resvg direkt**: `ImageResponse` aus Next ist genau
   satori + resvg (WASM), ist im Framework enthalten und braucht keine eigene
   WASM-Datei im Standalone-Image. Der voreingestellte öffentliche Cache-Header
@@ -1308,12 +1309,19 @@ Rückgängig zurücknehmen.
   Cache-Header), Browser-Durchlauf auf Handybreite.
 
 ### Abweichungen von der Spec
-- Logo: Platzhalter bis zur SVG (Spec 12 „Logo als SVG nachliefern“).
+- Logo (Nachtrag 12.11.2026): Logo-Symbol der Feuerwehr (Flamme mit Strahlrohr,
+  ohne Wortmarke) als PNG 570 × 570 aus Bens Logo-Ordner: `public/brand/
+  logo-symbol-rot.png` (PDF-Kopf, Bild hell) und `-weiss.png` (Bild dunkel).
+  Ohne Wortmarke, weil Titel und Organisation daneben als Text stehen und die
+  Wortmarken der Vorlagen voneinander abweichen („Freiwillige Feuerwehr“ bzw.
+  „Freiwillige Ortsfeuerwehr“). Für den Druck reicht die Auflösung (> 1000 dpi
+  bei 40 pt). Eine SVG wäre weiter schöner, auf dem Mac fehlte ein Werkzeug zum
+  Umwandeln des PDFs.
 - Bild: next/og (satori + resvg) statt der Pakete direkt, siehe oben.
 - „Geändert“-Fußnote im Export (Spec 8, „optional“) nicht umgesetzt.
 
 ### Offene Fragen
-- Logo als SVG.
+- Logo als SVG (optional, siehe Abweichungen).
 
 ## Phasen 12–13 (Release 2)
 

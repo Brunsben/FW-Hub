@@ -14,3 +14,12 @@ export function ladeSchriften() {
   cache ??= Promise.all(SCHRIFT_GEWICHTE.map(async (gewicht) => ({ gewicht, daten: await readFile(schriftPfad(gewicht)) })));
   return cache;
 }
+
+// Logo-Symbol der Feuerwehr (Flamme mit Strahlrohr), ohne Wortmarke: public/brand.
+// 570 × 570 px, transparent; rot für helle, weiß für dunkle Flächen.
+export const logoPfad = (farbe: "rot" | "weiss") => join(process.cwd(), "public", "brand", `logo-symbol-${farbe}.png`);
+const logoCache = new Map<string, Promise<Buffer>>();
+export function ladeLogo(farbe: "rot" | "weiss"): Promise<Buffer> {
+  if (!logoCache.has(farbe)) logoCache.set(farbe, readFile(logoPfad(farbe)));
+  return logoCache.get(farbe)!;
+}

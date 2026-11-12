@@ -1,10 +1,10 @@
-import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { druckfarbe } from "@/lib/dienstplan/druckfarben";
 import { legende, titelText, type DruckKategorie, type DruckZeile } from "@/lib/dienstplan/druck";
-import { schriftPfad } from "@/lib/dienstplan/schrift";
+import { ladeLogo, schriftPfad } from "@/lib/dienstplan/schrift";
 
 // PDF (Spec 9.2): A4 hoch zum Ausdrucken, je Halbjahr eine Seite (bei Bedarf
-// Umbruch, Tabellenkopf wiederholt). Kopf mit Logo-Platzhalter, Titel, Stand;
+// Umbruch, Tabellenkopf wiederholt). Kopf mit Logo-Symbol, Titel, Stand;
 // Tabelle wie Excel, Kategoriefarbe als schmaler Streifen am Zeilenanfang
 // (wenig Toner); Legende und Seitenzahl im Fuß. Inter eingebettet.
 
@@ -24,12 +24,11 @@ function schriften() {
   registriert = true;
 }
 
-const DUNKEL = "#1C1C1E", GRAU = "#636366", LINIE = "#D1D1D6", ROT = "#C8102E";
+const DUNKEL = "#1C1C1E", GRAU = "#636366", LINIE = "#D1D1D6";
 const s = StyleSheet.create({
   seite: { fontFamily: "Inter", fontSize: 9, color: DUNKEL, paddingTop: 36, paddingBottom: 56, paddingHorizontal: 36 },
   kopf: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
-  logo: { width: 34, height: 34, borderRadius: 6, backgroundColor: ROT, alignItems: "center", justifyContent: "center", marginRight: 10 },
-  logoText: { color: "#FFFFFF", fontSize: 11, fontWeight: 700 },
+  logo: { width: 40, height: 40, marginRight: 8 },
   titel: { fontSize: 16, fontWeight: 700 },
   unter: { fontSize: 9, color: GRAU, marginTop: 2 },
   zeileKopf: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: GRAU, paddingBottom: 3, marginBottom: 1, fontWeight: 600, fontSize: 8, color: GRAU },
@@ -67,15 +66,15 @@ function Tabelle({ zeilen }: { zeilen: DruckZeile[] }) {
   );
 }
 
-function Seite({ titel, zeilen, kategorien, stand, organisation, entwurf }: {
-  titel: string; zeilen: DruckZeile[]; kategorien: DruckKategorie[]; stand: string; organisation: string; entwurf: boolean;
+function Seite({ titel, zeilen, kategorien, stand, organisation, entwurf, logo }: {
+  titel: string; zeilen: DruckZeile[]; kategorien: DruckKategorie[]; stand: string; organisation: string; entwurf: boolean; logo: Buffer;
 }) {
   const leg = legende(zeilen, kategorien);
-  const initialen = organisation.split(/\s+/).filter((w) => /^[A-ZÄÖÜ]/.test(w)).map((w) => w[0]).join("").slice(0, 3) || "FW";
   return (
     <Page size="A4" orientation="portrait" style={s.seite}>
       <View style={s.kopf}>
-        <View style={s.logo}><Text style={s.logoText}>{initialen}</Text></View>
+        {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf-Image, kein HTML-img */}
+        <Image style={s.logo} src={logo} />
         <View>
           <Text style={s.titel}>{titel}{entwurf ? " (Entwurf)" : ""}</Text>
           <Text style={s.unter}>{organisation} · {stand}</Text>
@@ -102,11 +101,12 @@ export async function dienstplanPdf(o: {
   stand: string; organisation: string; entwurf: boolean;
 }): Promise<Uint8Array> {
   schriften();
+  const logo = await ladeLogo("rot");
   const teile: [1 | 2, DruckZeile[]][] = o.halbjahr === 1 ? [[1, o.zeilen.h1]] : o.halbjahr === 2 ? [[2, o.zeilen.h2]] : [[1, o.zeilen.h1], [2, o.zeilen.h2]];
   const doc = (
     <Document title={titelText(o.jahr, o.halbjahr)} author={o.organisation} creator="FW-Hub" producer="FW-Hub" language="de-DE">
       {teile.map(([h, z]) => (
-        <Seite key={h} titel={titelText(o.jahr, h)} zeilen={z} kategorien={o.kategorien} stand={o.stand} organisation={o.organisation} entwurf={o.entwurf} />
+        <Seite key={h} titel={titelText(o.jahr, h)} zeilen={z} kategorien={o.kategorien} stand={o.stand} organisation={o.organisation} entwurf={o.entwurf} logo={logo} />
       ))}
     </Document>
   );

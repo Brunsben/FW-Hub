@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { druckfarbe, toenung } from "@/lib/dienstplan/druckfarben";
 import { BILD, bildMasse, kuerze, legende, titelText, type DruckKategorie, type DruckZeile } from "@/lib/dienstplan/druck";
-import { ladeSchriften } from "@/lib/dienstplan/schrift";
+import { ladeLogo, ladeSchriften } from "@/lib/dienstplan/schrift";
 
 // Bild für das Smartphone (Spec 9.3): je Halbjahr ein PNG im Hochformat
 // 1290 × 2796, oben 15 % und unten 10 % frei (Uhr und Widgets des
@@ -20,7 +20,8 @@ export async function dienstplanBild(o: {
 }): Promise<Uint8Array> {
   const f = THEMEN[o.dunkel ? "dunkel" : "hell"];
   const m = bildMasse(o.zeilen.length, o.mitNamen);
-  const schriften = await ladeSchriften();
+  const [schriften, logo] = await Promise.all([ladeSchriften(), ladeLogo(o.dunkel ? "weiss" : "rot")]);
+  const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
   const zeichen = Math.floor((BILD.breite - 2 * 64 - 360) / (m.schrift * 0.55));
   const leg = legende(o.zeilen, o.kategorien);
   const tonung = (farbe: string) => (o.dunkel ? toenung(druckfarbe(farbe, true), 0.22, f.karte) : toenung(druckfarbe(farbe), 0.14, f.karte));
@@ -28,9 +29,13 @@ export async function dienstplanBild(o: {
   const element = (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", backgroundColor: f.grund, color: f.text, fontFamily: "Inter",
       paddingTop: Math.round(BILD.hoehe * BILD.oben), paddingBottom: Math.round(BILD.hoehe * BILD.unten), paddingLeft: 64, paddingRight: 64 }}>
-      <div style={{ display: "flex", flexDirection: "column", height: 150, justifyContent: "center" }}>
-        <div style={{ display: "flex", fontSize: 64, fontWeight: 700 }}>{titelText(o.jahr, o.halbjahr)}{o.entwurf ? " (Entwurf)" : ""}</div>
-        <div style={{ display: "flex", fontSize: 30, color: f.leise, marginTop: 6 }}>{o.stand}</div>
+      <div style={{ display: "flex", alignItems: "center", height: 150 }}>
+        {/* eslint-disable-next-line jsx-a11y/alt-text -- satori-Bild, kein HTML */}
+        <img src={logoSrc} width={120} height={120} style={{ marginRight: 24 }} />
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ display: "flex", fontSize: 64, fontWeight: 700 }}>{titelText(o.jahr, o.halbjahr)}{o.entwurf ? " (Entwurf)" : ""}</div>
+          <div style={{ display: "flex", fontSize: 30, color: f.leise, marginTop: 6 }}>{o.stand}</div>
+        </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
         {o.zeilen.map((z) => (
