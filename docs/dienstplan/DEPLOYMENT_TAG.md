@@ -12,6 +12,43 @@ knapp 1 Stunde Exporttests), dazu später die Freischaltung.
 
 Legende: **Du** = Ben, **Claude** = Arbeit im Repo, die vorher erledigt sein muss.
 
+## Checkliste in Reihenfolge (Kurzfassung)
+
+Zum Abhaken am Tag selbst. Einzelheiten in den genannten Schritten unten.
+
+- [ ] **1. DB-Backup** (B1): `/root/fw/FW-Hub/scripts/server-backup.sh` als root →
+  Exit 0, neue `.dump`-Datei in `/root/backups/fwhub/`, Kopie außerhalb des
+  Servers. Stand notieren: `select count(*) from drizzle.__drizzle_migrations;` = **16**.
+  (Lokal auf dem Mac entspricht das `scripts/db-backup.sh`; Restore-Probe mit
+  `scripts/db-restore.sh <dump> fwhub_restore_test --aufraeumen`.)
+- [ ] **2. B3**: Rollen-Skript nicht nötig; `\dp fw_food.*` im Owner-psql
+  sichern und an Claude geben.
+- [ ] **3. Migrationen 0016–0022** (B2): `git pull`, `scripts/server-migrate.sh`.
+  Erwartet `Migrationen eingetragen: 16 -> 23`, `Policies in core` unverändert,
+  `select count(*) from pg_policies where schemaname = 'dienstplan';` = **50**,
+  Exit 0. Bei Abweichung **anhalten** (Rollback-Weg unten).
+- [ ] **4. Docker-Build** (A4, vorher auf Windows erprobt): auf dem Server in
+  `~/fw/fwhub-stack` `docker compose build portal && docker compose up -d portal`
+  (nie `-v`); `/api/health` ok, kein Fehler des Start-Schutzes im Log.
+- [ ] **5. Smoke-Test PDF**: angemeldet `/api/dienstplan/plaene/2026/export/pdf`
+  im Browser öffnen → PDF erscheint (HTTP 200, `application/pdf`). Kommt 500,
+  im Log nach `Cannot find module …pdfkit…` sehen: Image ohne
+  `outputFileTracingIncludes` aus `next.config.ts` gebaut → Stand prüfen, neu bauen.
+  Dazu `…/export/bild?halbjahr=1` → Bild 1290 × 2796.
+- [ ] **6. B10**: Exporte mit echten Zielen (DIVERA-Testtermin, Google-Testkalender,
+  Abo-URL), Ergebnisse notieren.
+- [ ] **7. Rollback-Weg bereit halten** (siehe „Rückweg“ unten):
+  - App-Fehler nach Schritt 4: vorheriges Image starten
+    (`docker compose up -d portal` mit dem alten Image-Tag bzw. nach
+    `git checkout <vorheriger Stand>` neu bauen). 0016–0022 sind additiv, die alte
+    App läuft mit ihnen weiter; die Migrationen bleiben.
+  - Migration in Schritt 3 gescheitert: eine Transaktion, nichts angewendet;
+    Ausgabe an Claude, alte App läuft weiter.
+  - Daten kaputt (Import o. Ä.): App stoppen, Restore aus dem Backup von Schritt 1
+    in eine neue Datenbank prüfen (Ablauf „Produktion: Backup“ in
+    copilot-instructions.md), dann bewusst umschalten. Änderungen seit dem
+    Backup gehen verloren.
+
 ## Was ausgerollt wird
 
 | Migration | Inhalt | Reihenfolge |
@@ -32,7 +69,7 @@ gleich, Policies in dienstplan **50**.
 
 | # | Schritt | Wer | Dauer |
 |---|---|---|---|
-| A1 | Lokale Prüfung auf dem Stand, der ausgerollt wird: Testliste aus PROGRESS „Vor dem Ausrollen“, inkl. Standalone-Test für PDF/Bild. Mac: alle grün am 11.11.2026 nach Phase 11. | Claude | – |
+| A1 | Lokale Prüfung auf dem Stand, der ausgerollt wird: Testliste aus PROGRESS „Vor dem Ausrollen“, inkl. Standalone-Test für PDF/Bild und `npm run test:e2e` (Klickliste im Browser). Mac: alle grün am 12.11.2026. | Claude | – |
 | A2 | Deine lokale Durchklick-Liste (Bericht vom 11.11.2026, „Selbst durchklicken“). Auffälligkeiten an Claude; kleinere Fehler beheben wir nach dem Deployment. | Du | 60–90 min |
 | A3 | `feature/dienstplan` nach `main` zusammenführen (Pull Request, CI `ci.yml` und `security.yml` grün). Der Server baut aus `~/fw/FW-Hub`. | Du | 15 min |
 | A4 | Windows-Rechner: `git pull`, dann `docker build .` und `docker build --target import .`. Beide müssen durchlaufen (auf dem Mac gibt es kein Docker). Bei Fehlern: Ausgabe an Claude. | Du | 20–30 min |
