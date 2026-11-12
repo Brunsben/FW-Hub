@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/logout-button";
 import type { PortalModulKey } from "@/components/modul-icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { kannMitgliederSehen } from "@/lib/mitglieder/rechte";
+import { dienstRolleAus, istDienstPlaner } from "@/lib/dienstplan/auth";
 
 export interface ModulLink {
   key: PortalModulKey;
@@ -20,6 +21,10 @@ export interface ModulLink {
 // Küche: nur die Verwaltung (/food/admin) ist ein Portal-Modul; sie verlangt
 // food_rolle Admin (Mitglieder würden zum Kiosk /food umgeleitet).
 // FK hat noch keine Seite und erscheint daher nicht.
+// Dienstplan: für jedes angemeldete Konto (ohne dienst_rolle = Mitglied, sieht
+// nur freigegebene Pläne). Ziel ist immer die Mitgliederansicht /dienstplan;
+// Planung und Verwaltung verlinkt sie nur für Planer/Admin. Reihenfolge: nach den
+// Fachmodulen (PSA, Küche, Funk), vor der modulübergreifenden Mitgliederverwaltung.
 export function sichtbareModule(user: JwtPayload): ModulLink[] {
   const eintraege: ModulLink[] = [];
   if (user.psa_rolle) {
@@ -31,6 +36,14 @@ export function sichtbareModule(user: JwtPayload): ModulLink[] {
   if (user.funk_rolle) {
     eintraege.push({ key: "funk", href: "/funk", label: "Funktechnik", beschreibung: "Funkgeräte und Zuweisungen" });
   }
+  eintraege.push({
+    key: "dienstplan",
+    href: "/dienstplan",
+    label: "Dienstplan",
+    beschreibung: istDienstPlaner(dienstRolleAus(user))
+      ? "Jahresplanung, Termine, Exporte"
+      : "Termine, Kalender, Themenvorschläge",
+  });
   if (kannMitgliederSehen(user)) {
     eintraege.push({
       key: "mitglieder",

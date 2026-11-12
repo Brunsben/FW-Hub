@@ -31,6 +31,7 @@ export default async function ProfilPage() {
           foodRolle: kameraden.foodRolle,
           fkRolle: kameraden.fkRolle,
           funkRolle: kameraden.funkRolle,
+          dienstRolle: kameraden.dienstRolle,
         })
         .from(benutzer)
         .innerJoin(kameraden, eq(kameraden.id, benutzer.kameradId))
@@ -45,6 +46,8 @@ export default async function ProfilPage() {
     ["Küche", profil?.foodRolle],
     ["FK", profil?.fkRolle],
     ["Funk", profil?.funkRolle],
+    // Dienstplan: ohne Rolle gilt jede angemeldete Person als Mitglied
+    ["Dienstplan", profil?.dienstRolle ?? "Mitglied"],
   ] as const;
 
   const meineDaten = sichtbareAbschnitte(

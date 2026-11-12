@@ -164,7 +164,7 @@ try {
   let p = await seite(null, "/dienstplan/planung");
   check("Planung ohne Login → /login", [302, 303, 307, 308].includes(p.status) && p.ort.includes("/login"), `${p.status} ${p.ort}`);
   p = await seite(mitglied, "/dienstplan/planung");
-  check("Planung als Mitglied → Startseite", [302, 303, 307, 308].includes(p.status) && !p.ort.includes("/login"), `${p.status} ${p.ort}`);
+  check("Planung als Mitglied → Startseite mit Hinweis kein_zugriff=dienstplan", [302, 303, 307, 308].includes(p.status) && p.ort.includes("kein_zugriff=dienstplan"), `${p.status} ${p.ort}`);
   p = await seite(planer, "/dienstplan/planung");
   check("Planung als Planer: Seite mit Plan, ohne „Neues Jahr“", p.status === 200 && p.html.includes("Dienstplan – Planung") && p.html.includes(String(JAHR)) && !p.html.includes("Neues Jahr anlegen"), String(p.status));
   p = await seite(admin, "/dienstplan/planung");
@@ -178,7 +178,7 @@ try {
   p = await seite(planer, "/dienstplan/verwaltung");
   check("Verwaltung als Planer → 200", p.status === 200 && p.html.includes("Dienstplan – Verwaltung"), String(p.status));
   p = await seite(mitglied, "/dienstplan/verwaltung");
-  check("Verwaltung als Mitglied → umgeleitet", [302, 303, 307, 308].includes(p.status), String(p.status));
+  check("Verwaltung als Mitglied → Startseite mit Hinweis kein_zugriff=dienstplan", [302, 303, 307, 308].includes(p.status) && p.ort.includes("kein_zugriff=dienstplan"), `${p.status} ${p.ort}`);
 } finally {
   try {
     await owner`delete from dienstplan.plaene where jahr = ${JAHR}`;

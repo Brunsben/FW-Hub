@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuthUser, isGlobalAdmin, type JwtPayload } from "@/lib/auth";
 
-export type ModulKey = "psa" | "food" | "funk" | "fk" | "admin" | "mitglieder";
+export type ModulKey = "psa" | "food" | "funk" | "fk" | "admin" | "mitglieder" | "dienstplan";
 
 export const MODUL_LABELS: Record<ModulKey, string> = {
   psa: "PSA-Verwaltung",
@@ -10,6 +10,7 @@ export const MODUL_LABELS: Record<ModulKey, string> = {
   fk: "Führerscheinkontrolle",
   admin: "Benutzerverwaltung",
   mitglieder: "Mitglieder",
+  dienstplan: "Dienstplan",
 };
 
 export function isModulKey(value: unknown): value is ModulKey {

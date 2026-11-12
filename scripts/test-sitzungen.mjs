@@ -244,20 +244,21 @@ try {
   const kacheln = (h) => [...h.matchAll(/data-kachel="([a-z]+)"/g)].map((m) => m[1]).sort();
   const abmelden = (h) => (h.match(/>Abmelden</g) || []).length;
   const profile = [
-    { s: "psa", opt: { psa: "User" }, erwartet: ["psa"] },
-    { s: "ff", opt: { funk: "Mitglied", food: "Admin" }, erwartet: ["food", "funk", "mitglieder"] },
-    { s: "nix", opt: {}, erwartet: [] },
-    { s: "fm", opt: { food: "Mitglied", fk: "Prüfer" }, erwartet: [] },
+    // Dienstplan sieht jedes angemeldete Konto (ohne dienst_rolle = Mitglied)
+    { s: "psa", opt: { psa: "User" }, erwartet: ["dienstplan", "psa"] },
+    { s: "ff", opt: { funk: "Mitglied", food: "Admin" }, erwartet: ["dienstplan", "food", "funk", "mitglieder"] },
+    { s: "nix", opt: {}, erwartet: ["dienstplan"] },
+    { s: "fm", opt: { food: "Mitglied", fk: "Prüfer" }, erwartet: ["dienstplan"] },
   ];
   for (const p of profile) { const k = await konto(`pf-${p.s}`, p.opt); p.cookie = await sitzung(k); }
   for (const p of profile) {
     const h = await call("GET", "/", p.cookie);
     check(`/ (${p.s}): 200, Kacheln ${JSON.stringify(p.erwartet)}`, h.status === 200 && JSON.stringify(kacheln(h.text)) === JSON.stringify(p.erwartet), `${h.status} ${JSON.stringify(kacheln(h.text))}`);
-    if (!p.erwartet.length) check(`/ (${p.s}): Hinweis "kein Modul zugewiesen"`, h.text.includes("data-keine-module"));
+    check(`/ (${p.s}): kein Hinweis "kein Modul zugewiesen" (Dienstplan immer da)`, !h.text.includes("data-keine-module"));
     check(`/ (${p.s}): Kopfzeile mit Profil und genau einem Abmelden`, h.text.includes("data-app-header") && h.text.includes('href="/profil"') && abmelden(h.text) === 1);
   }
   let h = await call("GET", "/", aNeu);
-  check("/ (globaler Admin ohne Modulrollen): Kachel Mitglieder", JSON.stringify(kacheln(h.text)) === JSON.stringify(["mitglieder"]), JSON.stringify(kacheln(h.text)));
+  check("/ (globaler Admin ohne Modulrollen): Kacheln Dienstplan und Mitglieder", JSON.stringify(kacheln(h.text)) === JSON.stringify(["dienstplan", "mitglieder"]), JSON.stringify(kacheln(h.text)));
   h = await call("GET", "/", profile[0].cookie);
   check("Kopfzeile (nur PSA): kein Link auf /funk oder /food/admin", h.text.includes('href="/psa"') && !h.text.includes('href="/funk"') && !h.text.includes('href="/food/admin"'));
   h = await call("GET", "/");

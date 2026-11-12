@@ -94,7 +94,7 @@ try {
   check("Setup-JWT: app_rolle Admin, benutzer_id, tv 0, alle Modulrollen Admin", c.app_role === "Admin" && Number.isInteger(c.benutzer_id) && c.tv === 0 && c.psa_rolle === "Admin" && c.food_rolle === "Admin" && c.funk_rolle === "Admin" && c.dienst_rolle === "Admin");
   s = await seite("/", r.cookie);
   const k = [...s.html.matchAll(/data-kachel="([a-z]+)"/g)].map((m) => m[1]).sort();
-  check("Nach Setup: / zeigt PSA, Küche, Funk und Mitglieder", s.status === 200 && JSON.stringify(k) === JSON.stringify(["food", "funk", "mitglieder", "psa"]), JSON.stringify(k));
+  check("Nach Setup: / zeigt PSA, Küche, Funk, Dienstplan und Mitglieder", s.status === 200 && JSON.stringify(k) === JSON.stringify(["dienstplan", "food", "funk", "mitglieder", "psa"]), JSON.stringify(k));
   s = await seite("/setup");
   check("Nach Setup: /setup → 307 /login", s.status === 307 && s.loc.endsWith("/login"));
   const nochmal = await setup({ vorname: "X", name: "Y", benutzername: "test-setup2", pin: "192837" });
